@@ -1,0 +1,147 @@
+# Trading Swarm - Project Memory
+
+## Project Overview
+
+Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
+
+**Active Models:**
+- Generator: qwen3:8b (non-thinking mode, 4-bit quantization)
+- Critic: deepseek-r1:14b (native reasoning, 4-bit quantization)
+
+**Hardware Constraints:**
+- RTX 5070 Ti (16 GB VRAM) - models NEVER loaded simultaneously
+- OLLAMA_KEEP_ALIVE=0 enforced via validator - critical for VRAM management
+
+## Current State
+
+**Completed:**
+- Sessions 1-7: Environment, Data, Swarm, Verifier, Reward, Evaluation layers
+- Session 7.5: Multi-Persona Generation + DPO Export Utilities
+- Session 8: DPO Fine-Tuning Infrastructure (all 7 components)
+
+**Next:** Session 9 - End-to-End DPO Workflow
+
+**Active Issues:** None
+
+## Architecture Decisions
+
+### Configuration Layer
+- Nested Pydantic settings with flat env var mapping
+- Reward weights validated to sum to 1.0 via `@model_validator`
+
+### Data Layer
+- Async caching: diskcache wrapped in `asyncio.to_thread()`
+- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time
+- Regime classification: Realized volatility percentiles (no VIX for crypto)
+- Task sampling: Weighted by difficulty with isolated RNG
+
+### Swarm Layer
+- VRAM Management: Semaphore + explicit unload between model switches
+- Caching Strategy: Temperature gate - only cache temp=0 generations
+- Persona Selection: Regime-informed weighted sampling (5 personas)
+- Response Validation: 4-stage JSON extraction with single clarification retry
+- Multi-Persona Workflow: `run_multi_persona_workflow()` with `context_id` grouping
+
+### Training Layer - DPO
+- **Stack:** Direct transformers + PEFT (not Unsloth - better debuggability)
+- **Model Source:** HuggingFace download (Ollama cache incompatible with transformers)
+- **Process Isolation:** fcntl file locks (exclusive training, shared inference)
+- **VRAM Budget:** 9-11 GB for training, 9 GB conservative minimum
+- **LoRA Config:** r=32, alpha=64, 7 target modules
+- **DPO Hyperparams:** beta=0.1, lr=5e-6, batch_size=1, grad_accum=16
+- **Walk-Forward:** 500 train / 100 test pairs per window, temporal ordering
+- **Replay Buffer:** 15% old data to prevent catastrophic forgetting
+- **Evaluation Metrics:** IC, return-weighted IC, Brier, MACE, regime-stratified IC
+- **Promotion:** IC > 0.02, Brier > 0.01, p < 0.05, N >= 100, 24h cooldown, 3 max/week
+- **Pre-flight Order:** Data -> Temporal -> VRAM -> Lock -> Load
+- **Adapter Loading:** 30-day max age, graceful fallback to base
+
+### Verifier Layer
+- Timeframe-adaptive horizons (1m->60 bars, 1h->24 bars, 1d->5 bars)
+- Log returns for additivity and DPO compatibility
+- Entry at next bar open (realistic execution)
+
+### Reward Layer
+- Clipped linear reward bounded to [-1, 1] for stable DPO gradients
+- Three components: return (0.50), directional (0.30), MAE (0.20)
+
+### Evaluation Layer
+- Spearman IC primary, BH-FDR correction for multiple hypothesis testing
+- Metrics: IC, Sharpe, Sortino, Calmar, max drawdown, win rate, profit factor
+
+## File Index
+
+### Configuration
+- `config/settings.py` - Pydantic settings + DPOTrainingSettings
+- `pyproject.toml` - Project metadata, tool configs
+
+### Data Layer
+- `data/indicators.py` - Technical indicators (RSI, MACD, BB)
+- `data/cache_wrapper.py` - AsyncDiskCache with asyncio.to_thread()
+- `data/market_data.py` - CCXT client with context manager
+- `data/regime_filter.py` - RegimeClassifier with volatility percentiles
+- `data/prompt_builder.py` - Task sampling with isolated RNG
+
+### Swarm Layer
+- `swarm/exceptions.py` - Custom exception hierarchy
+- `swarm/ollama_client.py` - VRAM-aware Ollama client with semaphore
+- `swarm/generator.py` - Signal generator with 5 personas
+- `swarm/critic.py` - Critique generation with deepseek-r1:14b
+- `swarm/orchestrator.py` - LangGraph workflow + multi-persona
+- `swarm/training_capture.py` - TrainingExample with context_id
+- `swarm/adapter_loader.py` - Adapter discovery, validation, Ollama tags
+
+### Training Layer
+- `training/reward_config.py` - RewardScaling dataclass
+- `training/reward_components.py` - Individual reward functions
+- `training/reward_engine.py` - Main reward API with market_regime
+- `training/dpo_export.py` - Preference pair construction + export
+- `training/process_lock.py` - fcntl file locks
+- `training/vram_check.py` - GPU VRAM detection (NVIDIA + Apple Silicon)
+- `training/walk_forward.py` - Temporal splits with replay buffer
+- `training/dpo_eval.py` - IC, Brier, MACE, promotion logic
+- `training/dpo_trainer.py` - DPO training pipeline (transformers + PEFT)
+
+### Verifier Layer
+- `verifier/` - constants, config, outcome, validator, engine
+
+### Evaluation Layer
+- `eval/` - config, metrics, engine
+
+### Tests (403 total)
+- `tests/test_config.py` - 18 tests
+- `tests/test_indicators.py` - 19 tests
+- `tests/test_data_layer.py` - 21 tests
+- `tests/test_ollama_client.py` - 17 tests
+- `tests/test_generator.py` - 20 tests
+- `tests/test_critic.py` - 22 tests
+- `tests/test_orchestrator.py` - 23 tests
+- `tests/test_verifier/` - 64 tests
+- `tests/test_reward/` - 63 tests
+- `tests/test_eval/` - 49 tests
+- `tests/test_training/` - 71 tests (dpo_export, process_lock, vram_check, walk_forward, dpo_eval, dpo_trainer)
+- `tests/test_swarm/test_adapter_loader.py` - 16 tests
+
+## Known Issues & Gotchas
+
+### Runtime Dependencies
+- Ollama service: Required only at runtime
+- Model downloads: ~14 GB total (qwen3:8b + deepseek-r1:14b)
+
+### Code Patterns
+- All diskcache operations wrapped in `asyncio.to_thread()`
+- Generator prompts must include `/no_think`
+- Context managers for AsyncDiskCache, MarketDataService, OllamaClient
+
+## Working Decisions
+
+- Separate `requirements.txt` (inference) and `requirements-training.txt` (DPO)
+- Process A and Process B NEVER run concurrently (enforced by process_lock.py)
+- Models accessed by exact tag (e.g., `qwen3:8b`)
+- Adapter directory: `models/adapters/adapter-{PERSONA}-{TIMESTAMP}.promoted`
+- Deferred: M3 (fetch optimization), M4 (type hints), L2 (integration tests for Session 9)
+
+---
+
+**Total Tests:** 403 passing (341 original + 62 Session 8)
+**Python Version:** 3.13.7

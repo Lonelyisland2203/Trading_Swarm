@@ -1,0 +1,18 @@
+# Training Dependencies (Process B - Fine-tuning)
+# Install in SEPARATE environment from requirements.txt
+# NEVER run Process A and Process B concurrently
+
+# Core Training
+torch==2.6.1
+transformers==4.48.3
+trl==0.14.0
+peft==0.15.0
+accelerate==1.4.0
+bitsandbytes==0.45.2
+
+# Dataset & Tokenization
+datasets==3.2.0
+
+# Utilities
+wandb==0.19.1
+tqdm==4.67.1

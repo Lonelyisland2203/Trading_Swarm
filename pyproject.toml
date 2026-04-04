@@ -1,0 +1,67 @@
+[project]
+name = "trading-swarm"
+version = "0.1.0"
+description = "Autonomous AI trading signal system with self-improvement via DPO"
+authors = [{name = "Trading Swarm Team"}]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+
+dependencies = [
+    "langgraph>=0.2.65",
+    "langchain-core>=0.3.54",
+    "ollama>=0.4.7",
+    "sentence-transformers>=3.3.1",
+    "ccxt>=4.5.26",
+    "pandas>=2.2.3",
+    "numpy>=2.2.3",
+    "aiohttp>=3.11.13",
+    "diskcache>=5.6.3",
+    "asyncio-throttle>=1.0.1",
+    "pydantic>=2.10.5",
+    "pydantic-settings>=2.7.1",
+    "python-dotenv>=1.0.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.25.2",
+    "pytest-mock>=3.14.0",
+    "loguru>=0.7.3",
+    "typer>=0.15.1",
+    "rich>=13.9.4",
+]
+
+[project.optional-dependencies]
+training = [
+    "torch>=2.6.1",
+    "transformers>=4.48.3",
+    "trl>=0.14.0",
+    "peft>=0.15.0",
+    "accelerate>=1.4.0",
+    "bitsandbytes>=0.45.2",
+    "datasets>=3.2.0",
+    "wandb>=0.19.1",
+    "tqdm>=4.67.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
