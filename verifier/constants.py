@@ -26,16 +26,16 @@ DEFAULT_TXN_COST_PCT = 0.001  # 0.1%
 def get_horizon_bars(timeframe: str) -> int:
     """
     Get forward measurement window for timeframe.
-    
+
     Args:
         timeframe: Timeframe string (e.g., "1h", "15m")
-    
+
     Returns:
         Number of bars to measure forward
-    
+
     Raises:
         ValueError: Unknown timeframe
-        
+
     Example:
         >>> get_horizon_bars("1h")
         24  # Measure 24 hours forward
@@ -45,5 +45,41 @@ def get_horizon_bars(timeframe: str) -> int:
         raise ValueError(
             f"Unknown timeframe: '{timeframe}'. Valid timeframes: {valid}"
         )
-    
+
     return HORIZON_BARS[timeframe]
+
+
+def compute_holding_periods_8h(timeframe: str, horizon_bars: int) -> float:
+    """
+    Compute holding period in 8-hour units (funding periods).
+
+    Args:
+        timeframe: Timeframe string (e.g., "1m", "1h", "1d")
+        horizon_bars: Number of bars to hold position
+
+    Returns:
+        Holding period as fraction of 8h periods
+
+    Examples:
+        >>> compute_holding_periods_8h("1m", 60)  # 60 minutes
+        0.125  # 1/8 of a funding period
+        >>> compute_holding_periods_8h("1h", 24)  # 24 hours
+        3.0    # 3 funding periods
+        >>> compute_holding_periods_8h("1d", 5)   # 5 days
+        15.0   # 15 funding periods
+    """
+    # Parse timeframe to hours per bar
+    unit = timeframe[-1]
+    value = int(timeframe[:-1]) if len(timeframe) > 1 else 1
+
+    if unit == "m":
+        hours_per_bar = value / 60.0
+    elif unit == "h":
+        hours_per_bar = value
+    elif unit == "d":
+        hours_per_bar = value * 24.0
+    else:
+        raise ValueError(f"Unsupported timeframe unit: {unit}")
+
+    total_hours = hours_per_bar * horizon_bars
+    return total_hours / 8.0

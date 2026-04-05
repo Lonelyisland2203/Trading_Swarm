@@ -2,7 +2,7 @@
 
 import pytest
 
-from verifier.constants import HORIZON_BARS, DEFAULT_TXN_COST_PCT, get_horizon_bars
+from verifier.constants import HORIZON_BARS, DEFAULT_TXN_COST_PCT, get_horizon_bars, compute_holding_periods_8h
 
 
 class TestHorizonBars:
@@ -44,11 +44,11 @@ class TestHorizonBars:
 
 class TestTransactionCost:
     """Test transaction cost defaults."""
-    
+
     def test_default_txn_cost_is_reasonable(self):
         """Test that default cost is in reasonable range (0.05% - 0.5%)."""
         assert 0.0005 <= DEFAULT_TXN_COST_PCT <= 0.005
-    
+
     def test_default_matches_typical_exchange_fees(self):
         """Test that default is conservative estimate of exchange fees."""
         # 0.1% is conservative covering:
@@ -57,3 +57,51 @@ class TestTransactionCost:
         # Should be <= Kraken but >= Binance
         assert DEFAULT_TXN_COST_PCT >= 0.0007  # Above Binance with BNB
         assert DEFAULT_TXN_COST_PCT <= 0.002   # Below Kraken/Coinbase Pro
+
+
+def test_compute_holding_periods_8h_1m():
+    """Test holding period calculation for 1m timeframe."""
+    # 60 bars at 1 minute = 60 minutes = 1 hour
+    periods = compute_holding_periods_8h("1m", 60)
+    assert abs(periods - 0.125) < 1e-9  # 1/8 of a funding period
+
+
+def test_compute_holding_periods_8h_1h():
+    """Test holding period for 1h timeframe."""
+    # 24 bars at 1 hour = 24 hours = 3 funding periods
+    periods = compute_holding_periods_8h("1h", 24)
+    assert abs(periods - 3.0) < 1e-9
+
+
+def test_compute_holding_periods_8h_1d():
+    """Test holding period for 1d timeframe."""
+    # 5 bars at 1 day = 5 days = 15 funding periods
+    periods = compute_holding_periods_8h("1d", 5)
+    assert abs(periods - 15.0) < 1e-9
+
+
+def test_compute_holding_periods_8h_5m():
+    """Test holding period for 5m timeframe."""
+    # 96 bars at 5 minutes = 480 minutes = 8 hours = 1 funding period
+    periods = compute_holding_periods_8h("5m", 96)
+    assert abs(periods - 1.0) < 1e-9
+
+
+def test_compute_holding_periods_8h_15m():
+    """Test holding period for 15m timeframe."""
+    # 32 bars at 15 minutes = 480 minutes = 8 hours = 1 funding period
+    periods = compute_holding_periods_8h("15m", 32)
+    assert abs(periods - 1.0) < 1e-9
+
+
+def test_compute_holding_periods_8h_4h():
+    """Test holding period for 4h timeframe."""
+    # 2 bars at 4 hours = 8 hours = 1 funding period
+    periods = compute_holding_periods_8h("4h", 2)
+    assert abs(periods - 1.0) < 1e-9
+
+
+def test_compute_holding_periods_8h_invalid_unit():
+    """Test that invalid timeframe unit raises ValueError."""
+    with pytest.raises(ValueError, match="Unsupported timeframe unit"):
+        compute_holding_periods_8h("1w", 1)
