@@ -11,11 +11,21 @@ import time
 import uuid
 from collections import Counter
 from dataclasses import asdict, dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from loguru import logger
+
+
+class EnumJSONEncoder(json.JSONEncoder):
+    """JSON encoder that handles Enum values by converting to their .value."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Enum):
+            return obj.value
+        return super().default(obj)
 
 from config.settings import settings
 from data.prompt_builder import TaskType
@@ -218,8 +228,9 @@ class InferenceQueue:
             with open(self.output_file, "a") as f:
                 for ex in examples:
                     # Convert to dict and write as JSONL
+                    # EnumJSONEncoder handles Enum values (TaskType, TradingPersona)
                     ex_dict = ex.to_dict()
-                    f.write(json.dumps(ex_dict) + "\n")
+                    f.write(json.dumps(ex_dict, cls=EnumJSONEncoder) + "\n")
 
             logger.debug(
                 "Examples saved",

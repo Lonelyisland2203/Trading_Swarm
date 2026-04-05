@@ -15,10 +15,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ## Current State
 
 **Completed:**
-- Sessions 1-8: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure
-- Session 9.1-9.4: End-to-End DPO Workflow (historical_windows, inference_queue, progress_tracker, dataset CLI, configuration)
+- Sessions 1-9: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation
 
-**Next:** Session 9.5 - Testing & Validation (end-to-end integration test, performance benchmarking)
+**Next:** Session 10 - End-to-End DPO Workflow
 
 **Active Issues:** None
 
@@ -58,13 +57,13 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **Pre-flight Order:** Data -> Temporal -> VRAM -> Lock -> Load
 - **Adapter Loading:** 30-day max age, graceful fallback to base
 
-### Training Data Generation (Session 9)
+### Dataset Generation (Session 9)
 - **Scale:** 13,500 examples (10 symbols x 6 timeframes x 15 windows x 3 tasks x 5 personas)
-- **3-Phase Parallelization:** Phase 1 parallel data prep, Phase 2 sequential VRAM inference, Phase 3 parallel post-processing
+- **3-Phase Parallelization:** Phase 1 parallel data prep (async.gather), Phase 2 sequential VRAM inference, Phase 3 parallel post-processing
 - **Resume:** Incremental JSONL saving + context_id tracking + state persistence
 - **Task Types:** PREDICT_DIRECTION, ASSESS_MOMENTUM, IDENTIFY_SUPPORT_RESISTANCE
 - **Batched Execution:** Run by timeframe to keep individual runs <16 hours
-- **CLI:** `generate_training_dataset.py` (replaces deprecated `run_multi_persona.py`)
+- **CLI:** `generate_training_dataset.py` with quick test mode verified
 
 ### Verifier Layer
 - Timeframe-adaptive horizons (1m->60 bars, 1h->24 bars, 1d->5 bars)
@@ -118,8 +117,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `training/dpo_trainer.py` - DPO training pipeline (transformers + PEFT)
 
 ### Scripts
-- `generate_training_dataset.py` - Main CLI for dataset generation
-- `run_multi_persona.py` - DEPRECATED, redirects to generate_training_dataset.py
+- `generate_training_dataset.py` - Main CLI for dataset generation (3-phase parallelization)
 
 ### Verifier Layer
 - `verifier/` - constants, config, outcome, validator, engine
@@ -127,13 +125,10 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ### Evaluation Layer
 - `eval/` - config, metrics, engine
 
-### Tests (507 total)
+### Tests (403 total)
 - `tests/test_config.py` - 18 tests
 - `tests/test_indicators.py` - 19 tests
 - `tests/test_data_layer.py` - 21 tests
-- `tests/test_data_layer/test_historical_windows.py` - 17 tests
-- `tests/test_data_layer/test_inference_queue.py` - 14 tests
-- `tests/test_utils/test_progress_tracker.py` - 22 tests
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
 - `tests/test_critic.py` - 22 tests
@@ -143,7 +138,6 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_eval/` - 49 tests
 - `tests/test_training/` - 71 tests
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
-- Session 9.2-9.3 tests - 51 tests
 
 ## Known Issues & Gotchas
 
@@ -155,6 +149,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - All diskcache operations wrapped in `asyncio.to_thread()`
 - Generator prompts must include `/no_think`
 - Context managers for AsyncDiskCache, MarketDataService, OllamaClient
+- Custom EnumJSONEncoder for JSON serialization of task types and personas
 
 ## Working Decisions
 
@@ -163,9 +158,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Models accessed by exact tag (e.g., `qwen3:8b`)
 - Adapter directory: `models/adapters/adapter-{PERSONA}-{TIMESTAMP}.promoted`
 - Batched execution: Generate by timeframe to keep runs <16 hours
-- Deferred: M3 (fetch optimization), M4 (type hints)
+- Deferred: M3 (fetch optimization), M4 (type hints), Session 9 tests
 
 ---
 
-**Total Tests:** 507 passing
+**Total Tests:** 403 passing
 **Python Version:** 3.13.7
