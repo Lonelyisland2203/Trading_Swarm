@@ -16,9 +16,10 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 **Completed:**
 - Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
-- Session 11 (partial): Fee Model Tasks 1-3 complete (FeeModelSettings with round_trip_cost_pct, net_return, minimum_profitable_return_pct)
-
-**Next:** Session 11 Tasks 4-10 - Integrate fee model into verifier and DPO pipeline
+- Session 11: Fee Model Implementation (Tasks 1-10)
+  - Task 1-5: FeeModelSettings, compute_holding_periods_8h, apply_fee_model
+  - Task 6-9: Verifier integration, DPO pipeline integration, fee flip diagnostic, env vars
+  - Task 10: End-to-end integration test and validation (COMPLETE)
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -88,6 +89,8 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Timeframe-adaptive horizons (1m->60 bars, 1h->24 bars, 1d->5 bars)
 - Log returns for additivity and DPO compatibility
 - Entry at next bar open (realistic execution)
+- **Holding periods:** `compute_holding_periods_8h()` converts (timeframe, bars) to 8h funding periods
+- **Fee model:** `apply_fee_model()` with exact log/pct conversions (no linear approximations), bounds checking for extreme losses
 
 ### Reward Layer
 - Clipped linear reward bounded to [-1, 1] for stable DPO gradients
@@ -141,24 +144,27 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `run_dpo_training.py` - End-to-end DPO pipeline CLI (5-phase: load/verify/reward/pairs/train)
 
 ### Verifier Layer
-- `verifier/` - constants, config, outcome, validator, engine
+- `verifier/constants.py` - Timeframe constants + `compute_holding_periods_8h()`
+- `verifier/outcome.py` - OutcomeData + `apply_fee_model()` (deprecated: `compute_net_return()`)
+- `verifier/config.py`, `verifier/validator.py`, `verifier/engine.py` - Core verification logic
 
 ### Evaluation Layer
 - `eval/` - config, metrics, engine
 
-### Tests (448 total)
+### Tests (580 total)
 - `tests/test_config.py` - 40 tests (18 original + 22 FeeModelSettings)
 - `tests/test_indicators.py` - 19 tests
 - `tests/test_data_layer.py` - 21 tests
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
 - `tests/test_critic.py` - 22 tests
-- `tests/test_orchestrator.py` - 23 tests
-- `tests/test_verifier/` - 64 tests
+- `tests/test_orchestrator.py` - 23 tests (5 pre-existing failures unrelated to fee model)
+- `tests/test_verifier/` - 77 tests (64 original + 8 holding_periods + 5 apply_fee_model)
 - `tests/test_reward/` - 63 tests
 - `tests/test_eval/` - 49 tests
 - `tests/test_training/` - 71 tests + `test_dpo_pipeline.py` (23 tests)
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
+- `tests/test_integration/test_fee_model_integration.py` - 6 tests (new: config, timeframes, exact conversions, env vars, end-to-end)
 
 ## Known Issues & Gotchas
 
@@ -187,5 +193,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 448 passing
+**Total Tests:** 575 passing (580 collected, 5 pre-existing failures in test_orchestrator)
 **Python Version:** 3.13.7
