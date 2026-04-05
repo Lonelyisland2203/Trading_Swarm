@@ -12,6 +12,7 @@ from config.settings import (
     AppSettings,
     validate_ollama_models,
 )
+from config.fee_model import FeeModelSettings
 
 
 class TestOllamaSettings:
@@ -252,3 +253,26 @@ class TestValidateOllamaModels:
 
         assert result["error"] is not None
         assert "Failed to connect" in result["error"]
+
+
+class TestFeeModelSettings:
+    """Test fee model configuration."""
+
+    def test_default_values(self):
+        """Test default fee model settings."""
+        settings = FeeModelSettings()
+        assert settings.maker_fee_pct == 0.02
+        assert settings.taker_fee_pct == 0.05
+        assert settings.bnb_discount_enabled is True
+        assert settings.bnb_discount_pct == 10.0
+        assert settings.funding_rate_pct == 0.01
+        assert settings.funding_interval_hours == 8
+        assert settings.slippage_pct == 0.02
+
+    def test_round_trip_cost_pct_default(self):
+        """Test round_trip_cost_pct with default settings."""
+        settings = FeeModelSettings()
+        # Default: entry=maker 0.02%, exit=taker 0.05%, funding 0.01% per 8h, slippage 0.02%
+        # With BNB discount: (0.02 + 0.05) * 0.9 + 0.01 + 0.02 = 0.063 + 0.01 + 0.02 = 0.093%
+        cost = settings.round_trip_cost_pct(holding_periods_8h=1)
+        assert abs(cost - 0.093) < 0.001
