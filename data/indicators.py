@@ -129,6 +129,44 @@ def compute_bb_position(close: pd.Series, period: int = 20, num_std: float = 2.0
     return position
 
 
+def donchian_channels(
+    df: pd.DataFrame,
+    period: int = 20,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Compute Donchian Channels (highest high and lowest low over period).
+
+    Args:
+        df: DataFrame with 'high' and 'low' columns
+        period: Lookback period (default: 20)
+
+    Returns:
+        Tuple of (upper_band, middle_band, lower_band)
+    """
+    upper = df["high"].rolling(window=period).max()
+    lower = df["low"].rolling(window=period).min()
+    middle = (upper + lower) / 2.0
+
+    return upper, middle, lower
+
+
+def donchian_channels_long(
+    df: pd.DataFrame,
+    period: int = 55,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Compute long-term Donchian Channels (55-period default).
+
+    Args:
+        df: DataFrame with 'high' and 'low' columns
+        period: Lookback period (default: 55)
+
+    Returns:
+        Tuple of (upper_band, middle_band, lower_band)
+    """
+    return donchian_channels(df, period=period)
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
