@@ -105,3 +105,9 @@ def test_compute_holding_periods_8h_invalid_unit():
     """Test that invalid timeframe unit raises ValueError."""
     with pytest.raises(ValueError, match="Unsupported timeframe unit"):
         compute_holding_periods_8h("1w", 1)
+
+
+def test_compute_holding_periods_8h_zero_bars():
+    """Test holding period with zero bars (valid edge case)."""
+    periods = compute_holding_periods_8h("1h", 0)
+    assert abs(periods - 0.0) < 1e-9

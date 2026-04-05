@@ -68,6 +68,11 @@ def compute_holding_periods_8h(timeframe: str, horizon_bars: int) -> float:
         >>> compute_holding_periods_8h("1d", 5)   # 5 days
         15.0   # 15 funding periods
     """
+    if not timeframe:
+        raise ValueError("Timeframe cannot be empty")
+    if horizon_bars < 0:
+        raise ValueError(f"horizon_bars must be non-negative, got {horizon_bars}")
+
     # Parse timeframe to hours per bar
     unit = timeframe[-1]
     value = int(timeframe[:-1]) if len(timeframe) > 1 else 1
