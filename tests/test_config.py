@@ -458,3 +458,16 @@ class TestFeeModelSettings:
         assert abs(cost_0 - 0.083) < 1e-9  # Only base fees + slippage
         assert abs(cost_5 - 0.083) < 1e-9  # Same even with 5 periods
         assert abs(cost_0 - cost_5) < 1e-9  # Both equal
+
+    def test_invalid_order_type_rejected(self):
+        """Test that invalid order types raise validation error."""
+        with pytest.raises(ValidationError):
+            FeeModelSettings(entry_order_type="invalid")
+        with pytest.raises(ValidationError):
+            FeeModelSettings(exit_order_type="MAKER")  # case-sensitive
+
+    def test_negative_holding_periods_rejected(self):
+        """Test that negative holding periods raise ValueError."""
+        fee_model = FeeModelSettings()
+        with pytest.raises(ValueError, match="holding_periods_8h must be non-negative"):
+            fee_model.round_trip_cost_pct(holding_periods_8h=-1.0)

@@ -115,6 +115,9 @@ class FeeModelSettings(BaseModel):
             >>> cost = fee_model.round_trip_cost_pct(holding_periods_8h=1)
             >>> # With defaults: (0.02 + 0.05) * 0.9 + 0.01 + 0.02 = 0.093%
         """
+        if holding_periods_8h < 0:
+            raise ValueError("holding_periods_8h must be non-negative")
+
         # Apply BNB discount if enabled
         discount_multiplier = (100.0 - self.bnb_discount_pct) / 100.0 if self.bnb_discount_enabled else 1.0
 
