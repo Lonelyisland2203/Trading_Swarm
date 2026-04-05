@@ -838,3 +838,75 @@ def test_open_interest_stub():
 
     result = open_interest("BTC/USDT", 1640000000000)
     assert result is None
+
+
+@pytest.fixture
+def fvg_pattern_df():
+    """OHLCV data with known FVG patterns."""
+    return pd.DataFrame({
+        'timestamp': [
+            1704067200000,  # 0: Low bar before bullish gap
+            1704070800000,  # 1: Bullish FVG gap candle (middle, extended high)
+            1704074400000,  # 2: Completes bullish FVG (gap: 101 to 104)
+            1704078000000,  # 3: Stays above gap, overlaps bar 1 (no new gap, no fill)
+        ],
+        'open': [100.0, 101.0, 105.0, 104.5],
+        'high': [101.0, 104.5, 106.0, 106.5],
+        'low': [99.0, 100.0, 104.0, 104.2],
+        'close': [100.5, 102.0, 105.5, 105.0],
+    })
+
+
+def test_fvg_bullish_detection(fvg_pattern_df):
+    """Detects bullish FVG and verifies structure."""
+    from data.indicators import fair_value_gaps
+
+    gaps = fair_value_gaps(fvg_pattern_df, min_gap_pct=0.1)
+
+    # Should detect bullish FVG at index 1 (candle 0 high=101.0 < candle 2 low=104.0)
+    assert len(gaps) == 1
+    gap = gaps[0]
+    assert gap['index'] == 1
+    assert gap['direction'] == 'bullish'
+    assert gap['gap_bottom'] == 101.0
+    assert gap['gap_top'] == 104.0
+    assert gap['timestamp'] == 1704070800000
+    # Gap size = (104.0 - 101.0) / 101.0 * 100 = 2.97%
+    assert abs(gap['gap_size_pct'] - 2.97) < 0.01
+
+
+def test_fvg_min_gap_filter(fvg_pattern_df):
+    """Filters tiny gaps below threshold."""
+    from data.indicators import fair_value_gaps
+
+    # Set threshold to 5% - should exclude our 2.97% bullish gap
+    gaps = fair_value_gaps(fvg_pattern_df, min_gap_pct=5.0)
+
+    assert len(gaps) == 0
+
+
+def test_fvg_filled_gaps_excluded():
+    """Excludes filled gaps."""
+    from data.indicators import fair_value_gaps
+
+    # Create data with a bearish FVG that gets filled
+    df = pd.DataFrame({
+        'timestamp': [
+            1704067200000,  # 0: High bar before bearish gap
+            1704070800000,  # 1: Bearish FVG gap candle (middle)
+            1704074400000,  # 2: Completes bearish FVG (low bar, creates gap)
+            1704078000000,  # 3: Fills the gap (high goes above gap_bottom)
+        ],
+        'open': [110.0, 109.0, 105.0, 104.0],
+        'high': [111.0, 110.0, 106.0, 108.0],
+        'low': [109.0, 105.0, 103.0, 103.0],
+        'close': [110.5, 106.0, 104.0, 105.0],
+    })
+
+    # Bearish FVG at index 1:
+    # - Bar 0 low=109.0 > Bar 2 high=106.0 (gap exists)
+    # - Bar 3 high=108.0 > 106.0 (fills the gap)
+    # Should not be in results
+
+    gaps = fair_value_gaps(df, min_gap_pct=0.1)
+    assert len(gaps) == 0

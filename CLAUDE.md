@@ -16,9 +16,11 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 **Completed:**
 - Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
-- Session 11: Realistic Fee Model - COMPLETE (all 10 tasks)
+- Session 11a: Realistic Fee Model (10 tasks)
 
-**Next:** Session 12 - TBD (evaluation integration or production deployment)
+**In Progress:** Session 11b - Indicator Expansion (4/14 tasks)
+- Tasks 1-4 complete: Donchian Channels, Ichimoku Cloud, KAMA, Volume Indicators
+- Next: Task 5 (Volatility Indicators: ATR, Keltner, historical vol)
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -26,36 +28,36 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ## Architecture Decisions
 
+### Indicator Expansion (Session 11b)
+- **Pattern:** All new indicators use `compute_` prefix with pd.Series parameters
+- **Volume indicators:** OBV (cumulative), CMF (-1 to +1), MFI (0-100), VWAP (price-weighted)
+- **Trend indicators:** Donchian (high/low/mid channels), Ichimoku (5 lines), KAMA (adaptive EMA)
+- **Test file:** `test_indicators_extended.py` for new indicators (26 tests)
+
 ### Configuration Layer
 - Nested Pydantic settings with flat env var mapping
 - Reward weights validated to sum to 1.0 via `@model_validator`
 - DatasetGenerationSettings: window_count=15, stride=100, completeness=0.95, retries=2
 
-### Fee Model Implementation (Session 11)
+### Fee Model Implementation (Session 11a)
 - **Purpose:** Binance Futures USDT-M realistic fee model to filter unprofitable signals
 - **FeeModelSettings:** Pydantic config with env var support (FEE_MODEL_*)
 - **Defaults:** maker 0.02%, taker 0.05%, 10% BNB discount, 0.01% funding/8h, 0.02% slippage
 - **Core API:** `round_trip_cost_pct()`, `net_return()`, `minimum_profitable_return_pct()`
-- **Order types:** Configurable entry/exit (maker/taker)
-- **Holding periods:** `compute_holding_periods_8h()` converts (timeframe, bars) to funding periods
 - **Verifier integration:** `apply_fee_model()` with exact log/pct conversions
-- **DPO integration:** Fee-adjusted returns flow through reward computation
-- **Validation:** +0.10% gross signals correctly identified as unprofitable after fees
 
 ### Data Layer
 - Async caching: diskcache wrapped in `asyncio.to_thread()`
-- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time; passes `end_ts=as_of` to `fetch_ohlcv()` to anchor exchange queries historically
+- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time; passes `end_ts=as_of` to `fetch_ohlcv()`
 - Regime classification: Realized volatility percentiles (no VIX for crypto)
 - Task sampling: Weighted by difficulty with isolated RNG
 - Historical windows: Configurable stride, >95% completeness threshold
-- Inference queue: JSONL streaming, context_id tracking for 5-persona completion
 
 ### Swarm Layer
 - VRAM Management: Semaphore + explicit unload between model switches
 - Caching Strategy: Temperature gate - only cache temp=0 generations
 - Persona Selection: Regime-informed weighted sampling (5 personas)
 - Response Validation: 4-stage JSON extraction with single clarification retry
-- Multi-Persona Workflow: `run_multi_persona_workflow()` with `context_id` grouping
 
 ### Training Layer - DPO
 - **Stack:** Direct transformers + PEFT (not Unsloth - better debuggability)
@@ -66,27 +68,17 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **DPO Hyperparams:** beta=0.1, lr=5e-6, batch_size=1, grad_accum=16
 - **Walk-Forward:** 500 train / 100 test pairs per window, temporal ordering
 - **Replay Buffer:** 15% old data to prevent catastrophic forgetting
-- **Evaluation Metrics:** IC, return-weighted IC, Brier, MACE, regime-stratified IC
 - **Promotion:** IC > 0.02, Brier > 0.01, p < 0.05, N >= 100, 24h cooldown, 3 max/week
-- **Pre-flight Order:** Data -> Temporal -> VRAM -> Lock -> Load
-- **Adapter Loading:** 30-day max age, graceful fallback to base
 
 ### DPO Pipeline (Session 10)
 - **5-Phase CLI:** Load -> Verify -> Reward -> Pairs -> Train
-- **Phase 1:** Filters examples requiring direction in generator_signal
-- **Phase 2:** Async batch verification via MarketDataService
-- **Phase 3:** Reward computation per matched pair (now fee-adjusted)
-- **Phase 4:** Preference pair construction, optional `--save-pairs`
-- **Phase 5:** Calls `train_dpo()`, exits 1 on failure
+- **Phase 3:** Reward computation per matched pair (fee-adjusted)
 - **CLI flags:** `--dataset` (required), `--output`, `--save-pairs`, `--dry-run`, `--min-delta`, `--force`
 
 ### Dataset Generation (Session 9)
 - **Scale:** 13,500 examples (10 symbols x 6 timeframes x 15 windows x 3 tasks x 5 personas)
-- **3-Phase Parallelization:** Phase 1 parallel data prep (async.gather), Phase 2 sequential VRAM inference, Phase 3 parallel post-processing
-- **Resume:** Incremental JSONL saving + context_id tracking + state persistence
+- **3-Phase Parallelization:** Phase 1 parallel data prep, Phase 2 sequential VRAM inference, Phase 3 parallel post-processing
 - **Task Types:** PREDICT_DIRECTION, ASSESS_MOMENTUM, IDENTIFY_SUPPORT_RESISTANCE
-- **Batched Execution:** Run by timeframe to keep individual runs <16 hours
-- **CLI:** `generate_training_dataset.py` with quick test mode verified
 
 ### Verifier Layer
 - Timeframe-adaptive horizons (1m->60 bars, 1h->24 bars, 1d->5 bars)
@@ -106,10 +98,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ### Configuration
 - `config/settings.py` - Pydantic settings + DPOTrainingSettings + DatasetGenerationSettings
 - `config/fee_model.py` - FeeModelSettings for Binance Futures USDT-M fee calculations
-- `pyproject.toml` - Project metadata, tool configs
 
 ### Data Layer
-- `data/indicators.py` - Technical indicators (RSI, MACD, BB)
+- `data/indicators.py` - Technical indicators: RSI, MACD, BB, Donchian, Ichimoku, KAMA, OBV, CMF, MFI, VWAP
 - `data/cache_wrapper.py` - AsyncDiskCache with asyncio.to_thread()
 - `data/market_data.py` - CCXT client with context manager
 - `data/regime_filter.py` - RegimeClassifier with volatility percentiles
@@ -141,8 +132,8 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `training/dpo_trainer.py` - DPO training pipeline (transformers + PEFT)
 
 ### Scripts
-- `generate_training_dataset.py` - Main CLI for dataset generation (3-phase parallelization)
-- `run_dpo_training.py` - End-to-end DPO pipeline CLI (5-phase: load/verify/reward/pairs/train)
+- `generate_training_dataset.py` - Main CLI for dataset generation
+- `run_dpo_training.py` - End-to-end DPO pipeline CLI
 
 ### Verifier Layer
 - `verifier/constants.py` - Timeframe constants + `compute_holding_periods_8h()`
@@ -154,7 +145,8 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ### Tests
 - `tests/test_config.py` - 40 tests (18 original + 22 FeeModelSettings)
-- `tests/test_indicators.py` - 19 tests
+- `tests/test_indicators.py` - 19 tests (original indicators)
+- `tests/test_indicators_extended.py` - 26 tests (Donchian 5 + Ichimoku 4 + KAMA 5 + Volume 12)
 - `tests/test_data_layer.py` - 21 tests
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
@@ -165,7 +157,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_eval/` - 49 tests
 - `tests/test_training/` - 71 tests + `test_dpo_pipeline.py` (23 tests)
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
-- `tests/test_integration/test_fee_model_integration.py` - 6 tests (end-to-end fee model validation)
+- `tests/test_integration/test_fee_model_integration.py` - 6 tests
 
 ## Known Issues & Gotchas
 
@@ -182,6 +174,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Generator prompts must include `/no_think`
 - Context managers for AsyncDiskCache, MarketDataService, OllamaClient
 - Custom EnumJSONEncoder for JSON serialization of task types and personas
+- **Indicator pattern:** `compute_` prefix, pd.Series params, return pd.Series or dict of Series
 
 ## Working Decisions
 
@@ -194,5 +187,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 580 (575 passing, 5 pre-existing orchestrator failures)
+**Total Tests:** 606 (601 passing, 5 pre-existing orchestrator failures)
 **Python Version:** 3.13.7

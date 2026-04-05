@@ -702,6 +702,102 @@ def open_interest(symbol: str, timestamp_ms: int) -> float | None:
     return None
 
 
+def fair_value_gaps(
+    df: pd.DataFrame,
+    min_gap_pct: float = 0.1,
+) -> list[dict]:
+    """
+    Detect Fair Value Gaps (FVG) - three-candle patterns indicating imbalances.
+
+    A Fair Value Gap occurs when there is a gap in price action that suggests
+    rapid momentum and potential support/resistance zones.
+
+    Bullish FVG: candle[i-1].high < candle[i+1].low (gap between them)
+    Bearish FVG: candle[i-1].low > candle[i+1].high (gap between them)
+
+    Only returns unfilled gaps (not breached by subsequent price action).
+
+    Args:
+        df: OHLCV DataFrame with columns ['timestamp', 'open', 'high', 'low', 'close']
+        min_gap_pct: Minimum gap size as percentage of price (default: 0.1%)
+
+    Returns:
+        List of unfilled gap dictionaries:
+        [
+            {
+                'index': int,           # Index of gap candle (middle)
+                'direction': 'bullish' | 'bearish',
+                'gap_top': float,       # Top of gap zone
+                'gap_bottom': float,    # Bottom of gap zone
+                'gap_size_pct': float,  # Gap size as % of price
+                'timestamp': int,       # Millisecond timestamp
+            }
+        ]
+    """
+    if len(df) < 3:
+        return []
+
+    gaps = []
+
+    # Scan from bar 1 to bar n-2 (need bars i-1, i, i+1)
+    for i in range(1, len(df) - 1):
+        # Bullish FVG: candle[i-1].high < candle[i+1].low
+        if df.iloc[i - 1]['high'] < df.iloc[i + 1]['low']:
+            gap_bottom = df.iloc[i - 1]['high']
+            gap_top = df.iloc[i + 1]['low']
+            gap_size_pct = ((gap_top - gap_bottom) / gap_bottom) * 100
+
+            # Filter by minimum gap size
+            if gap_size_pct < min_gap_pct:
+                continue
+
+            # Check if gap is filled by subsequent bars
+            filled = False
+            for j in range(i + 2, len(df)):
+                if df.iloc[j]['low'] < gap_top:
+                    filled = True
+                    break
+
+            if not filled:
+                gaps.append({
+                    'index': i,
+                    'direction': 'bullish',
+                    'gap_top': gap_top,
+                    'gap_bottom': gap_bottom,
+                    'gap_size_pct': round(gap_size_pct, 2),
+                    'timestamp': int(df.iloc[i]['timestamp']),
+                })
+
+        # Bearish FVG: candle[i-1].low > candle[i+1].high
+        elif df.iloc[i - 1]['low'] > df.iloc[i + 1]['high']:
+            gap_top = df.iloc[i - 1]['low']
+            gap_bottom = df.iloc[i + 1]['high']
+            gap_size_pct = ((gap_top - gap_bottom) / gap_bottom) * 100
+
+            # Filter by minimum gap size
+            if gap_size_pct < min_gap_pct:
+                continue
+
+            # Check if gap is filled by subsequent bars
+            filled = False
+            for j in range(i + 2, len(df)):
+                if df.iloc[j]['high'] > gap_bottom:
+                    filled = True
+                    break
+
+            if not filled:
+                gaps.append({
+                    'index': i,
+                    'direction': 'bearish',
+                    'gap_top': gap_top,
+                    'gap_bottom': gap_bottom,
+                    'gap_size_pct': round(gap_size_pct, 2),
+                    'timestamp': int(df.iloc[i]['timestamp']),
+                })
+
+    return gaps
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
