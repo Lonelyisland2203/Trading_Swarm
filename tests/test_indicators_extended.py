@@ -1091,3 +1091,96 @@ def test_compute_all_indicators_full(sample_ohlcv):
     assert 'raw_swing_points' in result
     assert isinstance(result['raw_fvgs'], list)
     assert isinstance(result['raw_swing_points'], dict)
+
+
+def test_compute_all_indicators_scalar_summaries():
+    """Verifies FVG distance calculations in compute_all_indicators()."""
+    from data.indicators import compute_all_indicators
+
+    # Use proven FVG pattern from test_fvg_bullish_detection fixture
+    # Bullish FVG at index 6: bar[5].high=100.0 < bar[7].low=101.0
+    # Bearish FVG at index 11: bar[10].low=104.0 > bar[12].high=103.0
+    # Current price at last bar: 102.0 (between the two gaps)
+    #   - Bullish gap [100.0, 101.0] is below -> distance to nearest bullish FVG
+    #   - Bearish gap [103.0, 104.0] is above -> distance to nearest bearish FVG
+    # But wait - my implementation checks:
+    #   - nearest_bullish_fvg_pct: gap ABOVE price (gap_bottom > current_price)
+    #   - nearest_bearish_fvg_pct: gap BELOW price (gap_top < current_price)
+    # So with current price at 102.0:
+    #   - Bullish gap bottom 100.0 < 102.0 -> NOT counted (gap is below, not above)
+    #   - Bearish gap top 104.0 > 102.0 -> NOT counted (gap is above, not below)
+    # This doesn't test anything!
+    # Solution: Set current price to 99.0 (below bullish gap) or 105.0 (above bearish gap)
+    # Let's use 105.0 (above bearish gap)
+    data = []
+    for i in range(15):
+        if 5 <= i <= 7:
+            # Bullish FVG pattern at index 6
+            if i == 5:
+                bar = {'high': 100.0, 'low': 99.0}
+            elif i == 6:
+                bar = {'high': 103.0, 'low': 102.0}  # Gap candle
+            else:  # i == 7
+                bar = {'high': 105.0, 'low': 101.0}  # low > bar[5].high -> bullish FVG
+        elif 10 <= i <= 12:
+            # Bearish FVG pattern at index 11
+            if i == 10:
+                bar = {'high': 105.0, 'low': 104.0}
+            elif i == 11:
+                bar = {'high': 102.0, 'low': 101.5}  # Gap candle
+            else:  # i == 12
+                bar = {'high': 103.0, 'low': 101.5}  # high < bar[10].low -> bearish FVG
+        else:
+            # Default bars between gaps: [101.5, 102.5]
+            bar = {'high': 102.5, 'low': 101.5}
+
+        data.append({
+            'timestamp': i * 60000,
+            'high': bar['high'],
+            'low': bar['low'],
+            'open': bar['low'],
+            'close': 105.0 if i == 14 else bar['high'],  # Last bar close at 105.0
+            'volume': 1000.0,
+        })
+
+    df = pd.DataFrame(data)
+    result = compute_all_indicators(df, include_structure=True)
+
+    # Should detect both FVGs
+    assert len(result['raw_fvgs']) == 2
+    bullish_fvgs = [g for g in result['raw_fvgs'] if g['direction'] == 'bullish']
+    bearish_fvgs = [g for g in result['raw_fvgs'] if g['direction'] == 'bearish']
+    assert len(bullish_fvgs) == 1
+    assert len(bearish_fvgs) == 1
+
+    # Current price is 105.0
+    # Bearish gap: [103.0, 104.0], gap_top is 104.0 (below current price 105.0)
+    # Distance: (105.0 - 104.0) / 105.0 * 100 = 0.95%
+    assert result['nearest_bearish_fvg_pct'] is not None
+    assert abs(result['nearest_bearish_fvg_pct'] - 0.95) < 0.01
+
+    # Bullish gap bottom is 100.0 (below current price 105.0, not above)
+    # So no bullish FVG above current price
+    assert result['nearest_bullish_fvg_pct'] is None
+
+
+def test_compute_all_indicators_atr_normalized():
+    """Verifies atr_normalized = atr/close*100 in compute_all_indicators()."""
+    from data.indicators import compute_all_indicators
+
+    # Simple data with predictable ATR
+    df = pd.DataFrame({
+        'timestamp': [i * 60000 for i in range(30)],
+        'open': [100.0] * 30,
+        'high': [102.0] * 30,  # Range of 4.0 every bar
+        'low': [98.0] * 30,
+        'close': [100.0] * 30,
+        'volume': [1000.0] * 30,
+    })
+
+    result = compute_all_indicators(df)
+
+    # ATR should be ~4.0 (constant range), close is 100.0
+    # atr_normalized = 4.0 / 100.0 * 100 = 4.0%
+    assert result['atr_normalized'] is not None
+    assert 3.5 < result['atr_normalized'] < 4.5

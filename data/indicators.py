@@ -1020,18 +1020,51 @@ def compute_all_indicators(
         fvgs = fair_value_gaps(df, min_gap_pct=0.1)
         result['raw_fvgs'] = fvgs
 
-        # Scalar summaries for FVGs (Part 1: distances TODO in Task 11)
-        result['nearest_bullish_fvg_pct'] = None  # TODO: Task 11
-        result['nearest_bearish_fvg_pct'] = None  # TODO: Task 11
+        # Scalar summaries for FVGs
+        current_price = close.iloc[-1]
+        nearest_bullish_fvg_pct = None
+        nearest_bearish_fvg_pct = None
+
+        for gap in fvgs:
+            if gap['direction'] == 'bullish':
+                # Bullish FVG: gap is above price
+                if gap['gap_bottom'] > current_price:
+                    distance_pct = (gap['gap_bottom'] - current_price) / current_price * 100
+                    if nearest_bullish_fvg_pct is None or distance_pct < nearest_bullish_fvg_pct:
+                        nearest_bullish_fvg_pct = distance_pct
+            elif gap['direction'] == 'bearish':
+                # Bearish FVG: gap is below price
+                if gap['gap_top'] < current_price:
+                    distance_pct = (current_price - gap['gap_top']) / current_price * 100
+                    if nearest_bearish_fvg_pct is None or distance_pct < nearest_bearish_fvg_pct:
+                        nearest_bearish_fvg_pct = distance_pct
+
+        result['nearest_bullish_fvg_pct'] = nearest_bullish_fvg_pct
+        result['nearest_bearish_fvg_pct'] = nearest_bearish_fvg_pct
         result['open_fvg_count'] = len(fvgs)
 
         # Swing Points
         swing_data = swing_points(df, window=5)
         result['raw_swing_points'] = swing_data
 
-        # Scalar summaries for swing points (Part 1: distances TODO in Task 11)
-        result['nearest_swing_high_pct'] = None  # TODO: Task 11
-        result['nearest_swing_low_pct'] = None  # TODO: Task 11
+        # Scalar summaries for swing points
+        nearest_swing_high_pct = None
+        nearest_swing_low_pct = None
+
+        for swing_high in swing_data['highs']:
+            if swing_high['price'] > current_price:
+                distance_pct = (swing_high['price'] - current_price) / current_price * 100
+                if nearest_swing_high_pct is None or distance_pct < nearest_swing_high_pct:
+                    nearest_swing_high_pct = distance_pct
+
+        for swing_low in swing_data['lows']:
+            if swing_low['price'] < current_price:
+                distance_pct = (current_price - swing_low['price']) / current_price * 100
+                if nearest_swing_low_pct is None or distance_pct < nearest_swing_low_pct:
+                    nearest_swing_low_pct = distance_pct
+
+        result['nearest_swing_high_pct'] = nearest_swing_high_pct
+        result['nearest_swing_low_pct'] = nearest_swing_low_pct
     else:
         # Set empty structures if structure indicators skipped
         result['raw_fvgs'] = []
