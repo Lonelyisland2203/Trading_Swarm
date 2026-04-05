@@ -1036,3 +1036,58 @@ def test_swing_points_flat_price():
 
     assert result['highs'] == []
     assert result['lows'] == []
+
+
+def test_compute_all_indicators_full(sample_ohlcv):
+    """Verifies compute_all_indicators() returns all expected keys and structures."""
+    from data.indicators import compute_all_indicators
+
+    result = compute_all_indicators(sample_ohlcv, include_volume=True, include_structure=True)
+
+    # Verify return type
+    assert isinstance(result, dict)
+
+    # Verify all scalar keys are present (17 indicators total)
+    # Price/Trend (existing 3): rsi, macd_line, macd_signal
+    assert 'rsi' in result
+    assert 'macd_line' in result
+    assert 'macd_signal' in result
+
+    # Price/Trend (new 4): donchian_upper, donchian_middle, donchian_lower, kama
+    assert 'donchian_upper' in result
+    assert 'donchian_middle' in result
+    assert 'donchian_lower' in result
+    assert 'kama' in result
+
+    # Volume (new 4): obv, cmf, mfi, vwap
+    assert 'obv' in result
+    assert 'cmf' in result
+    assert 'mfi' in result
+    assert 'vwap' in result
+
+    # Volatility (new 4): atr_normalized, bb_width, keltner_width, donchian_width
+    assert 'atr_normalized' in result
+    assert 'bb_width' in result
+    assert 'keltner_width' in result
+    assert 'donchian_width' in result
+
+    # Market structure (new 2): nearest_bullish_fvg_pct, nearest_bearish_fvg_pct, open_fvg_count, nearest_swing_high_pct, nearest_swing_low_pct
+    assert 'nearest_bullish_fvg_pct' in result
+    assert 'nearest_bearish_fvg_pct' in result
+    assert 'open_fvg_count' in result
+    assert 'nearest_swing_high_pct' in result
+    assert 'nearest_swing_low_pct' in result
+
+    # Verify 'series' dict is present
+    assert 'series' in result
+    assert isinstance(result['series'], dict)
+    # Check a few series keys
+    assert 'rsi' in result['series']
+    assert 'macd_line' in result['series']
+    assert 'kama' in result['series']
+
+    # Verify 'raw_fvgs' and 'raw_swing_points' are present
+    assert 'raw_fvgs' in result
+    assert 'raw_swing_points' in result
+    assert isinstance(result['raw_fvgs'], list)
+    assert isinstance(result['raw_swing_points'], dict)

@@ -874,6 +874,180 @@ def swing_points(
     return {'highs': swing_highs, 'lows': swing_lows}
 
 
+def compute_all_indicators(
+    df: pd.DataFrame,
+    include_volume: bool = True,
+    include_structure: bool = True,
+) -> dict:
+    """
+    Compute all 17 technical indicators on OHLCV DataFrame.
+
+    This aggregates:
+    - Price/Trend indicators (7): RSI, MACD, Donchian Channels, KAMA
+    - Volume indicators (4): OBV, CMF, MFI, VWAP
+    - Volatility indicators (4): ATR normalized, BB width, Keltner width, Donchian width
+    - Market structure (2): Fair Value Gaps, Swing Points
+
+    Args:
+        df: OHLCV DataFrame with columns [timestamp, open, high, low, close, volume]
+        include_volume: If False, skip volume indicators
+        include_structure: If False, skip market structure indicators
+
+    Returns:
+        Dictionary with:
+        - Scalar outputs (latest values) for all indicators
+        - 'series' dict with full Series for each indicator
+        - 'raw_fvgs' and 'raw_swing_points' for market structure (if include_structure=True)
+
+    Example:
+        >>> df = pd.DataFrame(...)  # OHLCV data
+        >>> indicators = compute_all_indicators(df)
+        >>> print(indicators['rsi'])  # Latest RSI value
+        >>> print(indicators['series']['rsi'])  # Full RSI series
+    """
+    if df.empty:
+        raise ValueError("Cannot compute indicators on empty DataFrame")
+
+    # Extract series from DataFrame
+    open_series = df['open']
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    volume = df['volume'] if 'volume' in df.columns else None
+
+    # Initialize result dict
+    result = {}
+    series_dict = {}
+
+    # ============================================================
+    # Price/Trend Indicators (7 indicators)
+    # ============================================================
+
+    # RSI (14-period)
+    rsi_series = compute_rsi(close, period=14)
+    result['rsi'] = rsi_series.iloc[-1] if not rsi_series.empty and not pd.isna(rsi_series.iloc[-1]) else None
+    series_dict['rsi'] = rsi_series
+
+    # MACD (12, 26, 9)
+    macd_line, macd_signal, macd_histogram = compute_macd(close, fast_period=12, slow_period=26, signal_period=9)
+    result['macd_line'] = macd_line.iloc[-1] if not macd_line.empty and not pd.isna(macd_line.iloc[-1]) else None
+    result['macd_signal'] = macd_signal.iloc[-1] if not macd_signal.empty and not pd.isna(macd_signal.iloc[-1]) else None
+    series_dict['macd_line'] = macd_line
+    series_dict['macd_signal'] = macd_signal
+    series_dict['macd_histogram'] = macd_histogram
+
+    # Donchian Channels (20-period)
+    donchian_upper, donchian_middle, donchian_lower = compute_donchian_channels(high, low, period=20)
+    result['donchian_upper'] = donchian_upper.iloc[-1] if not donchian_upper.empty and not pd.isna(donchian_upper.iloc[-1]) else None
+    result['donchian_middle'] = donchian_middle.iloc[-1] if not donchian_middle.empty and not pd.isna(donchian_middle.iloc[-1]) else None
+    result['donchian_lower'] = donchian_lower.iloc[-1] if not donchian_lower.empty and not pd.isna(donchian_lower.iloc[-1]) else None
+    series_dict['donchian_upper'] = donchian_upper
+    series_dict['donchian_middle'] = donchian_middle
+    series_dict['donchian_lower'] = donchian_lower
+
+    # KAMA (10-period)
+    kama_series = compute_kama(close, period=10)
+    result['kama'] = kama_series.iloc[-1] if not kama_series.empty and not pd.isna(kama_series.iloc[-1]) else None
+    series_dict['kama'] = kama_series
+
+    # ============================================================
+    # Volume Indicators (4 indicators)
+    # ============================================================
+
+    if include_volume and volume is not None:
+        # OBV
+        obv_series = compute_obv(close, volume)
+        result['obv'] = obv_series.iloc[-1] if not obv_series.empty and not pd.isna(obv_series.iloc[-1]) else None
+        series_dict['obv'] = obv_series
+
+        # CMF (20-period)
+        cmf_series = compute_cmf(high, low, close, volume, period=20)
+        result['cmf'] = cmf_series.iloc[-1] if not cmf_series.empty and not pd.isna(cmf_series.iloc[-1]) else None
+        series_dict['cmf'] = cmf_series
+
+        # MFI (14-period)
+        mfi_series = compute_mfi(high, low, close, volume, period=14)
+        result['mfi'] = mfi_series.iloc[-1] if not mfi_series.empty and not pd.isna(mfi_series.iloc[-1]) else None
+        series_dict['mfi'] = mfi_series
+
+        # VWAP
+        vwap_series = compute_vwap(high, low, close, volume)
+        result['vwap'] = vwap_series.iloc[-1] if not vwap_series.empty and not pd.isna(vwap_series.iloc[-1]) else None
+        series_dict['vwap'] = vwap_series
+    else:
+        # Set None if volume indicators skipped
+        result['obv'] = None
+        result['cmf'] = None
+        result['mfi'] = None
+        result['vwap'] = None
+        series_dict['obv'] = pd.Series(dtype=float)
+        series_dict['cmf'] = pd.Series(dtype=float)
+        series_dict['mfi'] = pd.Series(dtype=float)
+        series_dict['vwap'] = pd.Series(dtype=float)
+
+    # ============================================================
+    # Volatility Indicators (4 indicators)
+    # ============================================================
+
+    # ATR Normalized (14-period)
+    atr_norm_series = compute_atr_normalized(high, low, close, period=14)
+    result['atr_normalized'] = atr_norm_series.iloc[-1] if not atr_norm_series.empty and not pd.isna(atr_norm_series.iloc[-1]) else None
+    series_dict['atr_normalized'] = atr_norm_series
+
+    # BB Width (20-period)
+    bb_width_series = compute_bb_width(close, period=20)
+    result['bb_width'] = bb_width_series.iloc[-1] if not bb_width_series.empty and not pd.isna(bb_width_series.iloc[-1]) else None
+    series_dict['bb_width'] = bb_width_series
+
+    # Keltner Width (20-period EMA, 10-period ATR)
+    kc_upper, kc_middle, kc_lower = compute_keltner_channels(high, low, close, ema_period=20, atr_period=10)
+    # Keltner width = (upper - lower) / middle * 100
+    keltner_width_series = ((kc_upper - kc_lower) / kc_middle.where(kc_middle.abs() > EPSILON, np.nan)) * 100
+    result['keltner_width'] = keltner_width_series.iloc[-1] if not keltner_width_series.empty and not pd.isna(keltner_width_series.iloc[-1]) else None
+    series_dict['keltner_width'] = keltner_width_series
+
+    # Donchian Width (20-period)
+    donchian_width_series = compute_donchian_width(high, low, period=20)
+    result['donchian_width'] = donchian_width_series.iloc[-1] if not donchian_width_series.empty and not pd.isna(donchian_width_series.iloc[-1]) else None
+    series_dict['donchian_width'] = donchian_width_series
+
+    # ============================================================
+    # Market Structure (2 indicators)
+    # ============================================================
+
+    if include_structure:
+        # Fair Value Gaps
+        fvgs = fair_value_gaps(df, min_gap_pct=0.1)
+        result['raw_fvgs'] = fvgs
+
+        # Scalar summaries for FVGs (Part 1: distances TODO in Task 11)
+        result['nearest_bullish_fvg_pct'] = None  # TODO: Task 11
+        result['nearest_bearish_fvg_pct'] = None  # TODO: Task 11
+        result['open_fvg_count'] = len(fvgs)
+
+        # Swing Points
+        swing_data = swing_points(df, window=5)
+        result['raw_swing_points'] = swing_data
+
+        # Scalar summaries for swing points (Part 1: distances TODO in Task 11)
+        result['nearest_swing_high_pct'] = None  # TODO: Task 11
+        result['nearest_swing_low_pct'] = None  # TODO: Task 11
+    else:
+        # Set empty structures if structure indicators skipped
+        result['raw_fvgs'] = []
+        result['nearest_bullish_fvg_pct'] = None
+        result['nearest_bearish_fvg_pct'] = None
+        result['open_fvg_count'] = 0
+        result['raw_swing_points'] = {'highs': [], 'lows': []}
+        result['nearest_swing_high_pct'] = None
+        result['nearest_swing_low_pct'] = None
+
+    # Add series dict to result
+    result['series'] = series_dict
+
+    return result
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
