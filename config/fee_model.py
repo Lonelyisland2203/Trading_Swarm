@@ -105,3 +105,50 @@ class FeeModelSettings(BaseModel):
         total_cost = entry_fee + exit_fee + funding_cost + self.slippage_pct
 
         return total_cost
+
+    def net_return(
+        self,
+        gross_return_pct: float,
+        holding_periods_8h: float,
+    ) -> float:
+        """
+        Compute net return after subtracting all fees.
+
+        Args:
+            gross_return_pct: Gross return as percentage (e.g., 0.15 for +0.15%)
+            holding_periods_8h: Holding period in 8-hour funding periods
+
+        Returns:
+            Net return as percentage after all fees
+
+        Examples:
+            >>> fee_model = FeeModelSettings()
+            >>> fee_model.net_return(0.15, 0)  # +0.15% gross, no funding
+            0.047  # 0.15 - 0.103 = 0.047%
+            >>> fee_model.net_return(0.08, 0)  # +0.08% gross
+            -0.023  # Below fee hurdle - net loss
+        """
+        total_cost = self.round_trip_cost_pct(holding_periods_8h)
+        return gross_return_pct - total_cost
+
+    def minimum_profitable_return_pct(self, holding_periods_8h: float) -> float:
+        """
+        Compute minimum gross return needed to break even after fees.
+
+        This is the break-even threshold - any signal with gross return below
+        this value will result in a net loss after fees.
+
+        Args:
+            holding_periods_8h: Holding period in 8-hour funding periods
+
+        Returns:
+            Minimum profitable return as percentage
+
+        Examples:
+            >>> fee_model = FeeModelSettings()
+            >>> fee_model.minimum_profitable_return_pct(0)  # No funding
+            0.103  # Must exceed 0.103% to profit
+            >>> fee_model.minimum_profitable_return_pct(3)  # 3 periods
+            0.133  # 0.103% + 0.03% funding = 0.133%
+        """
+        return self.round_trip_cost_pct(holding_periods_8h)

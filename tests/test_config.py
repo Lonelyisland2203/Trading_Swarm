@@ -373,3 +373,18 @@ class TestFeeModelSettings:
         # Valid values
         fee_model = FeeModelSettings(funding_interval_hours=12)
         assert fee_model.funding_interval_hours == 12
+
+    def test_net_return_positive_gross(self):
+        """Test net_return with gross return exceeding fees."""
+        fee_model = FeeModelSettings()
+        # Gross +0.15%, fees ~0.083% → net should be positive
+        net = fee_model.net_return(gross_return_pct=0.15, holding_periods_8h=0)
+        assert net > 0
+        assert abs(net - 0.067) < 1e-9  # 0.15 - 0.083 = 0.067%
+
+    def test_minimum_profitable_return_pct_equals_cost(self):
+        """Test minimum_profitable_return_pct equals round_trip_cost."""
+        fee_model = FeeModelSettings()
+        min_return = fee_model.minimum_profitable_return_pct(holding_periods_8h=3)
+        expected_cost = fee_model.round_trip_cost_pct(holding_periods_8h=3)
+        assert abs(min_return - expected_cost) < 1e-9
