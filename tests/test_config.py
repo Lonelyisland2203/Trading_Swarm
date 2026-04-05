@@ -150,6 +150,35 @@ class TestMarketDataSettings:
 class TestAppSettings:
     """Test main application settings."""
 
+    def test_app_settings_has_fee_model(self):
+        """Test AppSettings includes fee_model field."""
+        settings = AppSettings()
+        assert hasattr(settings, 'fee_model')
+        assert isinstance(settings.fee_model, FeeModelSettings)
+
+    def test_fee_model_env_var_mapping(self, monkeypatch):
+        """Test environment variables map to fee_model fields."""
+        # Set environment variables
+        monkeypatch.setenv("FEE_MAKER_PCT", "0.01")
+        monkeypatch.setenv("FEE_TAKER_PCT", "0.03")
+        monkeypatch.setenv("FEE_BNB_DISCOUNT", "false")
+        monkeypatch.setenv("FEE_ENTRY_ORDER_TYPE", "taker")
+        monkeypatch.setenv("FEE_EXIT_ORDER_TYPE", "maker")
+        monkeypatch.setenv("FEE_FUNDING_RATE_PER_8H", "0.02")
+        monkeypatch.setenv("FEE_INCLUDE_FUNDING", "false")
+        monkeypatch.setenv("FEE_SLIPPAGE_PCT", "0.05")
+
+        settings = AppSettings()
+
+        assert settings.fee_model.maker_fee_pct == 0.01
+        assert settings.fee_model.taker_fee_pct == 0.03
+        assert settings.fee_model.bnb_discount_enabled is False
+        assert settings.fee_model.entry_order_type == "taker"
+        assert settings.fee_model.exit_order_type == "maker"
+        assert settings.fee_model.funding_rate_pct == 0.02
+        assert settings.fee_model.include_funding is False
+        assert settings.fee_model.slippage_pct == 0.05
+
     def test_settings_load_from_env(self, env_vars):
         """Test settings load from environment variables."""
         # Force reload settings with env vars

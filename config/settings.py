@@ -12,6 +12,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from config.fee_model import FeeModelSettings
+
 
 class OllamaSettings(BaseModel):
     """Ollama LLM service configuration."""
@@ -389,6 +391,7 @@ class AppSettings(BaseSettings):
     market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
     dpo: DPOTrainingSettings = Field(default_factory=DPOTrainingSettings)
     dataset: DatasetGenerationSettings = Field(default_factory=DatasetGenerationSettings)
+    fee_model: FeeModelSettings = Field(default_factory=FeeModelSettings)
 
     # Paths
     model_save_dir: Path = Field(
@@ -476,6 +479,16 @@ class AppSettings(BaseSettings):
             "DPO_GRADIENT_ACCUMULATION_STEPS": ("dpo", "gradient_accumulation_steps"),
             "DPO_MIN_TRAINING_PAIRS": ("dpo", "min_training_pairs"),
             "DPO_ADAPTER_DIR": ("dpo", "adapter_dir"),
+
+            # Fee model settings
+            "FEE_MAKER_PCT": ("fee_model", "maker_fee_pct"),
+            "FEE_TAKER_PCT": ("fee_model", "taker_fee_pct"),
+            "FEE_BNB_DISCOUNT": ("fee_model", "bnb_discount_enabled"),
+            "FEE_ENTRY_ORDER_TYPE": ("fee_model", "entry_order_type"),
+            "FEE_EXIT_ORDER_TYPE": ("fee_model", "exit_order_type"),
+            "FEE_FUNDING_RATE_PER_8H": ("fee_model", "funding_rate_pct"),
+            "FEE_INCLUDE_FUNDING": ("fee_model", "include_funding"),
+            "FEE_SLIPPAGE_PCT": ("fee_model", "slippage_pct"),
         }
 
         for env_var, (group, field) in env_mappings.items():
@@ -511,6 +524,7 @@ class AppSettings(BaseSettings):
         self.reward = RewardWeights.model_validate(self.reward.model_dump())
         self.market_data = MarketDataSettings.model_validate(self.market_data.model_dump())
         self.dpo = DPOTrainingSettings.model_validate(self.dpo.model_dump())
+        self.fee_model = FeeModelSettings.model_validate(self.fee_model.model_dump())
 
 
 async def validate_ollama_models() -> dict:
