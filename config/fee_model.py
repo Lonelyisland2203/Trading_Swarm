@@ -68,7 +68,7 @@ class FeeModelSettings(BaseModel):
         description="Market impact/slippage estimate as % (default: 0.02%)"
     )
 
-    def round_trip_cost_pct(self, holding_periods_8h: int = 1) -> float:
+    def round_trip_cost_pct(self, holding_periods_8h: float = 1.0) -> float:
         """
         Calculate total round-trip cost for a position trade.
 
@@ -124,9 +124,9 @@ class FeeModelSettings(BaseModel):
         Examples:
             >>> fee_model = FeeModelSettings()
             >>> fee_model.net_return(0.15, 0)  # +0.15% gross, no funding
-            0.047  # 0.15 - 0.103 = 0.047%
+            0.067  # 0.15 - 0.083 = 0.067%
             >>> fee_model.net_return(0.08, 0)  # +0.08% gross
-            -0.023  # Below fee hurdle - net loss
+            -0.003  # Below fee hurdle - net loss
         """
         total_cost = self.round_trip_cost_pct(holding_periods_8h)
         return gross_return_pct - total_cost
@@ -147,8 +147,8 @@ class FeeModelSettings(BaseModel):
         Examples:
             >>> fee_model = FeeModelSettings()
             >>> fee_model.minimum_profitable_return_pct(0)  # No funding
-            0.103  # Must exceed 0.103% to profit
+            0.083  # Must exceed 0.083% to profit
             >>> fee_model.minimum_profitable_return_pct(3)  # 3 periods
-            0.133  # 0.103% + 0.03% funding = 0.133%
+            0.113  # 0.083% + 0.03% funding = 0.113%
         """
         return self.round_trip_cost_pct(holding_periods_8h)
