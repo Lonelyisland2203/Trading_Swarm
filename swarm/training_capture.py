@@ -172,6 +172,59 @@ def load_training_examples(path: Path) -> list[TrainingExample]:
     return examples
 
 
+def load_examples_from_jsonl(path: Path) -> list["TrainingExample"]:
+    """
+    Load training examples from a JSONL file (InferenceQueue output format).
+
+    Each line is a JSON-serialised TrainingExample dict.
+    Skips malformed lines and version-incompatible examples.
+
+    Args:
+        path: Path to JSONL file
+
+    Returns:
+        List of loaded training examples
+    """
+    if not path.exists():
+        logger.warning("JSONL file does not exist", path=str(path))
+        return []
+
+    examples = []
+    skipped = 0
+
+    with open(path) as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError as e:
+                logger.warning("Skipping malformed JSONL line", line=line_num, error=str(e))
+                skipped += 1
+                continue
+
+            version = data.get("version", "0.0.0")
+            if not is_compatible_version(version):
+                logger.warning("Skipping incompatible version", line=line_num, version=version)
+                skipped += 1
+                continue
+
+            try:
+                examples.append(TrainingExample(**data))
+            except TypeError as e:
+                logger.warning("Skipping undeserializable example", line=line_num, error=str(e))
+                skipped += 1
+
+    logger.info(
+        "Examples loaded from JSONL",
+        loaded=len(examples),
+        skipped=skipped,
+        path=str(path),
+    )
+    return examples
+
+
 def filter_by_acceptance(
     examples: list[TrainingExample],
     accepted_only: bool = False,

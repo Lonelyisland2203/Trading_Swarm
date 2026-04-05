@@ -17,19 +17,50 @@ from loguru import logger
 
 # Platform-specific locking
 if sys.platform == "win32":
-    import msvcrt
+    import ctypes
+    import ctypes.wintypes
+    import msvcrt as _msvcrt
+
+    _k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+    # LockFileEx flags
+    _LOCKFILE_EXCLUSIVE_LOCK = 0x0002
+    _LOCKFILE_FAIL_IMMEDIATELY = 0x0001
+
+    class _OVERLAPPED(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_ulong),
+            ("InternalHigh", ctypes.c_ulong),
+            ("Offset", ctypes.c_ulong),
+            ("OffsetHigh", ctypes.c_ulong),
+            ("hEvent", ctypes.c_void_p),
+        ]
 
     def _lock_exclusive(f):
-        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        handle = _msvcrt.get_osfhandle(f.fileno())
+        ovlp = _OVERLAPPED()
+        if not _k32.LockFileEx(
+            handle,
+            _LOCKFILE_EXCLUSIVE_LOCK | _LOCKFILE_FAIL_IMMEDIATELY,
+            0, 1, 0, ctypes.byref(ovlp),
+        ):
+            raise OSError("Could not acquire exclusive lock")
 
     def _lock_shared(f):
-        # Windows has no shared lock via msvcrt; use exclusive as fallback
-        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        handle = _msvcrt.get_osfhandle(f.fileno())
+        ovlp = _OVERLAPPED()
+        if not _k32.LockFileEx(
+            handle,
+            _LOCKFILE_FAIL_IMMEDIATELY,  # No EXCLUSIVE flag → shared
+            0, 1, 0, ctypes.byref(ovlp),
+        ):
+            raise OSError("Could not acquire shared lock")
 
     def _unlock(f):
         try:
-            f.seek(0)
-            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            handle = _msvcrt.get_osfhandle(f.fileno())
+            ovlp = _OVERLAPPED()
+            _k32.UnlockFileEx(handle, 0, 1, 0, ctypes.byref(ovlp))
         except Exception:
             pass
 

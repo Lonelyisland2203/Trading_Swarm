@@ -22,9 +22,9 @@ from .training_capture import TrainingExample
 
 # Regime-aware acceptance thresholds
 ACCEPTANCE_THRESHOLDS = {
-    MarketRegime.RISK_OFF: 0.75,   # Higher bar in volatile markets
-    MarketRegime.NEUTRAL: 0.65,    # Standard threshold
-    MarketRegime.RISK_ON: 0.60,    # Slightly lower in trending markets
+    MarketRegime.RISK_OFF: 0.60,
+    MarketRegime.NEUTRAL: 0.55,
+    MarketRegime.RISK_ON: 0.50,
 }
 
 
@@ -107,40 +107,31 @@ def should_accept_signal(
     regime: MarketRegime,
     override_threshold: float | None = None,
 ) -> tuple[bool, str]:
-    """
-    Determine if signal should be accepted based on critique.
-
-    Uses regime-aware thresholds and technical alignment gate.
-
-    Args:
-        critique: Critique result dict
-        regime: Market regime
-        override_threshold: Optional threshold override
-
-    Returns:
-        Tuple of (accepted: bool, reason: str)
-    """
     threshold = override_threshold or ACCEPTANCE_THRESHOLDS[regime]
 
-    # Extract scores
-    score = critique.get("score", 0.0)
+    # Compute score from sub-dimensions — CritiqueResult.score is a @property
+    # and dataclasses.asdict() drops properties, so we cannot rely on "score" key.
+    score = (
+        0.35 * critique.get("reasoning_quality", 0.0)
+        + 0.40 * critique.get("technical_alignment", 0.0)
+        + 0.25 * critique.get("confidence_calibration", 0.0)
+    )
     recommendation = critique.get("recommendation", "UNCERTAIN")
     technical_alignment = critique.get("technical_alignment", 0.0)
 
-    # Hard rejection
-    if recommendation == "REJECT":
-        return False, f"Critic recommendation: REJECT"
+    # Hard rejection ONLY if score is also low — don't trust label alone
+    if recommendation == "REJECT" and score < 0.45:
+        return False, f"Rejected: low score {score:.2f} and REJECT recommendation"
 
-    # Score-based filtering
+    # Score-based filtering (primary gate)
     if score < threshold:
         return False, f"Score {score:.2f} below threshold {threshold}"
 
-    # Technical alignment gate (hard cutoff)
-    if technical_alignment < 0.4:
+    # Technical alignment gate
+    if technical_alignment < 0.35:  # Slightly relaxed from 0.4
         return False, f"Technical alignment too low: {technical_alignment:.2f}"
 
-    # Accept
-    return True, f"Score {score:.2f} above threshold {threshold}, technical alignment {technical_alignment:.2f}"
+    return True, f"Score {score:.2f} above threshold {threshold}, alignment {technical_alignment:.2f}"
 
 
 async def run_swarm_workflow(

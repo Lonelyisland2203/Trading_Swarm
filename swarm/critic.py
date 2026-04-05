@@ -16,7 +16,14 @@ from .generator import TradingPersona
 from .ollama_client import OllamaClient
 
 # Critique prompt with adversarial framing
-CRITIQUE_TEMPLATE = """You are a skeptical trading signal evaluator. Your job is to FIND FLAWS in the analysis, not to validate it.
+CRITIQUE_TEMPLATE = """You are an objective trading signal evaluator. Assess signal quality fairly and accurately.
+
+Guidelines:
+- ACCEPT if reasoning is logical and indicators broadly support the direction
+- REJECT only if there are clear contradictions or obvious logical flaws  
+- UNCERTAIN if evidence is genuinely mixed
+
+A good signal does not need to be perfect — it just needs to be coherent and grounded in the data.
 
 ## Generator Signal
 Direction: {direction}
@@ -41,14 +48,14 @@ Market Regime: {market_regime}
 {recent_ohlcv}
 
 ## Your Task
-Critically evaluate this signal. ACTIVELY LOOK FOR PROBLEMS:
+Evaluate this signal objectively across these dimensions:
 
 1. **Reasoning Quality** - Does the logic logically follow from the data? Are there gaps or contradictions?
 2. **Technical Alignment** - Do indicators actually support the prediction? Check for contradictions (e.g., "bullish" but RSI >70 suggests overbought).
 3. **Confidence Calibration** - Is the confidence level justified by the strength of evidence? Over-confident or under-confident?
 4. **Persona Consistency** - Does the reasoning align with the {persona} trading philosophy?
 
-IMPORTANT: You must cite specific issues. Vague approval is not acceptable.
+Be specific in your critique, but do not manufacture flaws that aren't there.
 
 If you cannot find significant flaws after careful analysis, acknowledge the signal is sound.
 

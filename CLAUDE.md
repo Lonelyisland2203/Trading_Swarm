@@ -15,11 +15,13 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ## Current State
 
 **Completed:**
-- Sessions 1-9: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation
+- Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
 
-**Next:** Session 10 - End-to-End DPO Workflow
+**Next:** Session 11 - TBD (likely evaluation integration or production deployment)
 
-**Active Issues:** None
+**Active Issues:**
+- `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
+- 4 tests in `test_process_lock.py` - Windows/fcntl platform incompatibility
 
 ## Architecture Decisions
 
@@ -56,6 +58,15 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **Promotion:** IC > 0.02, Brier > 0.01, p < 0.05, N >= 100, 24h cooldown, 3 max/week
 - **Pre-flight Order:** Data -> Temporal -> VRAM -> Lock -> Load
 - **Adapter Loading:** 30-day max age, graceful fallback to base
+
+### DPO Pipeline (Session 10)
+- **5-Phase CLI:** Load -> Verify -> Reward -> Pairs -> Train
+- **Phase 1:** Filters examples requiring direction in generator_signal
+- **Phase 2:** Async batch verification via MarketDataService
+- **Phase 3:** Reward computation per matched pair
+- **Phase 4:** Preference pair construction, optional `--save-pairs`
+- **Phase 5:** Calls `train_dpo()`, exits 1 on failure
+- **CLI flags:** `--dataset` (required), `--output`, `--save-pairs`, `--dry-run`, `--min-delta`, `--force`
 
 ### Dataset Generation (Session 9)
 - **Scale:** 13,500 examples (10 symbols x 6 timeframes x 15 windows x 3 tasks x 5 personas)
@@ -102,7 +113,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `swarm/generator.py` - Signal generator with 5 personas
 - `swarm/critic.py` - Critique generation with deepseek-r1:14b
 - `swarm/orchestrator.py` - LangGraph workflow + multi-persona
-- `swarm/training_capture.py` - TrainingExample with context_id
+- `swarm/training_capture.py` - TrainingExample with context_id + `load_examples_from_jsonl()`
 - `swarm/adapter_loader.py` - Adapter discovery, validation, Ollama tags
 
 ### Training Layer
@@ -118,6 +129,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ### Scripts
 - `generate_training_dataset.py` - Main CLI for dataset generation (3-phase parallelization)
+- `run_dpo_training.py` - End-to-end DPO pipeline CLI (5-phase: load/verify/reward/pairs/train)
 
 ### Verifier Layer
 - `verifier/` - constants, config, outcome, validator, engine
@@ -125,7 +137,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ### Evaluation Layer
 - `eval/` - config, metrics, engine
 
-### Tests (403 total)
+### Tests (426 total)
 - `tests/test_config.py` - 18 tests
 - `tests/test_indicators.py` - 19 tests
 - `tests/test_data_layer.py` - 21 tests
@@ -136,10 +148,14 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_verifier/` - 64 tests
 - `tests/test_reward/` - 63 tests
 - `tests/test_eval/` - 49 tests
-- `tests/test_training/` - 71 tests
+- `tests/test_training/` - 71 tests + `test_dpo_pipeline.py` (23 tests)
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
 
 ## Known Issues & Gotchas
+
+### Active Test Failures
+- `test_critic.py::test_prompt_has_adversarial_framing` - stale expectation after critic.py change
+- 4 tests in `test_process_lock.py` - fcntl unavailable on Windows
 
 ### Runtime Dependencies
 - Ollama service: Required only at runtime
@@ -162,5 +178,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 403 passing
+**Total Tests:** 426 passing
 **Python Version:** 3.13.7

@@ -260,11 +260,12 @@ async def phase2_run_inference(
             stats = tracker.get_stats()
             logger.info(
                 "Progress update",
-                completed=stats["completed"],
-                total=stats["total"],
-                failed=stats["failed"],
-                success_rate=f"{stats['success_rate']:.1%}",
-                eta_min=stats["eta_seconds"] / 60,
+                completed=stats.completed,
+                failed=stats.failed,
+                total=stats.total,
+                elapsed_seconds=stats.elapsed_seconds,
+                eta_seconds=stats.eta_seconds,
+                success_rate=stats.success_rate,
             )
 
     await queue.process_all(jobs, progress_callback=progress_callback)

@@ -294,15 +294,15 @@ Hope this helps!'''
 class TestCritiquePrompt:
     """Test critique prompt structure."""
 
-    def test_prompt_has_adversarial_framing(self):
-        """Test that critique template uses adversarial language."""
+    def test_prompt_has_objective_evaluation_framing(self):
+        """Test that critique template uses objective/balanced evaluation language."""
         from swarm.critic import CRITIQUE_TEMPLATE
 
         template_lower = CRITIQUE_TEMPLATE.lower()
 
-        # Check for adversarial keywords
-        assert "find flaws" in template_lower or "skeptical" in template_lower
-        assert "actively look for problems" in template_lower or "critical" in template_lower
+        # Template uses objective framing (rewritten from adversarial to balanced)
+        assert "objective" in template_lower or "fairly" in template_lower or "accurately" in template_lower
+        assert "specific" in template_lower  # Still requires specific citations
 
     def test_prompt_requires_specific_citations(self):
         """Test that prompt requires citing specific issues."""
