@@ -388,3 +388,73 @@ class TestFeeModelSettings:
         min_return = fee_model.minimum_profitable_return_pct(holding_periods_8h=3)
         expected_cost = fee_model.round_trip_cost_pct(holding_periods_8h=3)
         assert abs(min_return - expected_cost) < 1e-9
+
+    def test_round_trip_maker_entry_maker_exit(self):
+        """Test round_trip with both entry and exit as limit orders."""
+        fee_model = FeeModelSettings(
+            entry_order_type="maker",
+            exit_order_type="maker",
+            bnb_discount=True,
+        )
+        cost = fee_model.round_trip_cost_pct(holding_periods_8h=0)
+        # Entry: 0.02 * 0.9 = 0.018%, Exit: 0.02 * 0.9 = 0.018%
+        # Slippage: 0.02%, Funding: 0%
+        # Total: 0.036 + 0.02 = 0.056%
+        assert abs(cost - 0.056) < 1e-9
+
+    def test_round_trip_taker_entry_taker_exit(self):
+        """Test round_trip with both entry and exit as market orders."""
+        fee_model = FeeModelSettings(
+            entry_order_type="taker",
+            exit_order_type="taker",
+            bnb_discount=True,
+        )
+        cost = fee_model.round_trip_cost_pct(holding_periods_8h=0)
+        # Entry: 0.05 * 0.9 = 0.045%, Exit: 0.05 * 0.9 = 0.045%
+        # Slippage: 0.02%, Funding: 0%
+        # Total: 0.09 + 0.02 = 0.11%
+        assert abs(cost - 0.11) < 1e-9
+
+    def test_round_trip_taker_entry_maker_exit(self):
+        """Test round_trip with market entry and limit exit."""
+        fee_model = FeeModelSettings(
+            entry_order_type="taker",
+            exit_order_type="maker",
+            bnb_discount=True,
+        )
+        cost = fee_model.round_trip_cost_pct(holding_periods_8h=0)
+        # Entry: 0.05 * 0.9 = 0.045%, Exit: 0.02 * 0.9 = 0.018%
+        # Slippage: 0.02%, Funding: 0%
+        # Total: 0.063 + 0.02 = 0.083%
+        assert abs(cost - 0.083) < 1e-9
+
+    def test_funding_cost_variations(self):
+        """Test funding costs with different holding periods."""
+        fee_model = FeeModelSettings()
+
+        # 0.5 periods
+        cost_half = fee_model.round_trip_cost_pct(holding_periods_8h=0.5)
+        expected_half = 0.083 + (0.01 * 0.5)  # Base + half funding
+        assert abs(cost_half - expected_half) < 1e-9
+
+        # 2.5 periods
+        cost_two_half = fee_model.round_trip_cost_pct(holding_periods_8h=2.5)
+        expected_two_half = 0.083 + (0.01 * 2.5)  # Base + 2.5x funding
+        assert abs(cost_two_half - expected_two_half) < 1e-9
+
+        # 10 periods (long hold)
+        cost_ten = fee_model.round_trip_cost_pct(holding_periods_8h=10)
+        expected_ten = 0.083 + (0.01 * 10)  # Base + 10x funding
+        assert abs(cost_ten - expected_ten) < 1e-9
+
+    def test_funding_disabled(self):
+        """Test round_trip with funding cost disabled."""
+        fee_model = FeeModelSettings(include_funding=False)
+
+        # Should get same cost regardless of holding period
+        cost_0 = fee_model.round_trip_cost_pct(holding_periods_8h=0)
+        cost_5 = fee_model.round_trip_cost_pct(holding_periods_8h=5)
+
+        assert abs(cost_0 - 0.083) < 1e-9  # Only base fees + slippage
+        assert abs(cost_5 - 0.083) < 1e-9  # Same even with 5 periods
+        assert abs(cost_0 - cost_5) < 1e-9  # Both equal

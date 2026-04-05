@@ -7,7 +7,7 @@ Models trading costs including:
 - Slippage estimates
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class FeeModelSettings(BaseModel):
@@ -20,11 +20,14 @@ class FeeModelSettings(BaseModel):
     Attributes:
         maker_fee_pct: Maker fee as % of notional (default: 0.02% for limit orders)
         taker_fee_pct: Taker fee as % of notional (default: 0.05% for market orders)
+        entry_order_type: Entry order type ("maker" for limit, "taker" for market, default: "maker")
+        exit_order_type: Exit order type ("maker" for limit, "taker" for market, default: "taker")
         bnb_discount_enabled: Apply 10% BNB discount to trading fees (Binance Futures discount)
         bnb_discount_pct: BNB discount as % (default: 10% = 0.1, NOT 25% which is Spot-only)
         funding_rate_pct: Hourly funding rate as % (default: 0.01% per hour)
         funding_interval_hours: Funding payment interval (default: 8 hours per period)
         slippage_pct: Market impact/slippage estimate as % (default: 0.02%)
+        include_funding: Include funding costs in round_trip calculation (default: True)
     """
 
     maker_fee_pct: float = Field(
@@ -38,6 +41,16 @@ class FeeModelSettings(BaseModel):
         ge=0.0,
         le=0.5,
         description="Taker fee as % of notional (market orders, typically 0.05%)"
+    )
+    entry_order_type: str = Field(
+        default="maker",
+        pattern="^(maker|taker)$",
+        description="Entry order type: 'maker' (limit) or 'taker' (market)"
+    )
+    exit_order_type: str = Field(
+        default="taker",
+        pattern="^(maker|taker)$",
+        description="Exit order type: 'maker' (limit) or 'taker' (market)"
     )
     bnb_discount_enabled: bool = Field(
         default=True,
@@ -67,15 +80,28 @@ class FeeModelSettings(BaseModel):
         le=1.0,
         description="Market impact/slippage estimate as % (default: 0.02%)"
     )
+    include_funding: bool = Field(
+        default=True,
+        description="Include funding costs in round_trip calculation"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_bnb_discount_alias(cls, data):
+        """Handle bnb_discount boolean parameter as alias for bnb_discount_enabled."""
+        if isinstance(data, dict) and "bnb_discount" in data:
+            # Convert bnb_discount boolean to bnb_discount_enabled
+            data["bnb_discount_enabled"] = data.pop("bnb_discount")
+        return data
 
     def round_trip_cost_pct(self, holding_periods_8h: float = 1.0) -> float:
         """
         Calculate total round-trip cost for a position trade.
 
         Includes:
-        1. Entry fee (maker rate, limit order)
-        2. Exit fee (taker rate, market order)
-        3. Funding costs (proportional to holding periods)
+        1. Entry fee (based on entry_order_type)
+        2. Exit fee (based on exit_order_type)
+        3. Funding costs (proportional to holding periods, if include_funding=True)
         4. Slippage estimate
 
         Args:
@@ -92,14 +118,16 @@ class FeeModelSettings(BaseModel):
         # Apply BNB discount if enabled
         discount_multiplier = (100.0 - self.bnb_discount_pct) / 100.0 if self.bnb_discount_enabled else 1.0
 
-        # Entry fee (maker, limit order)
-        entry_fee = self.maker_fee_pct * discount_multiplier
+        # Entry fee based on order type
+        entry_fee_rate = self.maker_fee_pct if self.entry_order_type == "maker" else self.taker_fee_pct
+        entry_fee = entry_fee_rate * discount_multiplier
 
-        # Exit fee (taker, market order)
-        exit_fee = self.taker_fee_pct * discount_multiplier
+        # Exit fee based on order type
+        exit_fee_rate = self.maker_fee_pct if self.exit_order_type == "maker" else self.taker_fee_pct
+        exit_fee = exit_fee_rate * discount_multiplier
 
         # Funding cost (proportional to holding periods)
-        funding_cost = self.funding_rate_pct * holding_periods_8h
+        funding_cost = (self.funding_rate_pct * holding_periods_8h) if self.include_funding else 0.0
 
         # Total cost
         total_cost = entry_fee + exit_fee + funding_cost + self.slippage_pct
