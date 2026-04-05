@@ -335,6 +335,21 @@ class TestApplyFeeModel:
         # Verify we DON'T match linear approximation (proves we're using exact)
         assert abs(net_pct - linear_approx_pct) > 1e-6
 
+    def test_apply_fee_model_extreme_loss(self):
+        """Test apply_fee_model handles extreme losses without math domain error."""
+        fee_model = FeeModelSettings()
+
+        # Gross -99.95% as log return (extreme loss)
+        gross_log = math.log(1 + (-99.95) / 100)
+
+        # Should handle gracefully (net will be < -100% after fees)
+        net_log = apply_fee_model(gross_log, fee_model, holding_periods_8h=0)
+
+        # Should return very large negative number (total loss)
+        assert net_log < -10  # Much smaller than typical returns
+        assert not math.isnan(net_log)  # Not NaN
+        assert not math.isinf(net_log)  # Not -inf (we use log(1e-10))
+
 
 class TestVerifiedOutcome:
     """Test VerifiedOutcome dataclass."""

@@ -16,8 +16,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 **Completed:**
 - Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
+- Session 11 (partial): Fee Model Tasks 1-3 complete (FeeModelSettings with round_trip_cost_pct, net_return, minimum_profitable_return_pct)
 
-**Next:** Session 11 - TBD (likely evaluation integration or production deployment)
+**Next:** Session 11 Tasks 4-10 - Integrate fee model into verifier and DPO pipeline
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -29,6 +30,13 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Nested Pydantic settings with flat env var mapping
 - Reward weights validated to sum to 1.0 via `@model_validator`
 - DatasetGenerationSettings: window_count=15, stride=100, completeness=0.95, retries=2
+- **FeeModelSettings:** Binance Futures USDT-M fee model with configurable order types
+  - Base fees: maker 0.02%, taker 0.05%, 10% BNB discount applied
+  - Funding: 0.01% per 8h period (configurable via `include_funding`)
+  - Slippage: 0.02% round-trip
+  - Methods: `round_trip_cost_pct()`, `net_return()`, `minimum_profitable_return_pct()`
+  - Order types: `entry_order_type`, `exit_order_type` (maker/taker)
+  - Validates holding_periods_8h >= 0
 
 ### Data Layer
 - Async caching: diskcache wrapped in `asyncio.to_thread()`
@@ -93,6 +101,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ### Configuration
 - `config/settings.py` - Pydantic settings + DPOTrainingSettings + DatasetGenerationSettings
+- `config/fee_model.py` - FeeModelSettings for Binance Futures USDT-M fee calculations
 - `pyproject.toml` - Project metadata, tool configs
 
 ### Data Layer
@@ -137,8 +146,8 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ### Evaluation Layer
 - `eval/` - config, metrics, engine
 
-### Tests (426 total)
-- `tests/test_config.py` - 18 tests
+### Tests (448 total)
+- `tests/test_config.py` - 40 tests (18 original + 22 FeeModelSettings)
 - `tests/test_indicators.py` - 19 tests
 - `tests/test_data_layer.py` - 21 tests
 - `tests/test_ollama_client.py` - 17 tests
@@ -178,5 +187,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 426 passing
+**Total Tests:** 448 passing
 **Python Version:** 3.13.7

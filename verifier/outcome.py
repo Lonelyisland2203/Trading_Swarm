@@ -106,7 +106,14 @@ def apply_fee_model(
     net_pct = fee_model.net_return(gross_pct, holding_periods_8h)
 
     # Convert percentage → log (EXACT)
-    net_log_return = math.log(1 + net_pct / 100)
+    # Clamp to prevent math domain error for extreme losses
+    net_factor = 1 + net_pct / 100
+    if net_factor <= 0:
+        # Return very large negative log return
+        # This represents a total loss (>= 100% loss after fees)
+        # Using log(1e-10) instead of -inf for numerical stability
+        return math.log(1e-10)
+    net_log_return = math.log(net_factor)
 
     return net_log_return
 

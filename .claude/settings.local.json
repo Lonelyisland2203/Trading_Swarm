@@ -12,7 +12,8 @@
       "Bash(tee:*)",
       "Bash(python3:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git show:*)"
     ]
   }
 }
