@@ -23,9 +23,11 @@ class TestDonchianChannels:
 
     def test_donchian_channels_default_period(self, sample_ohlcv):
         """Test Donchian Channels with default 20-period."""
-        from data.indicators import donchian_channels
+        from data.indicators import compute_donchian_channels
 
-        upper, middle, lower = donchian_channels(sample_ohlcv)
+        upper, middle, lower = compute_donchian_channels(
+            sample_ohlcv["high"], sample_ohlcv["low"]
+        )
 
         assert isinstance(upper, pd.Series)
         assert isinstance(middle, pd.Series)
@@ -44,9 +46,11 @@ class TestDonchianChannels:
 
     def test_donchian_channels_custom_period(self, sample_ohlcv):
         """Test Donchian Channels with custom period."""
-        from data.indicators import donchian_channels
+        from data.indicators import compute_donchian_channels
 
-        upper, middle, lower = donchian_channels(sample_ohlcv, period=10)
+        upper, middle, lower = compute_donchian_channels(
+            sample_ohlcv["high"], sample_ohlcv["low"], period=10
+        )
 
         # First 9 values should be NaN
         assert upper.iloc[:9].isna().all()
@@ -56,10 +60,12 @@ class TestDonchianChannels:
         assert lower.iloc[9] == sample_ohlcv["low"].iloc[:10].min()
 
     def test_donchian_channels_long_default(self, sample_ohlcv):
-        """Test donchian_channels_long with 55-period default."""
-        from data.indicators import donchian_channels_long
+        """Test compute_donchian_channels_long with 55-period default."""
+        from data.indicators import compute_donchian_channels_long
 
-        upper, middle, lower = donchian_channels_long(sample_ohlcv)
+        upper, middle, lower = compute_donchian_channels_long(
+            sample_ohlcv["high"], sample_ohlcv["low"]
+        )
 
         # First 54 values should be NaN (need 55 bars)
         # But we only have 50 bars, so all should be NaN
@@ -69,17 +75,30 @@ class TestDonchianChannels:
 
     def test_donchian_channels_trending_market(self):
         """Test Donchian Channels in trending market."""
-        from data.indicators import donchian_channels
+        from data.indicators import compute_donchian_channels
 
         # Uptrend: steadily increasing highs
-        df = pd.DataFrame({
-            "high": [100 + i for i in range(30)],
-            "low": [98 + i for i in range(30)],
-        })
+        high = pd.Series([100 + i for i in range(30)])
+        low = pd.Series([98 + i for i in range(30)])
 
-        upper, middle, lower = donchian_channels(df, period=10)
+        upper, middle, lower = compute_donchian_channels(high, low, period=10)
 
         # Upper should be increasing in uptrend
         assert upper.iloc[20] > upper.iloc[10]
         # Lower should lag behind upper
         assert lower.iloc[20] < upper.iloc[20]
+
+    def test_donchian_channels_constant_price(self):
+        """Test Donchian Channels with constant price (no volatility)."""
+        from data.indicators import compute_donchian_channels
+
+        high = pd.Series([100.0] * 30)
+        low = pd.Series([100.0] * 30)
+
+        upper, middle, lower = compute_donchian_channels(high, low, period=10)
+
+        # All bands should converge to same price when no volatility
+        assert not pd.isna(upper.iloc[9])
+        assert upper.iloc[9] == 100.0
+        assert middle.iloc[9] == 100.0
+        assert lower.iloc[9] == 100.0
