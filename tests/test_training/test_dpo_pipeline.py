@@ -406,7 +406,7 @@ class TestDryRun:
         # Patch verify to return outcomes for all examples
         examples_data = [json.loads(l) for l in lines]
 
-        async def fake_run_verify(examples):
+        async def fake_run_verify(examples, fee_model):
             return [
                 VerifiedOutcome(
                     example_id=ex.example_id,
@@ -489,6 +489,44 @@ class TestArgParsing:
 # --------------------------------------------------------------------------- #
 # Fee flip diagnostic
 # --------------------------------------------------------------------------- #
+
+class TestPhase2VerifyUsesFeeModel:
+    """Test that phase2_verify integrates fee_model parameter."""
+
+    def test_phase2_verify_passes_fee_model_to_run_verify(self, single_example_jsonl):
+        """Test that phase2_verify passes fee_model to _run_verify."""
+        from run_dpo_training import phase2_verify
+        from config.fee_model import FeeModelSettings
+        from verifier.outcome import VerifiedOutcome
+        from unittest.mock import AsyncMock, patch
+
+        examples = load_examples_from_jsonl(single_example_jsonl)
+        fee_model = FeeModelSettings(maker_fee_pct=0.03)
+
+        fake_outcome = VerifiedOutcome(
+            example_id=examples[0].example_id,
+            actual_direction="HIGHER",
+            realized_return=0.03,
+            max_adverse_excursion=-0.01,
+            net_return=0.028,
+            entry_price=50000.0,
+            exit_price=51500.0,
+            bars_held=24,
+        )
+
+        # Mock _run_verify to capture the fee_model argument
+        with patch(
+            "run_dpo_training._run_verify",
+            new=AsyncMock(return_value=[fake_outcome]),
+        ) as mock_run_verify:
+            matched = phase2_verify(examples, fee_model=fee_model)
+
+        # Verify _run_verify was called with fee_model
+        mock_run_verify.assert_called_once()
+        args, kwargs = mock_run_verify.call_args
+        assert kwargs.get("fee_model") == fee_model or (len(args) > 1 and args[1] == fee_model)
+        assert len(matched) == 1
+
 
 class TestFeeFlipDiagnostic:
     def test_compute_fee_flip_diagnostic_no_flips(self, capsys):

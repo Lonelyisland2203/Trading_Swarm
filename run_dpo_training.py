@@ -88,19 +88,20 @@ def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
 # Phase 2 – Verify
 # --------------------------------------------------------------------------- #
 
-async def _run_verify(examples: list[TrainingExample]) -> list[VerifiedOutcome]:
+async def _run_verify(examples: list[TrainingExample], fee_model: FeeModelSettings) -> list[VerifiedOutcome]:
     from data.market_data import MarketDataService
     async with MarketDataService() as svc:
-        return await verify_batch(examples, svc)
+        return await verify_batch(examples, svc, fee_model=fee_model)
 
 
 def phase2_verify(
     examples: list[TrainingExample],
+    fee_model: FeeModelSettings = FeeModelSettings(),
 ) -> list[tuple[TrainingExample, VerifiedOutcome]]:
     """Verify examples against realized market outcomes."""
     logger.info("Phase 2: Verifying examples", count=len(examples))
 
-    outcomes = asyncio.run(_run_verify(examples))
+    outcomes = asyncio.run(_run_verify(examples, fee_model))
 
     # Build outcome lookup by example_id
     outcome_by_id: dict[str, VerifiedOutcome] = {o.example_id: o for o in outcomes}
@@ -262,6 +263,7 @@ def compute_fee_flip_diagnostic(
 
 def phase3_reward(
     matched: list[tuple[TrainingExample, VerifiedOutcome]],
+    fee_model: FeeModelSettings = FeeModelSettings(),
 ) -> list[tuple[TrainingExample, VerifiedOutcome, ComputedReward]]:
     """Compute rewards for all verified examples."""
     logger.info("Phase 3: Computing rewards", count=len(matched))
@@ -284,7 +286,7 @@ def phase3_reward(
 
     # Phase 3 diagnostic
     examples_and_outcomes = [(ex, outcome) for ex, outcome, _ in result]
-    compute_fee_flip_diagnostic(examples_and_outcomes, fee_model=FeeModelSettings())
+    compute_fee_flip_diagnostic(examples_and_outcomes, fee_model=fee_model)
 
     return result
 
@@ -438,13 +440,13 @@ def main() -> None:
     examples = phase1_load(args.dataset)
 
     # Phase 2: Verify
-    matched = phase2_verify(examples)
+    matched = phase2_verify(examples, fee_model=FeeModelSettings())
     if not matched:
         logger.error("No examples verified — cannot build preference pairs")
         sys.exit(1)
 
     # Phase 3: Reward
-    examples_with_rewards = phase3_reward(matched)
+    examples_with_rewards = phase3_reward(matched, fee_model=FeeModelSettings())
 
     # Phase 4: Preference pairs
     pairs = phase4_pairs(
