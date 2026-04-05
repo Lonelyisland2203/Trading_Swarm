@@ -186,10 +186,11 @@ async def fetch_window_data(
     """
     try:
         # Fetch data up to window end time
+        # Parameter "as_of" is the point-in-time timestamp (ms) from market_data.py
         df = await service.get_ohlcv_as_of(
             symbol=window.symbol,
             timeframe=window.timeframe,
-            as_of_timestamp_ms=window.end_timestamp_ms,
+            as_of=window.end_timestamp_ms,
             lookback_bars=window.lookback_bars + 10,  # Extra buffer for filtering
         )
 

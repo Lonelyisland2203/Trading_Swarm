@@ -105,7 +105,7 @@ async def phase1_prepare_contexts(config: DatasetConfig) -> list[InferenceJob]:
         # Parallel: Fetch latest data for all symbol/timeframe pairs
         logger.info("Fetching latest data for all symbol/timeframe pairs...")
         latest_data_tasks = [
-            service.fetch_ohlcv(symbol, timeframe, limit=10)
+            service.fetch_ohlcv(symbol, timeframe, lookback_bars=10)
             for symbol in config.symbols
             for timeframe in config.timeframes
         ]
