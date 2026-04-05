@@ -430,7 +430,7 @@ async def run_multi_persona_workflow(
                     settings.ollama.generator_model,
                     task_prompt,
                     market_regime,
-                    temperature=settings.swarm.generator_temperature,
+                    temperature=0.7,
                     persona_override=persona,  # Force this persona
                 )
 
@@ -474,7 +474,7 @@ async def run_multi_persona_workflow(
                     asdict(signal),
                     market_context,
                     task_prompt,
-                    temperature=settings.swarm.critic_temperature,
+                    temperature=0.0,
                 )
 
                 # Unload critic before next persona

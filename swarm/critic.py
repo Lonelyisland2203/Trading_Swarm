@@ -16,9 +16,7 @@ from .generator import TradingPersona
 from .ollama_client import OllamaClient
 
 # Critique prompt with adversarial framing
-CRITIQUE_TEMPLATE = """/no_think
-
-You are a skeptical trading signal evaluator. Your job is to FIND FLAWS in the analysis, not to validate it.
+CRITIQUE_TEMPLATE = """You are a skeptical trading signal evaluator. Your job is to FIND FLAWS in the analysis, not to validate it.
 
 ## Generator Signal
 Direction: {direction}
@@ -310,11 +308,13 @@ async def evaluate_signal(
         recent_ohlcv=market_context.get("recent_ohlcv", ""),
     )
 
-    # Generation options
+    # Generation options — think:False disables CoT reasoning in deepseek-r1,
+    # which otherwise routes all output to `thinking` leaving `response` empty
     options = {
         "temperature": temperature,
         "top_p": 0.9,
         "num_predict": 512,
+        "think": False,
     }
 
     logger.info("Evaluating signal", model=model, direction=generator_signal.get("direction"))

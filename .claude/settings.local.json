@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python run_multi_persona.py)",
+      "Bash(python:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)"
+    ]
+  }
+}

@@ -313,10 +313,13 @@ async def generate_signal(
     full_prompt = f"{persona_prompt}\n\n{prompt}"
 
     # Generation options
+    # think=False disables qwen3's reasoning step so output goes to `response`
+    # (with thinking on, all tokens are consumed by the `thinking` key, leaving response empty)
     options = {
         "temperature": temperature,
         "top_p": 0.9,
-        "num_predict": 512,  # Limit response length
+        "num_predict": 512,
+        "think": False,
     }
     if seed is not None:
         options["seed"] = seed

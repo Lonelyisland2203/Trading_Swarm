@@ -263,14 +263,20 @@ class OllamaClient:
         if not self._session:
             raise OllamaError("Client not initialized - use async context manager")
 
+        # `think` is a top-level Ollama parameter (not inside options) for qwen3
+        top_level_keys = {"think"}
+        top_level_params = {k: v for k, v in options.items() if k in top_level_keys}
+        model_options = {k: v for k, v in options.items() if k not in top_level_keys}
+
         payload = {
             "model": model,
             "prompt": prompt,
             "stream": False,
             "options": {
-                **options,
+                **model_options,
                 "keep_alive": 0,  # Force unload after generation (VRAM safety)
             },
+            **top_level_params,
         }
 
         url = f"{self.base_url}/api/generate"

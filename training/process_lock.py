@@ -3,22 +3,74 @@ Process-level locking to prevent concurrent inference and training.
 
 CRITICAL: Process A (inference) and Process B (training) must NEVER run simultaneously.
 This module provides file-based locking with exclusive/shared semantics to enforce isolation.
+
+Cross-platform: uses msvcrt on Windows, fcntl on Unix/macOS.
 """
 
-import fcntl
+import sys
+import os
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator
 
 from loguru import logger
 
-# Lock directory
-LOCK_DIR = Path("/Users/javierlee/Trading Swarm/.locks")
+# Platform-specific locking
+if sys.platform == "win32":
+    import msvcrt
+
+    def _lock_exclusive(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _lock_shared(f):
+        # Windows has no shared lock via msvcrt; use exclusive as fallback
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _unlock(f):
+        try:
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except Exception:
+            pass
+
+    _LockError = OSError
+else:
+    import fcntl
+
+    def _lock_exclusive(f):
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _lock_shared(f):
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+
+    def _unlock(f):
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+    _LockError = BlockingIOError
+
+# Lock directory — works on both Windows and Unix
+LOCK_DIR = Path.home() / "Trading Swarm" / ".locks"
 
 
 class ProcessLockError(Exception):
     """Raised when process lock cannot be acquired."""
     pass
+
+
+def _is_locked(lock_path: Path) -> bool:
+    """Check if a lock file is currently held by another process."""
+    if not lock_path.exists():
+        return False
+    try:
+        with open(lock_path, "r+") as f:
+            _lock_exclusive(f)
+            _unlock(f)
+        return False  # We got it — not locked
+    except _LockError:
+        return True  # Someone else holds it
+    except Exception as e:
+        logger.warning(f"Error checking lock {lock_path}: {e}")
+        return False
 
 
 @contextmanager
@@ -35,51 +87,34 @@ def acquire_training_lock() -> Generator[None, None, None]:
 
     Example:
         >>> with acquire_training_lock():
-        ...     # Training code here
         ...     train_model()
     """
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
     inference_lock_path = LOCK_DIR / "inference.lock"
     training_lock_path = LOCK_DIR / "training.lock"
 
-    # Check inference not running
-    if inference_lock_path.exists():
-        try:
-            with open(inference_lock_path, "r") as f:
-                # Try to acquire non-blocking exclusive lock
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                # If we got the lock, inference is not running, release it
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except BlockingIOError:
-            # Lock is held - inference is running
-            raise ProcessLockError(
-                "Inference process (Process A) is currently running. "
-                "Cannot start training. Wait for inference to complete or stop it manually."
-            )
-        except Exception as e:
-            logger.warning(f"Error checking inference lock: {e}")
+    if _is_locked(inference_lock_path):
+        raise ProcessLockError(
+            "Inference process (Process A) is currently running. "
+            "Cannot start training. Wait for inference to complete or stop it manually."
+        )
 
-    # Acquire training lock
     training_lock_path.touch()
     training_lock_file = open(training_lock_path, "r+")
 
     try:
-        # Try to acquire exclusive lock
-        fcntl.flock(training_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_exclusive(training_lock_file)
         logger.info("Training lock acquired", lock_path=str(training_lock_path))
-
         yield
-
-    except BlockingIOError:
+    except _LockError:
         training_lock_file.close()
         raise ProcessLockError(
             "Another training process (Process B) is already running. "
             "Only one training process allowed at a time."
         )
     finally:
-        # Release lock and close file
         try:
-            fcntl.flock(training_lock_file.fileno(), fcntl.LOCK_UN)
+            _unlock(training_lock_file)
             training_lock_file.close()
             logger.info("Training lock released")
         except Exception as e:
@@ -102,50 +137,33 @@ def acquire_inference_lock() -> Generator[None, None, None]:
 
     Example:
         >>> with acquire_inference_lock():
-        ...     # Inference code here
         ...     generate_signal()
     """
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
     training_lock_path = LOCK_DIR / "training.lock"
     inference_lock_path = LOCK_DIR / "inference.lock"
 
-    # Check training not running
-    if training_lock_path.exists():
-        try:
-            with open(training_lock_path, "r") as f:
-                # Try to acquire non-blocking exclusive lock
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                # If we got the lock, training is not running, release it
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except BlockingIOError:
-            # Lock is held - training is running
-            raise ProcessLockError(
-                "Training process (Process B) is currently running. "
-                "Cannot start inference. Wait for training to complete."
-            )
-        except Exception as e:
-            logger.warning(f"Error checking training lock: {e}")
+    if _is_locked(training_lock_path):
+        raise ProcessLockError(
+            "Training process (Process B) is currently running. "
+            "Cannot start inference. Wait for training to complete."
+        )
 
-    # Acquire inference lock (shared)
     inference_lock_path.touch()
     inference_lock_file = open(inference_lock_path, "r+")
 
     try:
-        # Acquire shared lock (multiple inference processes allowed)
-        fcntl.flock(inference_lock_file.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
-        logger.debug("Inference lock acquired (shared)", lock_path=str(inference_lock_path))
-
+        _lock_shared(inference_lock_file)
+        logger.debug("Inference lock acquired", lock_path=str(inference_lock_path))
         yield
-
-    except BlockingIOError:
+    except _LockError:
         inference_lock_file.close()
         raise ProcessLockError(
             "Cannot acquire inference lock. This should not happen (shared locks)."
         )
     finally:
-        # Release lock and close file
         try:
-            fcntl.flock(inference_lock_file.fileno(), fcntl.LOCK_UN)
+            _unlock(inference_lock_file)
             inference_lock_file.close()
             logger.debug("Inference lock released")
         except Exception as e:
@@ -165,30 +183,12 @@ def check_can_train() -> tuple[bool, str]:
         ...     print(f"Cannot train: {reason}")
     """
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
-    inference_lock_path = LOCK_DIR / "inference.lock"
-    training_lock_path = LOCK_DIR / "training.lock"
 
-    # Check inference not running
-    if inference_lock_path.exists():
-        try:
-            with open(inference_lock_path, "r") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except BlockingIOError:
-            return False, "Inference process is running"
-        except Exception as e:
-            return False, f"Error checking inference lock: {e}"
+    if _is_locked(LOCK_DIR / "inference.lock"):
+        return False, "Inference process is running"
 
-    # Check another training not running
-    if training_lock_path.exists():
-        try:
-            with open(training_lock_path, "r") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except BlockingIOError:
-            return False, "Another training process is running"
-        except Exception as e:
-            return False, f"Error checking training lock: {e}"
+    if _is_locked(LOCK_DIR / "training.lock"):
+        return False, "Another training process is running"
 
     return True, "Ready to train"
 
@@ -206,17 +206,8 @@ def check_can_infer() -> tuple[bool, str]:
         ...     print(f"Cannot infer: {reason}")
     """
     LOCK_DIR.mkdir(parents=True, exist_ok=True)
-    training_lock_path = LOCK_DIR / "training.lock"
 
-    # Check training not running
-    if training_lock_path.exists():
-        try:
-            with open(training_lock_path, "r") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except BlockingIOError:
-            return False, "Training process is running"
-        except Exception as e:
-            return False, f"Error checking training lock: {e}"
+    if _is_locked(LOCK_DIR / "training.lock"):
+        return False, "Training process is running"
 
     return True, "Ready to infer"

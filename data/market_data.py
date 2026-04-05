@@ -8,6 +8,7 @@ import asyncio
 import time
 from typing import Any
 
+import aiohttp
 import ccxt.async_support as ccxt
 import pandas as pd
 from asyncio_throttle import Throttler
@@ -104,6 +105,10 @@ class ExchangeClient:
             "enableRateLimit": True,  # CCXT built-in rate limiting
             "rateLimit": 100,         # ms between requests
         })
+        # Inject a session using ThreadedResolver so aiodns is bypassed.
+        # aiodns (c-ares) fails on Windows; Python's built-in resolver works fine.
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        self.exchange.session = aiohttp.ClientSession(connector=connector)
 
         # Additional throttle for burst protection
         # Binance: 1200 requests/minute = 20/second, use 15/sec to be conservative
