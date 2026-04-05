@@ -729,8 +729,6 @@ class TestTTMSqueeze:
 
         # Flat price series creates tight Bollinger Bands
         close = pd.Series([100.0] * 30)
-        high = pd.Series([100.5] * 30)
-        low = pd.Series([99.5] * 30)
 
         # Expanding range creates wide Keltner Channels
         # Inject high volatility by manipulating ATR via high-low range
@@ -762,10 +760,6 @@ class TestTTMSqueeze:
         # Volatile price creates wide Bollinger Bands
         close = pd.Series([100.0 + (i % 2) * 10 for i in range(30)])  # Oscillating 100, 110, 100, 110...
 
-        # Use same volatile data for BB calculation
-        high_bb = pd.Series([105.0 + (i % 2) * 10 for i in range(30)])
-        low_bb = pd.Series([95.0 + (i % 2) * 10 for i in range(30)])
-
         # Calculate BB on volatile price (wide bands)
         bb_upper, bb_middle, bb_lower = compute_bollinger_bands(close, period=20)
 
@@ -790,3 +784,41 @@ class TestTTMSqueeze:
         # BB is wide (volatile price, ~100-110 range)
         # KC is tight (flat price, ~105 +/- tiny ATR)
         assert result.iloc[-1] == False
+
+    def test_ttm_squeeze_explicit_values(self):
+        """Verify TTM squeeze with explicit band values."""
+        from data.indicators import ttm_squeeze
+
+        # Explicit test data - no dependency on other indicator functions
+        bb_upper = pd.Series([105.0, 108.0, 103.0, 106.0])
+        bb_lower = pd.Series([95.0, 92.0, 97.0, 94.0])
+        kc_upper = pd.Series([110.0, 107.0, 110.0, 105.0])
+        kc_lower = pd.Series([90.0, 93.0, 90.0, 95.0])
+
+        result = ttm_squeeze(bb_upper, bb_lower, kc_upper, kc_lower)
+
+        # Bar 0: BB [95, 105] inside KC [90, 110] -> True
+        assert result.iloc[0] == True
+        # Bar 1: BB lower 92 < KC lower 93 -> False (not completely inside)
+        assert result.iloc[1] == False
+        # Bar 2: BB [97, 103] inside KC [90, 110] -> True
+        assert result.iloc[2] == True
+        # Bar 3: BB upper 106 > KC upper 105 -> False (not completely inside)
+        assert result.iloc[3] == False
+
+    def test_ttm_squeeze_boundary_equal_values(self):
+        """When BB touches KC exactly, squeeze is OFF (not strictly inside)."""
+        from data.indicators import ttm_squeeze
+
+        # BB upper equals KC upper exactly
+        bb_upper = pd.Series([110.0, 109.0])
+        bb_lower = pd.Series([95.0, 95.0])
+        kc_upper = pd.Series([110.0, 110.0])
+        kc_lower = pd.Series([90.0, 90.0])
+
+        result = ttm_squeeze(bb_upper, bb_lower, kc_upper, kc_lower)
+
+        # Bar 0: bb_upper == kc_upper, strict < fails -> False
+        assert result.iloc[0] == False
+        # Bar 1: bb_upper < kc_upper, bb_lower > kc_lower -> True
+        assert result.iloc[1] == True
