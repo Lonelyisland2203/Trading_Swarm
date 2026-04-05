@@ -244,6 +244,10 @@ class TestKAMA:
         # (efficiency ratio high, smoothing constant closer to fast)
         assert abs(result.iloc[-1] - trending_series.iloc[-1]) < 5.0
 
+        # Verify SMA initialization at first valid index (bar 10)
+        expected_init = trending_series.iloc[:11].mean()  # bars 0-10 inclusive
+        assert abs(result.iloc[10] - expected_init) < 1e-6
+
     def test_kama_choppy_market(self, choppy_series):
         """KAMA in choppy market smooths aggressively."""
         from data.indicators import compute_kama
@@ -258,6 +262,10 @@ class TestKAMA:
         # Current price alternates 100/102, KAMA should be between them
         assert 99.0 < result.iloc[-1] < 103.0
 
+        # Verify SMA initialization at first valid index (bar 10)
+        expected_init = choppy_series.iloc[:11].mean()  # bars 0-10 inclusive
+        assert abs(result.iloc[10] - expected_init) < 1e-6
+
     def test_kama_warmup_period(self):
         """KAMA with insufficient data returns NaN."""
         from data.indicators import compute_kama
@@ -267,3 +275,31 @@ class TestKAMA:
 
         # Not enough data for period=10
         assert pd.isna(result.iloc[-1])
+
+    def test_kama_constant_price(self):
+        """KAMA with constant price should equal that price."""
+        from data.indicators import compute_kama
+
+        constant = pd.Series([100.0] * 30)
+        result = compute_kama(constant, period=10)
+
+        # After warmup (period + 1), KAMA should converge to constant price
+        assert not pd.isna(result.iloc[-1])
+        assert abs(result.iloc[-1] - 100.0) < 1e-6
+
+        # First valid value should also be 100 (SMA of 100s = 100)
+        assert abs(result.iloc[10] - 100.0) < 1e-6
+
+    def test_kama_custom_parameters(self, trending_series):
+        """Test KAMA with non-default parameters."""
+        from data.indicators import compute_kama
+
+        # Very fast smoothing (fast_ema=1 gives higher SC)
+        fast_result = compute_kama(trending_series, period=5, fast_ema=1, slow_ema=30)
+
+        # Should have valid data after period=5
+        assert fast_result.iloc[:5].isna().all()
+        assert not pd.isna(fast_result.iloc[5])
+
+        # Faster smoothing should track price more closely in trends
+        assert abs(fast_result.iloc[-1] - trending_series.iloc[-1]) < 3.0

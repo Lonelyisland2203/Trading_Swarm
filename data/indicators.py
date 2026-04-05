@@ -269,6 +269,12 @@ def compute_kama(
     # Efficiency Ratio (avoid division by zero)
     er = price_change / volatility.where(volatility > EPSILON, np.nan)
 
+    # Handle constant price: when both numerator and denominator are zero
+    # In this case, ER should be 0 (use slow smoothing, KAMA becomes stable)
+    has_data = price_change.notna() & volatility.notna()
+    constant_price = has_data & (price_change <= EPSILON) & (volatility <= EPSILON)
+    er = er.where(~constant_price, 0.0)
+
     # Smoothing Constant
     sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
