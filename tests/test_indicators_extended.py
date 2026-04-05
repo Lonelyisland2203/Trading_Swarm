@@ -822,3 +822,19 @@ class TestTTMSqueeze:
         assert result.iloc[0] == False
         # Bar 1: bb_upper < kc_upper, bb_lower > kc_lower -> True
         assert result.iloc[1] == True
+
+
+def test_funding_rate_stub():
+    """funding_rate returns None (stub implementation)."""
+    from data.indicators import funding_rate
+
+    result = funding_rate("BTC/USDT", 1640000000000)
+    assert result is None
+
+
+def test_open_interest_stub():
+    """open_interest returns None (stub implementation)."""
+    from data.indicators import open_interest
+
+    result = open_interest("BTC/USDT", 1640000000000)
+    assert result is None

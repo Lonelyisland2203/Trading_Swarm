@@ -659,6 +659,49 @@ def ttm_squeeze(
     return squeeze_on
 
 
+def funding_rate(symbol: str, timestamp_ms: int) -> float | None:
+    """
+    Funding rate for perpetual futures (stub).
+
+    TODO: Implement by fetching from exchange API or local database.
+    For now, returns None to avoid blocking indicator computation.
+
+    Funding rate indicates long/short imbalance:
+    - Positive: Longs pay shorts (bullish bias)
+    - Negative: Shorts pay longs (bearish bias)
+
+    Args:
+        symbol: Trading pair (e.g., "BTC/USDT")
+        timestamp_ms: Timestamp for historical lookup
+
+    Returns:
+        Funding rate as decimal (e.g., 0.0001 = 0.01%), or None
+    """
+    return None
+
+
+def open_interest(symbol: str, timestamp_ms: int) -> float | None:
+    """
+    Open interest for perpetual futures (stub).
+
+    TODO: Implement by fetching from exchange API or local database.
+    For now, returns None to avoid blocking indicator computation.
+
+    Open interest indicates total contracts outstanding:
+    - Rising OI + rising price: Strong uptrend
+    - Rising OI + falling price: Strong downtrend
+    - Falling OI: Liquidations, trend weakening
+
+    Args:
+        symbol: Trading pair (e.g., "BTC/USDT")
+        timestamp_ms: Timestamp for historical lookup
+
+    Returns:
+        Open interest in USD, or None
+    """
+    return None
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
