@@ -718,3 +718,75 @@ class TestVolatilityIndicators:
 
         result = compute_donchian_width(high, low, period=20)
         assert pd.isna(result.iloc[-1])
+
+
+class TestTTMSqueeze:
+    """Tests for TTM Squeeze indicator."""
+
+    def test_ttm_squeeze_on(self):
+        """Scenario: Flat price (tight BB) + expanding range (wide KC) = squeeze ON."""
+        from data.indicators import compute_bollinger_bands, compute_keltner_channels, ttm_squeeze
+
+        # Flat price series creates tight Bollinger Bands
+        close = pd.Series([100.0] * 30)
+        high = pd.Series([100.5] * 30)
+        low = pd.Series([99.5] * 30)
+
+        # Expanding range creates wide Keltner Channels
+        # Inject high volatility by manipulating ATR via high-low range
+        high_volatile = pd.Series([100.0 + i for i in range(30)])
+        low_volatile = pd.Series([99.0 - i for i in range(30)])
+
+        # Calculate BB on flat price (tight bands)
+        bb_upper, bb_middle, bb_lower = compute_bollinger_bands(close, period=20)
+
+        # Calculate KC on volatile range (wide channels)
+        kc_upper, kc_middle, kc_lower = compute_keltner_channels(
+            high_volatile, low_volatile, close, ema_period=20, atr_period=10
+        )
+
+        # TTM Squeeze: BB inside KC = squeeze ON
+        result = ttm_squeeze(bb_upper, bb_lower, kc_upper, kc_lower)
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 30
+
+        # Last value should be True (squeeze ON: BB inside KC)
+        # BB is tight (close to 100), KC is wide (expanding)
+        assert result.iloc[-1] == True
+
+    def test_ttm_squeeze_off(self):
+        """Scenario: Volatile price (wide BB) + narrow range (tight KC) = squeeze OFF."""
+        from data.indicators import compute_bollinger_bands, compute_keltner_channels, ttm_squeeze
+
+        # Volatile price creates wide Bollinger Bands
+        close = pd.Series([100.0 + (i % 2) * 10 for i in range(30)])  # Oscillating 100, 110, 100, 110...
+
+        # Use same volatile data for BB calculation
+        high_bb = pd.Series([105.0 + (i % 2) * 10 for i in range(30)])
+        low_bb = pd.Series([95.0 + (i % 2) * 10 for i in range(30)])
+
+        # Calculate BB on volatile price (wide bands)
+        bb_upper, bb_middle, bb_lower = compute_bollinger_bands(close, period=20)
+
+        # For KC, use flat price with very tight range to get narrow channels
+        # Key: flat close and minimal high-low range creates minimal ATR
+        close_flat = pd.Series([105.0] * 30)  # Centered near middle of oscillation
+        high_narrow = pd.Series([105.1] * 30)
+        low_narrow = pd.Series([104.9] * 30)
+
+        # Calculate KC on flat price with minimal range (tight channels)
+        kc_upper, kc_middle, kc_lower = compute_keltner_channels(
+            high_narrow, low_narrow, close_flat, ema_period=20, atr_period=10
+        )
+
+        # TTM Squeeze: BB outside KC = squeeze OFF
+        result = ttm_squeeze(bb_upper, bb_lower, kc_upper, kc_lower)
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 30
+
+        # Last value should be False (squeeze OFF: BB outside KC)
+        # BB is wide (volatile price, ~100-110 range)
+        # KC is tight (flat price, ~105 +/- tiny ATR)
+        assert result.iloc[-1] == False

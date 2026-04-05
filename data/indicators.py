@@ -624,6 +624,41 @@ def compute_donchian_width(
     return ((upper - lower) / middle.where(middle.abs() > EPSILON, np.nan)) * 100
 
 
+def ttm_squeeze(
+    bb_upper: pd.Series,
+    bb_lower: pd.Series,
+    kc_upper: pd.Series,
+    kc_lower: pd.Series,
+) -> pd.Series:
+    """
+    Compute TTM Squeeze indicator.
+
+    The TTM Squeeze detects consolidation periods where Bollinger Bands
+    contract inside Keltner Channels, indicating low volatility that may
+    precede a breakout.
+
+    Squeeze ON (True): BB inside KC
+        - bb_lower > kc_lower AND bb_upper < kc_upper
+        - Volatility contracting, potential breakout setup
+
+    Squeeze OFF (False): BB outside KC
+        - Volatility expanding, breakout occurring or completed
+
+    Args:
+        bb_upper: Bollinger Band upper series
+        bb_lower: Bollinger Band lower series
+        kc_upper: Keltner Channel upper series
+        kc_lower: Keltner Channel lower series
+
+    Returns:
+        Boolean series (True = squeeze ON, False = squeeze OFF)
+    """
+    # Squeeze is ON when BB is completely inside KC
+    squeeze_on = (bb_lower > kc_lower) & (bb_upper < kc_upper)
+
+    return squeeze_on
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
