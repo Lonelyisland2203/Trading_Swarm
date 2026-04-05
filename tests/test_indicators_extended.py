@@ -303,3 +303,167 @@ class TestKAMA:
 
         # Faster smoothing should track price more closely in trends
         assert abs(fast_result.iloc[-1] - trending_series.iloc[-1]) < 3.0
+
+
+class TestVolumeIndicators:
+    """Tests for volume-based indicators."""
+
+    def test_obv_accumulation(self, sample_ohlcv):
+        """OBV accumulates volume on up days."""
+        from data.indicators import compute_obv
+
+        result = compute_obv(sample_ohlcv["close"], sample_ohlcv["volume"])
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert result.iloc[0] == 0
+        assert not pd.isna(result.iloc[-1])
+
+    def test_obv_flat_price(self):
+        """OBV with flat price stays at zero."""
+        from data.indicators import compute_obv
+
+        close = pd.Series([100.0] * 30)
+        volume = pd.Series([1000.0] * 30)
+
+        result = compute_obv(close, volume)
+        assert result.iloc[-1] == 0
+
+    def test_obv_zero_volume(self):
+        """OBV handles zero volume gracefully."""
+        from data.indicators import compute_obv
+
+        close = pd.Series([100 + i for i in range(30)])
+        volume = pd.Series([0.0] * 30)
+
+        result = compute_obv(close, volume)
+        assert result.iloc[-1] == 0
+
+    def test_cmf_standard(self, sample_ohlcv):
+        """CMF with 20-period on 50 bars."""
+        from data.indicators import compute_cmf
+
+        result = compute_cmf(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            sample_ohlcv["volume"],
+            period=20
+        )
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert -1.0 <= result.iloc[-1] <= 1.0
+
+    def test_cmf_zero_range_bars(self):
+        """CMF handles bars with zero range (high=low)."""
+        from data.indicators import compute_cmf
+
+        high = pd.Series([100.0] * 30)
+        low = pd.Series([100.0] * 30)
+        close = pd.Series([100.0] * 30)
+        volume = pd.Series([1000.0] * 30)
+
+        result = compute_cmf(high, low, close, volume, period=20)
+        assert pd.isna(result.iloc[-1]) or result.iloc[-1] == 0.0
+
+    def test_cmf_insufficient_data(self):
+        """CMF with less than period bars returns NaN."""
+        from data.indicators import compute_cmf
+
+        high = pd.Series([102, 103, 104])
+        low = pd.Series([98, 99, 100])
+        close = pd.Series([100, 101, 102])
+        volume = pd.Series([1000, 1100, 1200])
+
+        result = compute_cmf(high, low, close, volume, period=20)
+        assert pd.isna(result.iloc[-1])
+
+    def test_mfi_standard(self, sample_ohlcv):
+        """MFI with 14-period on 50 bars."""
+        from data.indicators import compute_mfi
+
+        result = compute_mfi(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            sample_ohlcv["volume"],
+            period=14
+        )
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert 0.0 <= result.iloc[-1] <= 100.0
+
+    def test_mfi_zero_volume(self):
+        """MFI handles zero volume gracefully."""
+        from data.indicators import compute_mfi
+
+        high = pd.Series([102] * 30)
+        low = pd.Series([98] * 30)
+        close = pd.Series([100 + i * 0.1 for i in range(30)])
+        volume = pd.Series([0.0] * 30)
+
+        result = compute_mfi(high, low, close, volume, period=14)
+        assert pd.isna(result.iloc[-1])
+
+    def test_mfi_insufficient_data(self):
+        """MFI with less than period bars returns NaN."""
+        from data.indicators import compute_mfi
+
+        high = pd.Series([102, 103, 104])
+        low = pd.Series([98, 99, 100])
+        close = pd.Series([100, 101, 102])
+        volume = pd.Series([1000, 1100, 1200])
+
+        result = compute_mfi(high, low, close, volume, period=14)
+        assert pd.isna(result.iloc[-1])
+
+    def test_vwap_standard(self, sample_ohlcv):
+        """VWAP cumulative calculation on 50 bars."""
+        from data.indicators import compute_vwap
+
+        result = compute_vwap(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            sample_ohlcv["volume"]
+        )
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert not pd.isna(result.iloc[0])
+
+        # VWAP should be within reasonable range
+        typical_price = (
+            sample_ohlcv["high"].iloc[-1] +
+            sample_ohlcv["low"].iloc[-1] +
+            sample_ohlcv["close"].iloc[-1]
+        ) / 3.0
+        assert abs(result.iloc[-1] - typical_price) < 20.0
+
+    def test_vwap_zero_volume(self):
+        """VWAP handles zero volume gracefully."""
+        from data.indicators import compute_vwap
+
+        high = pd.Series([102] * 30)
+        low = pd.Series([98] * 30)
+        close = pd.Series([100] * 30)
+        volume = pd.Series([0.0] * 30)
+
+        result = compute_vwap(high, low, close, volume)
+        assert pd.isna(result.iloc[0])
+
+    def test_vwap_single_bar(self):
+        """VWAP with single bar equals typical price."""
+        from data.indicators import compute_vwap
+
+        high = pd.Series([102.0])
+        low = pd.Series([98.0])
+        close = pd.Series([100.0])
+        volume = pd.Series([1000.0])
+
+        result = compute_vwap(high, low, close, volume)
+
+        expected = (102.0 + 98.0 + 100.0) / 3.0
+        assert abs(result.iloc[0] - expected) < 1e-6

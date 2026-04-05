@@ -297,6 +297,168 @@ def compute_kama(
     return kama_values
 
 
+def compute_obv(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """
+    Compute On-Balance Volume.
+
+    Cumulative volume with direction based on close:
+    - Add volume if close > previous close
+    - Subtract volume if close < previous close
+    - No change if close == previous close
+
+    Args:
+        close: Close price series
+        volume: Volume series
+
+    Returns:
+        Cumulative OBV series
+    """
+    # Determine direction: 1 (up), -1 (down), 0 (unchanged)
+    direction = pd.Series(0, index=close.index)
+    direction[close > close.shift(1)] = 1
+    direction[close < close.shift(1)] = -1
+
+    # Signed volume
+    signed_volume = direction * volume
+
+    # Cumulative sum
+    return signed_volume.cumsum()
+
+
+def compute_cmf(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    volume: pd.Series,
+    period: int = 20,
+) -> pd.Series:
+    """
+    Compute Chaikin Money Flow.
+
+    Weighted average of money flow volume over period.
+
+    Money Flow Multiplier = ((close - low) - (high - close)) / (high - low)
+    Money Flow Volume = multiplier * volume
+    CMF = sum(MFV over period) / sum(volume over period)
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        volume: Volume series
+        period: Lookback period (default: 20)
+
+    Returns:
+        CMF series (range: -1.0 to +1.0)
+    """
+    # Money Flow Multiplier (avoid division by zero)
+    range_hl = high - low
+    mf_multiplier = ((close - low) - (high - close)) / range_hl.where(range_hl > EPSILON, np.nan)
+
+    # Money Flow Volume
+    mf_volume = mf_multiplier * volume
+
+    # CMF: rolling sum of MFV / rolling sum of volume
+    mfv_sum = mf_volume.rolling(window=period).sum()
+    volume_sum = volume.rolling(window=period).sum()
+
+    return mfv_sum / volume_sum.where(volume_sum > EPSILON, np.nan)
+
+
+def compute_mfi(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    volume: pd.Series,
+    period: int = 14,
+) -> pd.Series:
+    """
+    Compute Money Flow Index (volume-weighted RSI).
+
+    Typical Price = (high + low + close) / 3
+    Raw Money Flow = Typical Price * Volume
+
+    Separate positive flow (TP increased) from negative flow (TP decreased)
+    Money Ratio = sum(positive_flow) / sum(negative_flow)
+    MFI = 100 - (100 / (1 + Money Ratio))
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        volume: Volume series
+        period: Lookback period (default: 14)
+
+    Returns:
+        MFI series (range: 0-100)
+    """
+    # Typical Price
+    typical_price = (high + low + close) / 3.0
+
+    # Raw Money Flow
+    raw_money_flow = typical_price * volume
+
+    # Separate positive and negative flows
+    tp_delta = typical_price.diff()
+    positive_flow = raw_money_flow.where(tp_delta > 0, 0.0)
+    negative_flow = raw_money_flow.where(tp_delta < 0, 0.0)
+
+    # Rolling sums
+    positive_sum = positive_flow.rolling(window=period).sum()
+    negative_sum = negative_flow.rolling(window=period).sum()
+
+    # Money Ratio (avoid division by zero)
+    money_ratio = positive_sum / negative_sum.where(negative_sum > EPSILON, np.nan)
+
+    # MFI
+    mfi_series = 100 - (100 / (1 + money_ratio))
+
+    # Handle edge cases: pure positive or pure negative
+    has_data = positive_sum.notna() & negative_sum.notna()
+    pure_positive = has_data & (negative_sum <= EPSILON) & (positive_sum > EPSILON)
+    pure_negative = has_data & (positive_sum <= EPSILON) & (negative_sum > EPSILON)
+
+    mfi_series = mfi_series.where(~pure_positive, 100.0)
+    mfi_series = mfi_series.where(~pure_negative, 0.0)
+
+    return mfi_series
+
+
+def compute_vwap(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    volume: pd.Series,
+) -> pd.Series:
+    """
+    Compute Volume-Weighted Average Price.
+
+    VWAP = cumulative(typical_price * volume) / cumulative(volume)
+    Typical Price = (high + low + close) / 3
+
+    Note: In production, VWAP resets at session boundaries.
+    Here it's cumulative over the entire window.
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        volume: Volume series
+
+    Returns:
+        Cumulative VWAP series
+    """
+    # Typical Price
+    typical_price = (high + low + close) / 3.0
+
+    # Cumulative sums
+    cum_tp_volume = (typical_price * volume).cumsum()
+    cum_volume = volume.cumsum()
+
+    # VWAP (avoid division by zero)
+    return cum_tp_volume / cum_volume.where(cum_volume > EPSILON, np.nan)
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
