@@ -3,7 +3,12 @@
     "allow": [
       "Bash(python run_multi_persona.py)",
       "Bash(python:*)",
-      "Bash(curl -s http://localhost:11434/api/tags)"
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(ls:*)",
+      "Bash(chmod:*)",
+      "Bash(pytest:*)",
+      "Bash(ollama list:*)",
+      "Bash(ollama pull:*)"
     ]
   }
 }

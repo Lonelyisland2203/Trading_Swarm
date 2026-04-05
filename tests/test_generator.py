@@ -3,6 +3,7 @@
 import json
 import pytest
 
+from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime
 from swarm.generator import (
     BASE_PERSONA_WEIGHTS,
@@ -69,7 +70,7 @@ class TestResponseExtraction:
     def test_extract_direct_json(self):
         """Test extraction from direct JSON."""
         response = '{"direction": "HIGHER", "confidence": 0.75, "reasoning": "Strong momentum"}'
-        signal = extract_signal(response, TradingPersona.MOMENTUM)
+        signal = extract_signal(response, TradingPersona.MOMENTUM, TaskType.PREDICT_DIRECTION)
 
         assert signal.direction == "HIGHER"
         assert signal.confidence == 0.75
@@ -84,7 +85,7 @@ class TestResponseExtraction:
 ```
 Hope this helps!'''
 
-        signal = extract_signal(response, TradingPersona.CONTRARIAN)
+        signal = extract_signal(response, TradingPersona.CONTRARIAN, TaskType.PREDICT_DIRECTION)
 
         assert signal.direction == "LOWER"
         assert signal.confidence == 0.6
@@ -95,7 +96,7 @@ Hope this helps!'''
         response = '''<think>Let me analyze this...</think>
 {"direction": "HIGHER", "confidence": 0.8, "reasoning": "Breakout signal"}'''
 
-        signal = extract_signal(response, TradingPersona.BREAKOUT)
+        signal = extract_signal(response, TradingPersona.BREAKOUT, TaskType.PREDICT_DIRECTION)
 
         assert signal.direction == "HIGHER"
         assert signal.confidence == 0.8
@@ -104,7 +105,7 @@ Hope this helps!'''
         """Test regex extraction as last resort."""
         response = '''My analysis shows "direction": "LOWER" with "confidence": 0.55'''
 
-        signal = extract_signal(response, TradingPersona.CONSERVATIVE)
+        signal = extract_signal(response, TradingPersona.CONSERVATIVE, TaskType.PREDICT_DIRECTION)
 
         assert signal.direction == "LOWER"
         assert signal.confidence == 0.55
@@ -115,24 +116,24 @@ Hope this helps!'''
         response = '{"direction": "SIDEWAYS", "confidence": 0.5, "reasoning": "Test"}'
 
         with pytest.raises(ValueError, match="Invalid direction"):
-            extract_signal(response, TradingPersona.CONSERVATIVE)
+            extract_signal(response, TradingPersona.CONSERVATIVE, TaskType.PREDICT_DIRECTION)
 
     def test_extract_confidence_clamped(self):
         """Test that confidence is clamped to [0, 1]."""
         # Too high
         response1 = '{"direction": "HIGHER", "confidence": 1.5, "reasoning": "Test"}'
-        signal1 = extract_signal(response1, TradingPersona.MOMENTUM)
+        signal1 = extract_signal(response1, TradingPersona.MOMENTUM, TaskType.PREDICT_DIRECTION)
         assert signal1.confidence == 1.0
 
         # Too low
         response2 = '{"direction": "LOWER", "confidence": -0.2, "reasoning": "Test"}'
-        signal2 = extract_signal(response2, TradingPersona.CONSERVATIVE)
+        signal2 = extract_signal(response2, TradingPersona.CONSERVATIVE, TaskType.PREDICT_DIRECTION)
         assert signal2.confidence == 0.0
 
     def test_extract_case_insensitive_direction(self):
         """Test that direction matching is case-insensitive."""
         response = '{"direction": "higher", "confidence": 0.7, "reasoning": "Test"}'
-        signal = extract_signal(response, TradingPersona.MOMENTUM)
+        signal = extract_signal(response, TradingPersona.MOMENTUM, TaskType.PREDICT_DIRECTION)
         assert signal.direction == "HIGHER"  # Normalized to uppercase
 
     def test_extract_unparseable_raises_error(self):
@@ -140,18 +141,18 @@ Hope this helps!'''
         response = "This is not JSON at all and has no direction or confidence"
 
         with pytest.raises(ResponseValidationError):
-            extract_signal(response, TradingPersona.CONSERVATIVE)
+            extract_signal(response, TradingPersona.CONSERVATIVE, TaskType.PREDICT_DIRECTION)
 
     def test_extract_preserves_raw_response(self):
         """Test that raw response is preserved in signal."""
         response = '{"direction": "HIGHER", "confidence": 0.65, "reasoning": "Test"}'
-        signal = extract_signal(response, TradingPersona.MOMENTUM)
+        signal = extract_signal(response, TradingPersona.MOMENTUM, TaskType.PREDICT_DIRECTION)
         assert signal.raw_response == response
 
     def test_extract_handles_missing_reasoning(self):
         """Test that missing reasoning field is handled gracefully."""
         response = '{"direction": "LOWER", "confidence": 0.5}'
-        signal = extract_signal(response, TradingPersona.CONTRARIAN)
+        signal = extract_signal(response, TradingPersona.CONTRARIAN, TaskType.PREDICT_DIRECTION)
         assert signal.reasoning == ""  # Empty string for missing reasoning
 
 

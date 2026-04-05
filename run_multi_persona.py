@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Run multi-persona signal generation workflow."""
+"""
+DEPRECATED: Lightweight single-context test script.
+
+For comprehensive dataset generation, use:
+    python generate_training_dataset.py --help
+
+This script is kept for quick testing and debugging of the
+multi-persona workflow on a single market context.
+"""
 
 import asyncio
 import sys
@@ -55,6 +63,7 @@ async def process_symbol(
         ohlcv_df=df,
         market_regime=market_regime,
         task_prompt=task_prompt,
+        task_type=task.task_type,
     )
 
     print(f"  [{symbol}] Status: {summary['workflow_status']}, "
@@ -65,6 +74,18 @@ async def process_symbol(
 
 
 async def main():
+    print("=" * 70)
+    print("⚠️  DEPRECATION WARNING")
+    print("=" * 70)
+    print("This script processes only a single context with limited examples.")
+    print()
+    print("For comprehensive dataset generation (1000s of examples), use:")
+    print("  python generate_training_dataset.py --help")
+    print()
+    print("Continuing with lightweight test mode...")
+    print("=" * 70)
+    print()
+
     print("Starting multi-persona workflow...")
     print("  1. Generate signals from all 5 personas per symbol (parallel)")
     print("  2. Run critic evaluation on each signal")

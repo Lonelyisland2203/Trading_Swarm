@@ -16,6 +16,7 @@ from enum import Enum
 
 from loguru import logger
 
+from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime
 from .exceptions import ResponseValidationError
 from .ollama_client import OllamaClient
@@ -117,13 +118,31 @@ Focus on identifying only the clearest, highest-conviction setups with strong te
 
 @dataclass(slots=True, frozen=True)
 class GeneratorSignal:
-    """Validated signal from generator model."""
+    """
+    Validated signal from generator model.
 
-    direction: str  # "HIGHER" | "LOWER"
-    confidence: float  # 0.0-1.0
+    Supports multiple task types with different schemas:
+    - PREDICT_DIRECTION: {direction, confidence}
+    - ASSESS_MOMENTUM: {direction, confidence}
+    - IDENTIFY_SUPPORT_RESISTANCE: {support_price, support_confidence, resistance_price, resistance_confidence}
+    """
+
+    task_type: TaskType
+    signal_data: dict  # Task-specific fields (direction/confidence OR support/resistance)
     reasoning: str
     persona: TradingPersona
     raw_response: str  # Preserve original for debugging
+
+    # Convenience properties for backward compatibility with PREDICT_DIRECTION
+    @property
+    def direction(self) -> str | None:
+        """Get direction for direction-based tasks (PREDICT_DIRECTION, ASSESS_MOMENTUM)."""
+        return self.signal_data.get("direction")
+
+    @property
+    def confidence(self) -> float | None:
+        """Get confidence for direction-based tasks (PREDICT_DIRECTION, ASSESS_MOMENTUM)."""
+        return self.signal_data.get("confidence")
 
 
 def sample_persona(
@@ -170,7 +189,33 @@ def sample_persona(
     return selected
 
 
-def extract_signal(raw_response: str, persona: TradingPersona) -> GeneratorSignal:
+def _validate_signal_schema(data: dict, task_type: TaskType) -> bool:
+    """
+    Validate signal data has required fields for task type.
+
+    Note: "reasoning" is optional and defaults to empty string if missing.
+
+    Args:
+        data: Parsed JSON data
+        task_type: Task type to validate against
+
+    Returns:
+        True if schema is valid for task type
+    """
+    if task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE:
+        required = {
+            "support_price",
+            "support_confidence",
+            "resistance_price",
+            "resistance_confidence",
+        }
+        return required.issubset(data.keys())
+    else:  # PREDICT_DIRECTION, ASSESS_MOMENTUM
+        required = {"direction", "confidence"}
+        return required.issubset(data.keys())
+
+
+def extract_signal(raw_response: str, persona: TradingPersona, task_type: TaskType) -> GeneratorSignal:
     """
     Extract signal from LLM response with multi-stage fallback.
 
@@ -183,6 +228,7 @@ def extract_signal(raw_response: str, persona: TradingPersona) -> GeneratorSigna
     Args:
         raw_response: Raw LLM response text
         persona: Persona used for generation
+        task_type: Task type for schema validation
 
     Returns:
         Validated signal
@@ -195,7 +241,7 @@ def extract_signal(raw_response: str, persona: TradingPersona) -> GeneratorSigna
     # Attempt 1: Direct JSON parse
     try:
         data = json.loads(text)
-        return _validate_and_build_signal(data, persona, raw_response)
+        return _validate_and_build_signal(data, persona, task_type, raw_response)
     except json.JSONDecodeError:
         pass
 
@@ -205,7 +251,7 @@ def extract_signal(raw_response: str, persona: TradingPersona) -> GeneratorSigna
     if match:
         try:
             data = json.loads(match.group(1))
-            return _validate_and_build_signal(data, persona, raw_response)
+            return _validate_and_build_signal(data, persona, task_type, raw_response)
         except json.JSONDecodeError:
             pass
 
@@ -214,39 +260,45 @@ def extract_signal(raw_response: str, persona: TradingPersona) -> GeneratorSigna
     match = re.search(think_pattern, text, re.DOTALL)
     if match:
         # Recursive call on post-think content
-        return extract_signal(match.group(1), persona)
+        return extract_signal(match.group(1), persona, task_type)
 
-    # Attempt 4: Regex extraction (last resort)
-    direction_match = re.search(r'"direction"\s*:\s*"(HIGHER|LOWER)"', text, re.IGNORECASE)
-    confidence_match = re.search(r'"confidence"\s*:\s*([\d.]+)', text)
+    # Attempt 4: Regex extraction (last resort, only for direction-based tasks)
+    if task_type in (TaskType.PREDICT_DIRECTION, TaskType.ASSESS_MOMENTUM):
+        direction_match = re.search(r'"direction"\s*:\s*"(INCREASING|DECREASING|HIGHER|LOWER)"', text, re.IGNORECASE)
+        confidence_match = re.search(r'"confidence"\s*:\s*([\d.]+)', text)
 
-    if direction_match and confidence_match:
-        logger.warning("Using regex fallback extraction", persona=persona.value)
-        return GeneratorSignal(
-            direction=direction_match.group(1).upper(),
-            confidence=float(confidence_match.group(1)),
-            reasoning="[Extracted via regex fallback]",
-            persona=persona,
-            raw_response=raw_response,
-        )
+        if direction_match and confidence_match:
+            logger.warning("Using regex fallback extraction", persona=persona.value, task_type=task_type.value)
+            return GeneratorSignal(
+                task_type=task_type,
+                signal_data={
+                    "direction": direction_match.group(1).upper(),
+                    "confidence": float(confidence_match.group(1)),
+                },
+                reasoning="[Extracted via regex fallback]",
+                persona=persona,
+                raw_response=raw_response,
+            )
 
     # All attempts failed
     raise ResponseValidationError(
-        f"Could not extract signal from response (persona={persona.value}): {text[:200]}..."
+        f"Could not extract signal from response (persona={persona.value}, task={task_type.value}): {text[:200]}..."
     )
 
 
 def _validate_and_build_signal(
     data: dict,
     persona: TradingPersona,
+    task_type: TaskType,
     raw: str,
 ) -> GeneratorSignal:
     """
-    Validate JSON schema and build signal.
+    Validate JSON schema and build signal based on task type.
 
     Args:
         data: Parsed JSON data
         persona: Persona used for generation
+        task_type: Task type for schema validation
         raw: Raw response text
 
     Returns:
@@ -255,17 +307,54 @@ def _validate_and_build_signal(
     Raises:
         ValueError: Invalid schema
     """
-    direction = data.get("direction", "").upper()
-    if direction not in ("HIGHER", "LOWER"):
-        raise ValueError(f"Invalid direction: {direction}")
+    # Validate schema
+    if not _validate_signal_schema(data, task_type):
+        raise ValueError(f"Invalid schema for task type {task_type.value}: missing required fields")
 
-    confidence = float(data.get("confidence", 0.5))
-    confidence = max(0.0, min(1.0, confidence))  # Clamp to valid range
+    reasoning = str(data.get("reasoning", ""))
+
+    if task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE:
+        # Support/Resistance task
+        support_price = float(data["support_price"])
+        support_confidence = float(data["support_confidence"])
+        resistance_price = float(data["resistance_price"])
+        resistance_confidence = float(data["resistance_confidence"])
+
+        # Clamp confidences to valid range
+        support_confidence = max(0.0, min(1.0, support_confidence))
+        resistance_confidence = max(0.0, min(1.0, resistance_confidence))
+
+        # Validate prices are positive
+        if support_price <= 0 or resistance_price <= 0:
+            raise ValueError(f"Invalid prices: support={support_price}, resistance={resistance_price}")
+
+        signal_data = {
+            "support_price": support_price,
+            "support_confidence": support_confidence,
+            "resistance_price": resistance_price,
+            "resistance_confidence": resistance_confidence,
+        }
+
+    else:  # PREDICT_DIRECTION, ASSESS_MOMENTUM
+        # Direction-based task
+        direction = data.get("direction", "").upper()
+
+        # Handle both formats: HIGHER/LOWER and INCREASING/DECREASING
+        if direction not in ("HIGHER", "LOWER", "INCREASING", "DECREASING"):
+            raise ValueError(f"Invalid direction: {direction}")
+
+        confidence = float(data.get("confidence", 0.5))
+        confidence = max(0.0, min(1.0, confidence))  # Clamp to valid range
+
+        signal_data = {
+            "direction": direction,
+            "confidence": confidence,
+        }
 
     return GeneratorSignal(
-        direction=direction,
-        confidence=confidence,
-        reasoning=str(data.get("reasoning", "")),
+        task_type=task_type,
+        signal_data=signal_data,
+        reasoning=reasoning,
         persona=persona,
         raw_response=raw,
     )
@@ -276,6 +365,7 @@ async def generate_signal(
     model: str,
     prompt: str,
     regime: MarketRegime,
+    task_type: TaskType,
     temperature: float = 0.7,
     seed: int | None = None,
     persona_override: TradingPersona | None = None,
@@ -290,6 +380,7 @@ async def generate_signal(
         model: Model identifier (e.g., "qwen3:8b")
         prompt: Base prompt from PromptBuilder
         regime: Current market regime
+        task_type: Task type for schema validation
         temperature: Generation temperature
         seed: Random seed for reproducibility
         persona_override: Optional specific persona (for cross-persona generation)
@@ -300,9 +391,10 @@ async def generate_signal(
     Example:
         async with OllamaClient() as client:
             signal = await generate_signal(
-                client, "qwen3:8b", prompt, MarketRegime.NEUTRAL
+                client, "qwen3:8b", prompt, MarketRegime.NEUTRAL,
+                TaskType.PREDICT_DIRECTION
             )
-            if signal:
+            if signal and signal.direction:
                 print(f"Direction: {signal.direction}, Confidence: {signal.confidence}")
     """
     # Sample persona or use override for cross-persona generation
@@ -330,6 +422,7 @@ async def generate_signal(
         model=model,
         persona=persona.value,
         regime=regime.value,
+        task_type=task_type.value,
         temperature=temperature,
     )
 
@@ -338,12 +431,12 @@ async def generate_signal(
 
     # Extract signal
     try:
-        signal = extract_signal(raw_text, persona)
+        signal = extract_signal(raw_text, persona, task_type)
         logger.info(
             "Signal generated",
-            direction=signal.direction,
-            confidence=signal.confidence,
+            task_type=task_type.value,
             persona=persona.value,
+            signal_data=signal.signal_data,
         )
         return signal
 
@@ -351,10 +444,18 @@ async def generate_signal(
         # Single retry with clarification
         logger.warning("Parse failed, retrying with clarification", error=str(e))
 
-        clarification = """
+        # Task-specific clarification
+        if task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE:
+            clarification = """
 Your previous response could not be parsed as JSON.
 Please respond with ONLY valid JSON, no markdown or explanation:
-{"direction": "HIGHER" | "LOWER", "confidence": 0.0-1.0, "reasoning": "brief explanation"}
+{"support_price": float, "support_confidence": 0.0-1.0, "resistance_price": float, "resistance_confidence": 0.0-1.0, "reasoning": "brief explanation"}
+"""
+        else:  # PREDICT_DIRECTION, ASSESS_MOMENTUM
+            clarification = """
+Your previous response could not be parsed as JSON.
+Please respond with ONLY valid JSON, no markdown or explanation:
+{"direction": "HIGHER" | "LOWER" | "INCREASING" | "DECREASING", "confidence": 0.0-1.0, "reasoning": "brief explanation"}
 """
 
         clarified_prompt = full_prompt + "\n\n" + clarification
@@ -363,14 +464,15 @@ Please respond with ONLY valid JSON, no markdown or explanation:
         retry_text = retry_response["response"]
 
         try:
-            signal = extract_signal(retry_text, persona)
-            logger.info("Signal extracted after clarification", direction=signal.direction)
+            signal = extract_signal(retry_text, persona, task_type)
+            logger.info("Signal extracted after clarification", task_type=task_type.value)
             return signal
 
         except ResponseValidationError as retry_error:
             logger.error(
                 "Signal extraction failed after retry",
                 persona=persona.value,
+                task_type=task_type.value,
                 original_error=str(e),
                 retry_error=str(retry_error),
                 raw_response=retry_text[:200],

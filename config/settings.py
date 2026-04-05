@@ -329,6 +329,46 @@ class DPOTrainingSettings(BaseModel):
         return v
 
 
+class DatasetGenerationSettings(BaseModel):
+    """Configuration for comprehensive dataset generation."""
+
+    default_window_count: int = Field(
+        default=15,
+        ge=1,
+        le=100,
+        description="Default number of historical windows per symbol/timeframe"
+    )
+    default_window_stride: int = Field(
+        default=100,
+        ge=10,
+        le=1000,
+        description="Default stride between windows (in bars)"
+    )
+    min_data_completeness: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Minimum data completeness ratio (skip windows below this threshold)"
+    )
+    save_frequency: int = Field(
+        default=1,
+        ge=1,
+        description="Save after every N contexts (1=after each context)"
+    )
+    max_retries_per_job: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Max retries for failed inference jobs"
+    )
+    retry_delay_seconds: int = Field(
+        default=10,
+        ge=1,
+        le=300,
+        description="Delay between retries (seconds)"
+    )
+
+
 class AppSettings(BaseSettings):
     """Main application settings.
 
@@ -348,6 +388,7 @@ class AppSettings(BaseSettings):
     reward: RewardWeights = Field(default_factory=RewardWeights)
     market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
     dpo: DPOTrainingSettings = Field(default_factory=DPOTrainingSettings)
+    dataset: DatasetGenerationSettings = Field(default_factory=DatasetGenerationSettings)
 
     # Paths
     model_save_dir: Path = Field(

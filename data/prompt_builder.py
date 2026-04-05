@@ -14,6 +14,7 @@ from loguru import logger
 
 from .indicators import compute_rsi, compute_macd, compute_bb_position
 from .regime_filter import MarketRegime
+import numpy as np
 
 # Thread-local random generator to avoid global state pollution
 _task_rng = random.Random()
@@ -40,14 +41,12 @@ class TaskConfig:
 
 
 # Task configurations with weights
-# NOTE: Only PREDICT_DIRECTION has a template implemented. Other tasks are
-# defined for future expansion but will raise NotImplementedError if sampled.
 TASK_CONFIGS = [
     TaskConfig(TaskType.PREDICT_DIRECTION, weight=1.0, difficulty=2, min_bars_required=50),
+    TaskConfig(TaskType.ASSESS_MOMENTUM, weight=0.8, difficulty=2, min_bars_required=30),
+    TaskConfig(TaskType.IDENTIFY_SUPPORT_RESISTANCE, weight=0.6, difficulty=3, min_bars_required=100),
     # Temporarily disabled until templates are implemented:
-    # TaskConfig(TaskType.IDENTIFY_SUPPORT_RESISTANCE, weight=0.25, difficulty=3, min_bars_required=100),
     # TaskConfig(TaskType.DETECT_TREND_REVERSAL, weight=0.20, difficulty=4, min_bars_required=100),
-    # TaskConfig(TaskType.ASSESS_MOMENTUM, weight=0.15, difficulty=2, min_bars_required=30),
     # TaskConfig(TaskType.IDENTIFY_PATTERN, weight=0.10, difficulty=5, min_bars_required=200),
 ]
 
@@ -168,6 +167,297 @@ Respond in JSON format:
         )
 
 
+@dataclass(slots=True)
+class MomentumAssessmentPrompt:
+    """Prompt template for momentum assessment task."""
+
+    TEMPLATE = """/no_think
+
+You are a momentum analyst. Analyze the following market data and assess whether momentum is increasing or decreasing.
+
+## Market Data
+Symbol: {symbol}
+Timeframe: {timeframe}
+Current Price: ${current_price:.4f}
+Market Regime: {market_regime}
+
+## Technical Indicators
+RSI(14): {rsi:.2f} (previous: {rsi_prev:.2f}, change: {rsi_delta:+.2f})
+MACD: {macd:.4f} (Signal: {macd_signal:.4f})
+MACD Previous: {macd_prev:.4f} (change: {macd_delta:+.4f})
+BB Width: {bb_width:.4f} ({bb_trend})
+
+## Recent Price Action (last {num_bars} bars)
+{price_summary}
+
+## Task
+Is momentum INCREASING or DECREASING? Consider:
+- RSI trend (rising RSI = increasing momentum)
+- MACD vs signal line (diverging upward = increasing momentum)
+- Price action acceleration (larger price changes = increasing momentum)
+- BB width (expanding = increasing volatility/momentum)
+
+Respond in JSON format:
+{{"direction": "INCREASING" | "DECREASING", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}
+"""
+
+    def render(
+        self,
+        symbol: str,
+        timeframe: str,
+        current_price: float,
+        market_regime: str,
+        rsi: float,
+        rsi_prev: float,
+        rsi_delta: float,
+        macd: float,
+        macd_signal: float,
+        macd_prev: float,
+        macd_delta: float,
+        bb_width: float,
+        bb_trend: str,
+        price_summary: str,
+        num_bars: int = 10,
+    ) -> str:
+        """Render momentum assessment prompt."""
+        return self.TEMPLATE.format(
+            symbol=symbol,
+            timeframe=timeframe,
+            current_price=current_price,
+            market_regime=market_regime,
+            rsi=rsi,
+            rsi_prev=rsi_prev,
+            rsi_delta=rsi_delta,
+            macd=macd,
+            macd_signal=macd_signal,
+            macd_prev=macd_prev,
+            macd_delta=macd_delta,
+            bb_width=bb_width,
+            bb_trend=bb_trend,
+            price_summary=price_summary,
+            num_bars=num_bars,
+        )
+
+
+@dataclass(slots=True)
+class SupportResistancePrompt:
+    """Prompt template for support/resistance identification task."""
+
+    TEMPLATE = """/no_think
+
+You are a technical analyst. Identify the nearest support and resistance levels based on recent price action.
+
+## Market Data
+Symbol: {symbol}
+Timeframe: {timeframe}
+Current Price: ${current_price:.4f}
+Market Regime: {market_regime}
+
+## Price History (last 50 bars)
+High: ${price_high:.4f}
+Low: ${price_low:.4f}
+Range: ${price_range:.4f}
+
+## Recent Swing Points
+Swing Highs: {swing_highs}
+Swing Lows: {swing_lows}
+
+## Recent Price Action (last {num_bars} bars)
+{price_summary}
+
+## Task
+Identify:
+1. Nearest SUPPORT level below current price
+2. Nearest RESISTANCE level above current price
+
+Consider: Previous swing highs/lows, psychological levels (round numbers), high-volume areas
+
+Respond in JSON format:
+{{
+  "support_price": float,
+  "support_confidence": 0.0-1.0,
+  "resistance_price": float,
+  "resistance_confidence": 0.0-1.0,
+  "reasoning": "brief explanation"
+}}
+"""
+
+    def render(
+        self,
+        symbol: str,
+        timeframe: str,
+        current_price: float,
+        market_regime: str,
+        price_high: float,
+        price_low: float,
+        price_range: float,
+        swing_highs: str,
+        swing_lows: str,
+        price_summary: str,
+        num_bars: int = 10,
+    ) -> str:
+        """Render support/resistance prompt."""
+        return self.TEMPLATE.format(
+            symbol=symbol,
+            timeframe=timeframe,
+            current_price=current_price,
+            market_regime=market_regime,
+            price_high=price_high,
+            price_low=price_low,
+            price_range=price_range,
+            swing_highs=swing_highs,
+            swing_lows=swing_lows,
+            price_summary=price_summary,
+            num_bars=num_bars,
+        )
+
+
+def detect_swing_highs(df: pd.DataFrame, window: int = 5, num_swings: int = 3) -> list[float]:
+    """
+    Detect recent swing high prices.
+
+    A swing high is a local maximum where the high is greater than
+    surrounding highs in the window.
+
+    Args:
+        df: OHLCV DataFrame
+        window: Window size for local maximum detection
+        num_swings: Number of most recent swings to return
+
+    Returns:
+        List of swing high prices (most recent first)
+    """
+    if len(df) < window * 2 + 1:
+        return []
+
+    highs = df["high"].values
+    swing_highs = []
+
+    # Start from most recent and work backward
+    for i in range(len(highs) - window - 1, window, -1):
+        # Check if this is a local maximum
+        is_swing = True
+        center_high = highs[i]
+
+        # Check left window
+        for j in range(i - window, i):
+            if highs[j] >= center_high:
+                is_swing = False
+                break
+
+        # Check right window
+        if is_swing:
+            for j in range(i + 1, min(i + window + 1, len(highs))):
+                if highs[j] >= center_high:
+                    is_swing = False
+                    break
+
+        if is_swing:
+            swing_highs.append(float(center_high))
+            if len(swing_highs) >= num_swings:
+                break
+
+    return swing_highs
+
+
+def detect_swing_lows(df: pd.DataFrame, window: int = 5, num_swings: int = 3) -> list[float]:
+    """
+    Detect recent swing low prices.
+
+    A swing low is a local minimum where the low is less than
+    surrounding lows in the window.
+
+    Args:
+        df: OHLCV DataFrame
+        window: Window size for local minimum detection
+        num_swings: Number of most recent swings to return
+
+    Returns:
+        List of swing low prices (most recent first)
+    """
+    if len(df) < window * 2 + 1:
+        return []
+
+    lows = df["low"].values
+    swing_lows = []
+
+    # Start from most recent and work backward
+    for i in range(len(lows) - window - 1, window, -1):
+        # Check if this is a local minimum
+        is_swing = True
+        center_low = lows[i]
+
+        # Check left window
+        for j in range(i - window, i):
+            if lows[j] <= center_low:
+                is_swing = False
+                break
+
+        # Check right window
+        if is_swing:
+            for j in range(i + 1, min(i + window + 1, len(lows))):
+                if lows[j] <= center_low:
+                    is_swing = False
+                    break
+
+        if is_swing:
+            swing_lows.append(float(center_low))
+            if len(swing_lows) >= num_swings:
+                break
+
+    return swing_lows
+
+
+def calculate_bb_width(df: pd.DataFrame, period: int = 20, std_dev: float = 2.0) -> float:
+    """
+    Calculate Bollinger Band width.
+
+    Width = (Upper Band - Lower Band) / Middle Band
+
+    Args:
+        df: OHLCV DataFrame
+        period: Period for moving average
+        std_dev: Standard deviation multiplier
+
+    Returns:
+        BB width as ratio
+    """
+    if len(df) < period:
+        return 0.0
+
+    close = df["close"].tail(period)
+    middle_band = close.mean()
+    std = close.std()
+
+    upper_band = middle_band + (std_dev * std)
+    lower_band = middle_band - (std_dev * std)
+
+    if middle_band == 0:
+        return 0.0
+
+    width = (upper_band - lower_band) / middle_band
+    return float(width)
+
+
+def get_bb_trend(current_width: float, prev_width: float) -> str:
+    """
+    Determine Bollinger Band trend.
+
+    Args:
+        current_width: Current BB width
+        prev_width: Previous BB width
+
+    Returns:
+        "expanding", "contracting", or "stable"
+    """
+    if abs(current_width - prev_width) < 0.001:
+        return "stable"
+    elif current_width > prev_width:
+        return "expanding"
+    else:
+        return "contracting"
+
+
 class PromptBuilder:
     """
     Main interface for building prompts from market data.
@@ -179,7 +469,8 @@ class PromptBuilder:
         """Initialize prompt builder."""
         self.templates = {
             TaskType.PREDICT_DIRECTION: DirectionPredictionPrompt(),
-            # Additional templates can be added for other task types
+            TaskType.ASSESS_MOMENTUM: MomentumAssessmentPrompt(),
+            TaskType.IDENTIFY_SUPPORT_RESISTANCE: SupportResistancePrompt(),
         }
 
     def _format_price_summary(self, df: pd.DataFrame, num_bars: int = 10) -> str:
@@ -243,26 +534,94 @@ class PromptBuilder:
         if template is None:
             raise ValueError(f"No template for task type: {task.task_type}")
 
-        # Calculate indicators
-        rsi = compute_rsi(df["close"]).iloc[-1]
-        macd_line, macd_signal, _ = compute_macd(df["close"])
+        # Calculate common indicators
+        rsi_series = compute_rsi(df["close"])
+        rsi = rsi_series.iloc[-1] if not pd.isna(rsi_series.iloc[-1]) else 50.0
+
+        macd_line, macd_signal_series, _ = compute_macd(df["close"])
+        macd = macd_line.iloc[-1] if not pd.isna(macd_line.iloc[-1]) else 0.0
+        macd_signal = macd_signal_series.iloc[-1] if not pd.isna(macd_signal_series.iloc[-1]) else 0.0
+
         bb_pos = compute_bb_position(df["close"]).iloc[-1]
+        bb_pos = bb_pos if not pd.isna(bb_pos) else 0.5
 
         # Format price summary
         price_summary = self._format_price_summary(df)
+        current_price = float(df["close"].iloc[-1])
 
-        # Render template
-        prompt = template.render(
-            symbol=symbol,
-            timeframe=timeframe,
-            current_price=df["close"].iloc[-1],
-            market_regime=market_regime.value,
-            rsi=rsi if not pd.isna(rsi) else 50.0,
-            macd=macd_line.iloc[-1] if not pd.isna(macd_line.iloc[-1]) else 0.0,
-            macd_signal=macd_signal.iloc[-1] if not pd.isna(macd_signal.iloc[-1]) else 0.0,
-            bb_position=bb_pos if not pd.isna(bb_pos) else 0.5,
-            price_summary=price_summary,
-        )
+        # Task-specific rendering
+        if task.task_type == TaskType.PREDICT_DIRECTION:
+            prompt = template.render(
+                symbol=symbol,
+                timeframe=timeframe,
+                current_price=current_price,
+                market_regime=market_regime.value,
+                rsi=rsi,
+                macd=macd,
+                macd_signal=macd_signal,
+                bb_position=bb_pos,
+                price_summary=price_summary,
+            )
+
+        elif task.task_type == TaskType.ASSESS_MOMENTUM:
+            # Calculate momentum-specific indicators
+            rsi_prev = rsi_series.iloc[-2] if len(rsi_series) > 1 and not pd.isna(rsi_series.iloc[-2]) else rsi
+            rsi_delta = rsi - rsi_prev
+
+            macd_prev = macd_line.iloc[-2] if len(macd_line) > 1 and not pd.isna(macd_line.iloc[-2]) else macd
+            macd_delta = macd - macd_prev
+
+            # Calculate BB width
+            current_bb_width = calculate_bb_width(df, period=20)
+            prev_bb_width = calculate_bb_width(df.iloc[:-1], period=20) if len(df) > 20 else current_bb_width
+            bb_trend = get_bb_trend(current_bb_width, prev_bb_width)
+
+            prompt = template.render(
+                symbol=symbol,
+                timeframe=timeframe,
+                current_price=current_price,
+                market_regime=market_regime.value,
+                rsi=rsi,
+                rsi_prev=rsi_prev,
+                rsi_delta=rsi_delta,
+                macd=macd,
+                macd_signal=macd_signal,
+                macd_prev=macd_prev,
+                macd_delta=macd_delta,
+                bb_width=current_bb_width,
+                bb_trend=bb_trend,
+                price_summary=price_summary,
+            )
+
+        elif task.task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE:
+            # Calculate support/resistance indicators
+            price_high = float(df["high"].tail(50).max())
+            price_low = float(df["low"].tail(50).min())
+            price_range = price_high - price_low
+
+            # Detect swing points
+            swing_highs = detect_swing_highs(df, window=5, num_swings=3)
+            swing_lows = detect_swing_lows(df, window=5, num_swings=3)
+
+            # Format swing points
+            swing_highs_str = ", ".join([f"${h:.2f}" for h in swing_highs]) if swing_highs else "None detected"
+            swing_lows_str = ", ".join([f"${l:.2f}" for l in swing_lows]) if swing_lows else "None detected"
+
+            prompt = template.render(
+                symbol=symbol,
+                timeframe=timeframe,
+                current_price=current_price,
+                market_regime=market_regime.value,
+                price_high=price_high,
+                price_low=price_low,
+                price_range=price_range,
+                swing_highs=swing_highs_str,
+                swing_lows=swing_lows_str,
+                price_summary=price_summary,
+            )
+
+        else:
+            raise ValueError(f"Unsupported task type: {task.task_type}")
 
         logger.info(
             "Prompt built",

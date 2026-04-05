@@ -13,6 +13,7 @@ from loguru import logger
 
 from config.settings import settings
 from data.indicators import compute_bb_position, compute_macd, compute_rsi
+from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime
 from .critic import evaluate_signal
 from .generator import generate_signal, TradingPersona
@@ -148,6 +149,7 @@ async def run_swarm_workflow(
     ohlcv_df: pd.DataFrame,
     market_regime: MarketRegime,
     task_prompt: str,
+    task_type: TaskType = TaskType.PREDICT_DIRECTION,
 ) -> tuple[SwarmState, TrainingExample]:
     """
     Execute generator -> critic workflow with guaranteed VRAM cleanup.
@@ -214,6 +216,7 @@ async def run_swarm_workflow(
                 settings.ollama.generator_model,
                 task_prompt,
                 market_regime,
+                task_type,
                 temperature=settings.swarm.generator_temperature,
             )
 
@@ -345,6 +348,7 @@ async def run_multi_persona_workflow(
     ohlcv_df: pd.DataFrame,
     market_regime: MarketRegime,
     task_prompt: str,
+    task_type: TaskType = TaskType.PREDICT_DIRECTION,
 ) -> tuple[dict, list[TrainingExample]]:
     """
     Generate signals from ALL personas for the same context (DPO training).
@@ -430,6 +434,7 @@ async def run_multi_persona_workflow(
                     settings.ollama.generator_model,
                     task_prompt,
                     market_regime,
+                    task_type,
                     temperature=0.7,
                     persona_override=persona,  # Force this persona
                 )
