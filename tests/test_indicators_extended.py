@@ -939,3 +939,100 @@ def test_fvg_filled_gaps_excluded():
 
     gaps = fair_value_gaps(df, min_gap_pct=0.1)
     assert len(gaps) == 0
+
+
+@pytest.fixture
+def swing_pattern_df():
+    """20-bar OHLCV data with known swing patterns."""
+    # Create pattern with clear swing highs and lows
+    # Swing high at index 10 (high=110.0)
+    # Swing low at index 5 (low=95.0)
+    highs = [
+        100.0, 101.0, 102.0, 103.0, 104.0,  # 0-4: rising
+        103.0, 102.0, 103.0, 104.0, 105.0,  # 5-9: rising (low at 5)
+        110.0,  # 10: swing high peak
+        105.0, 104.0, 103.0, 102.0,  # 11-14: falling
+        103.0, 104.0, 105.0, 106.0, 107.0,  # 15-19: rising
+    ]
+    lows = [
+        98.0, 99.0, 100.0, 101.0, 102.0,  # 0-4: rising
+        95.0,  # 5: swing low trough
+        100.0, 101.0, 102.0, 103.0,  # 6-9: rising
+        108.0,  # 10: swing high
+        103.0, 102.0, 101.0, 100.0,  # 11-14: falling
+        101.0, 102.0, 103.0, 104.0, 105.0,  # 15-19: rising
+    ]
+
+    return pd.DataFrame({
+        'timestamp': [i * 60000 for i in range(20)],
+        'open': [99.0] * 20,
+        'high': highs,
+        'low': lows,
+        'close': [99.5] * 20,
+    })
+
+
+def test_swing_points_detection(swing_pattern_df):
+    """Detects swing highs and lows, verifies structure."""
+    from data.indicators import swing_points
+
+    result = swing_points(swing_pattern_df, window=5)
+
+    # Verify return structure
+    assert isinstance(result, dict)
+    assert 'highs' in result
+    assert 'lows' in result
+    assert isinstance(result['highs'], list)
+    assert isinstance(result['lows'], list)
+
+    # Should detect swing high at index 10 (high=110.0)
+    assert len(result['highs']) >= 1
+    swing_high = result['highs'][0]
+    assert swing_high['index'] == 10
+    assert swing_high['price'] == 110.0
+    assert swing_high['timestamp'] == 10 * 60000
+
+    # Should detect swing low at index 5 (low=95.0)
+    assert len(result['lows']) >= 1
+    swing_low = result['lows'][0]
+    assert swing_low['index'] == 5
+    assert swing_low['price'] == 95.0
+    assert swing_low['timestamp'] == 5 * 60000
+
+
+def test_swing_points_insufficient_data():
+    """Returns empty lists with minimal data."""
+    from data.indicators import swing_points
+
+    # Only 3 bars - need at least window*2+1 bars for any swing points
+    df = pd.DataFrame({
+        'timestamp': [0, 60000, 120000],
+        'open': [100.0, 101.0, 102.0],
+        'high': [102.0, 103.0, 104.0],
+        'low': [98.0, 99.0, 100.0],
+        'close': [101.0, 102.0, 103.0],
+    })
+
+    result = swing_points(df, window=5)
+
+    assert result['highs'] == []
+    assert result['lows'] == []
+
+
+def test_swing_points_flat_price():
+    """Returns no swings for flat price."""
+    from data.indicators import swing_points
+
+    # All highs and lows are identical - no local extrema
+    df = pd.DataFrame({
+        'timestamp': [i * 60000 for i in range(20)],
+        'open': [100.0] * 20,
+        'high': [100.0] * 20,
+        'low': [100.0] * 20,
+        'close': [100.0] * 20,
+    })
+
+    result = swing_points(df, window=5)
+
+    assert result['highs'] == []
+    assert result['lows'] == []

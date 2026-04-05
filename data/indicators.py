@@ -798,6 +798,82 @@ def fair_value_gaps(
     return gaps
 
 
+def swing_points(
+    df: pd.DataFrame,
+    window: int = 5,
+) -> dict[str, list[dict]]:
+    """
+    Detect swing highs and swing lows.
+
+    A swing high is a local maximum where the high is greater than all
+    surrounding highs in the window.
+
+    A swing low is a local minimum where the low is less than all
+    surrounding lows in the window.
+
+    Args:
+        df: OHLCV DataFrame with columns ['timestamp', 'high', 'low']
+        window: Number of bars before and after to check (default: 5)
+
+    Returns:
+        Dict with 'highs' and 'lows' lists:
+        {
+            'highs': [
+                {'index': int, 'price': float, 'timestamp': int},
+                ...
+            ],
+            'lows': [
+                {'index': int, 'price': float, 'timestamp': int},
+                ...
+            ]
+        }
+    """
+    if len(df) < window * 2 + 1:
+        return {'highs': [], 'lows': []}
+
+    swing_highs = []
+    swing_lows = []
+
+    # Iterate through potential swing points (excluding edges)
+    for i in range(window, len(df) - window):
+        current_high = df.iloc[i]['high']
+        current_low = df.iloc[i]['low']
+
+        # Check if this is a swing high
+        is_swing_high = True
+        for j in range(i - window, i + window + 1):
+            if j == i:
+                continue
+            if df.iloc[j]['high'] >= current_high:
+                is_swing_high = False
+                break
+
+        if is_swing_high:
+            swing_highs.append({
+                'index': i,
+                'price': current_high,
+                'timestamp': int(df.iloc[i]['timestamp']),
+            })
+
+        # Check if this is a swing low
+        is_swing_low = True
+        for j in range(i - window, i + window + 1):
+            if j == i:
+                continue
+            if df.iloc[j]['low'] <= current_low:
+                is_swing_low = False
+                break
+
+        if is_swing_low:
+            swing_lows.append({
+                'index': i,
+                'price': current_low,
+                'timestamp': int(df.iloc[i]['timestamp']),
+            })
+
+    return {'highs': swing_highs, 'lows': swing_lows}
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
