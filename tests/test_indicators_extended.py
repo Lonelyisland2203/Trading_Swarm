@@ -136,6 +136,20 @@ class TestIchimokuCloud:
         assert not pd.isna(components['tenkan_sen'].iloc[-1])
         assert not pd.isna(components['kijun_sen'].iloc[-1])
 
+        # Verify Tenkan-sen calculation at bar 8 (first non-NaN)
+        expected_tenkan = (
+            sample_ohlcv["high"].iloc[0:9].max() +
+            sample_ohlcv["low"].iloc[0:9].min()
+        ) / 2.0
+        assert abs(components['tenkan_sen'].iloc[8] - expected_tenkan) < 1e-6
+
+        # Verify Kijun-sen calculation at bar 25 (first non-NaN)
+        expected_kijun = (
+            sample_ohlcv["high"].iloc[0:26].max() +
+            sample_ohlcv["low"].iloc[0:26].min()
+        ) / 2.0
+        assert abs(components['kijun_sen'].iloc[25] - expected_kijun) < 1e-6
+
     def test_ichimoku_cloud_insufficient_data(self):
         """Ichimoku with minimal data returns NaN."""
         from data.indicators import compute_ichimoku_cloud
@@ -159,6 +173,38 @@ class TestIchimokuCloud:
 
         components = compute_ichimoku_cloud(high, low, close)
 
-        # All lines should equal 100 (except shifted ones which may be NaN)
+        # All components should equal 100.0 where not NaN
         assert abs(components['tenkan_sen'].iloc[-1] - 100.0) < 1e-6
         assert abs(components['kijun_sen'].iloc[-1] - 100.0) < 1e-6
+
+        # Senkou spans shifted forward 26: first valid at index 51
+        # (senkou_span_a is (tenkan+kijun)/2 first valid at 25, then shifted 26 -> index 51)
+        assert pd.isna(components['senkou_span_a'].iloc[50])
+        assert abs(components['senkou_span_a'].iloc[51] - 100.0) < 1e-6
+
+        # Chikou span shifted backward 26: last 26 are NaN
+        assert pd.isna(components['chikou_span'].iloc[-1])
+        assert abs(components['chikou_span'].iloc[0] - 100.0) < 1e-6
+
+    def test_ichimoku_cloud_custom_periods(self, sample_ohlcv):
+        """Test Ichimoku with non-standard periods."""
+        from data.indicators import compute_ichimoku_cloud
+
+        # Use shorter periods to test parameter handling
+        components = compute_ichimoku_cloud(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            tenkan_period=7,
+            kijun_period=22,
+            senkou_span_b_period=44
+        )
+
+        # Verify periods were actually used by checking NaN positions
+        # Tenkan (7-period) should have first 6 NaN, then valid at index 6
+        assert components['tenkan_sen'].iloc[:6].isna().all()
+        assert not pd.isna(components['tenkan_sen'].iloc[6])
+
+        # Kijun (22-period) should have first 21 NaN, then valid at index 21
+        assert components['kijun_sen'].iloc[:21].isna().all()
+        assert not pd.isna(components['kijun_sen'].iloc[21])
