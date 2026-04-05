@@ -18,7 +18,7 @@ class FeeModelSettings(BaseModel):
     All fees expressed as percentages of position size.
 
     Attributes:
-        maker_fee_pct: Taker fee as % of notional (default: 0.02% for limit orders)
+        maker_fee_pct: Maker fee as % of notional (default: 0.02% for limit orders)
         taker_fee_pct: Taker fee as % of notional (default: 0.05% for market orders)
         bnb_discount_enabled: Apply 10% BNB discount to trading fees (Binance Futures discount)
         bnb_discount_pct: BNB discount as % (default: 10% = 0.1, NOT 25% which is Spot-only)

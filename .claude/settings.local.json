@@ -10,7 +10,9 @@
       "Bash(ollama list:*)",
       "Bash(ollama pull:*)",
       "Bash(tee:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

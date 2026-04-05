@@ -276,3 +276,100 @@ class TestFeeModelSettings:
         # With BNB discount: (0.02 + 0.05) * 0.9 + 0.01 + 0.02 = 0.063 + 0.01 + 0.02 = 0.093%
         cost = settings.round_trip_cost_pct(holding_periods_8h=1)
         assert abs(cost - 0.093) < 0.001
+
+    def test_round_trip_cost_no_bnb_discount(self):
+        """Test round_trip with BNB discount disabled."""
+        fee_model = FeeModelSettings(bnb_discount_enabled=False)
+        cost = fee_model.round_trip_cost_pct(holding_periods_8h=1)
+        # (0.02 + 0.05) + 0.01 + 0.02 = 0.10%
+        assert abs(cost - 0.10) < 1e-9
+
+    def test_round_trip_cost_multiple_funding_periods(self):
+        """Test round_trip with extended holding period."""
+        fee_model = FeeModelSettings()
+        cost = fee_model.round_trip_cost_pct(holding_periods_8h=3)
+        # (0.02 + 0.05) * 0.9 + 0.01*3 + 0.02 = 0.063 + 0.03 + 0.02 = 0.113%
+        assert abs(cost - 0.113) < 1e-9
+
+    def test_round_trip_cost_zero_holding(self):
+        """Test round_trip with immediate close (no funding)."""
+        fee_model = FeeModelSettings()
+        cost = fee_model.round_trip_cost_pct(holding_periods_8h=0)
+        # (0.02 + 0.05) * 0.9 + 0 + 0.02 = 0.083%
+        assert abs(cost - 0.083) < 1e-9
+
+    def test_negative_fees_rejected(self):
+        """Test that negative fees raise validation error."""
+        with pytest.raises(ValidationError):
+            FeeModelSettings(maker_fee_pct=-0.01)
+
+    def test_negative_taker_fees_rejected(self):
+        """Test that negative taker fees raise validation error."""
+        with pytest.raises(ValidationError):
+            FeeModelSettings(taker_fee_pct=-0.01)
+
+    def test_excessive_fees_rejected(self):
+        """Test that unrealistic fees are rejected."""
+        with pytest.raises(ValidationError):
+            FeeModelSettings(taker_fee_pct=1.1)  # > 0.5
+
+    def test_excessive_maker_fees_rejected(self):
+        """Test that unrealistic maker fees are rejected."""
+        with pytest.raises(ValidationError):
+            FeeModelSettings(maker_fee_pct=0.6)  # > 0.5
+
+    def test_funding_rate_bounds(self):
+        """Test funding rate validation bounds."""
+        # Negative funding rate should fail
+        with pytest.raises(ValidationError):
+            FeeModelSettings(funding_rate_pct=-0.01)
+
+        # Excessive funding rate should fail
+        with pytest.raises(ValidationError):
+            FeeModelSettings(funding_rate_pct=1.5)  # > 1.0
+
+        # Valid rate
+        fee_model = FeeModelSettings(funding_rate_pct=0.05)
+        assert fee_model.funding_rate_pct == 0.05
+
+    def test_slippage_bounds(self):
+        """Test slippage validation bounds."""
+        # Negative slippage should fail
+        with pytest.raises(ValidationError):
+            FeeModelSettings(slippage_pct=-0.01)
+
+        # Excessive slippage should fail
+        with pytest.raises(ValidationError):
+            FeeModelSettings(slippage_pct=1.5)  # > 1.0
+
+        # Valid slippage
+        fee_model = FeeModelSettings(slippage_pct=0.05)
+        assert fee_model.slippage_pct == 0.05
+
+    def test_bnb_discount_bounds(self):
+        """Test BNB discount percentage validation."""
+        # Negative discount should fail
+        with pytest.raises(ValidationError):
+            FeeModelSettings(bnb_discount_pct=-10.0)
+
+        # Excessive discount should fail
+        with pytest.raises(ValidationError):
+            FeeModelSettings(bnb_discount_pct=150.0)  # > 100.0
+
+        # Valid discount
+        fee_model = FeeModelSettings(bnb_discount_pct=15.0)
+        assert fee_model.bnb_discount_pct == 15.0
+
+    def test_funding_interval_bounds(self):
+        """Test funding interval hours validation."""
+        # Too low
+        with pytest.raises(ValidationError):
+            FeeModelSettings(funding_interval_hours=0)
+
+        # Too high
+        with pytest.raises(ValidationError):
+            FeeModelSettings(funding_interval_hours=25)
+
+        # Valid values
+        fee_model = FeeModelSettings(funding_interval_hours=12)
+        assert fee_model.funding_interval_hours == 12
