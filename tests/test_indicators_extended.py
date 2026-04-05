@@ -555,3 +555,166 @@ class TestVolumeIndicators:
 
         # MFM when close=high is +1.0, so CMF should be +1.0
         assert abs(result.iloc[-1] - 1.0) < 1e-6
+
+
+class TestVolatilityIndicators:
+    """Tests for volatility-based indicators."""
+
+    def test_atr_standard(self, sample_ohlcv):
+        """ATR with 14-period on 50 bars."""
+        from data.indicators import compute_atr
+
+        result = compute_atr(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            period=14
+        )
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert result.iloc[-1] > 0
+
+    def test_atr_zero_range_bars(self):
+        """ATR handles bars with zero range gracefully."""
+        from data.indicators import compute_atr
+
+        high = pd.Series([100.0] * 30)
+        low = pd.Series([100.0] * 30)
+        close = pd.Series([100.0] * 30)
+
+        result = compute_atr(high, low, close, period=14)
+        assert result.iloc[-1] < 1e-6
+
+    def test_atr_single_bar(self):
+        """ATR with single bar returns NaN."""
+        from data.indicators import compute_atr
+
+        high = pd.Series([102.0])
+        low = pd.Series([98.0])
+        close = pd.Series([100.0])
+
+        result = compute_atr(high, low, close, period=14)
+        assert pd.isna(result.iloc[0])
+
+    def test_atr_normalized_standard(self, sample_ohlcv):
+        """ATR normalized with 14-period on 50 bars."""
+        from data.indicators import compute_atr_normalized
+
+        result = compute_atr_normalized(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            period=14
+        )
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert result.iloc[-1] > 0
+
+    def test_bb_width_standard(self):
+        """BB width calculation on 50 bars."""
+        from data.indicators import compute_bb_width
+
+        close = pd.Series([100 + i * 0.5 for i in range(50)])
+        result = compute_bb_width(close, period=20)
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert result.iloc[-1] > 0
+
+    def test_bb_width_flat_price(self):
+        """BB width with flat price returns zero."""
+        from data.indicators import compute_bb_width
+
+        close = pd.Series([100.0] * 30)
+        result = compute_bb_width(close, period=20)
+        assert result.iloc[-1] < 1e-6
+
+    def test_bb_width_insufficient_data(self):
+        """BB width with less than period bars returns NaN."""
+        from data.indicators import compute_bb_width
+
+        close = pd.Series([100, 101, 102])
+        result = compute_bb_width(close, period=20)
+        assert pd.isna(result.iloc[-1])
+
+    def test_keltner_channels_standard(self, sample_ohlcv):
+        """Keltner channels with standard parameters."""
+        from data.indicators import compute_keltner_channels
+
+        upper, middle, lower = compute_keltner_channels(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"]
+        )
+
+        assert isinstance(upper, pd.Series)
+        assert isinstance(middle, pd.Series)
+        assert isinstance(lower, pd.Series)
+        assert upper.iloc[-1] > middle.iloc[-1]
+        assert middle.iloc[-1] > lower.iloc[-1]
+
+    def test_keltner_channels_insufficient_data(self):
+        """Keltner with minimal data returns NaN."""
+        from data.indicators import compute_keltner_channels
+
+        high = pd.Series([102, 103, 104])
+        low = pd.Series([98, 99, 100])
+        close = pd.Series([100, 101, 102])
+
+        upper, middle, lower = compute_keltner_channels(
+            high, low, close,
+            ema_period=20, atr_period=10
+        )
+        assert pd.isna(upper.iloc[-1])
+
+    def test_keltner_channels_zero_atr(self):
+        """Keltner with zero ATR has upper=middle=lower."""
+        from data.indicators import compute_keltner_channels
+
+        high = pd.Series([100.0] * 30)
+        low = pd.Series([100.0] * 30)
+        close = pd.Series([100.0] * 30)
+
+        upper, middle, lower = compute_keltner_channels(
+            high, low, close,
+            ema_period=20, atr_period=10
+        )
+
+        assert abs(upper.iloc[-1] - middle.iloc[-1]) < 1e-6
+        assert abs(middle.iloc[-1] - lower.iloc[-1]) < 1e-6
+
+    def test_donchian_width_standard(self, sample_ohlcv):
+        """Donchian width calculation on 50 bars."""
+        from data.indicators import compute_donchian_width
+
+        result = compute_donchian_width(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            period=20
+        )
+
+        assert isinstance(result, pd.Series)
+        assert len(result) == 50
+        assert result.iloc[-1] > 0
+
+    def test_donchian_width_flat_price(self):
+        """Donchian width with flat price returns zero."""
+        from data.indicators import compute_donchian_width
+
+        high = pd.Series([100.0] * 30)
+        low = pd.Series([100.0] * 30)
+
+        result = compute_donchian_width(high, low, period=20)
+        assert result.iloc[-1] < 1e-6
+
+    def test_donchian_width_insufficient_data(self):
+        """Donchian width with less than period bars returns NaN."""
+        from data.indicators import compute_donchian_width
+
+        high = pd.Series([102, 103, 104])
+        low = pd.Series([98, 99, 100])
+
+        result = compute_donchian_width(high, low, period=20)
+        assert pd.isna(result.iloc[-1])

@@ -459,6 +459,171 @@ def compute_vwap(
     return cum_tp_volume / cum_volume.where(cum_volume > EPSILON, np.nan)
 
 
+def compute_atr(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    period: int = 14,
+) -> pd.Series:
+    """
+    Compute Average True Range.
+
+    True Range = max of:
+    - high - low
+    - |high - previous_close|
+    - |low - previous_close|
+
+    ATR = Wilder's smoothed average of True Range
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        period: Smoothing period (default: 14)
+
+    Returns:
+        ATR series
+    """
+    prev_close = close.shift(1)
+
+    # True Range components
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+
+    # True Range = max of three components
+    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+    # Wilder's smoothing: alpha = 1/period
+    return true_range.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+
+
+def compute_atr_normalized(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    period: int = 14,
+) -> pd.Series:
+    """
+    Compute normalized ATR as percentage of close price.
+
+    ATR Normalized = (ATR / close) * 100
+
+    Useful for comparing volatility across different price levels or assets.
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        period: ATR period (default: 14)
+
+    Returns:
+        ATR normalized as percentage series
+    """
+    atr_value = compute_atr(high, low, close, period)
+    return (atr_value / close.where(close.abs() > EPSILON, np.nan)) * 100
+
+
+def compute_bb_width(
+    close: pd.Series,
+    period: int = 20,
+    num_std: float = 2.0,
+) -> pd.Series:
+    """
+    Compute Bollinger Band Width as percentage.
+
+    Width = (upper_band - lower_band) / middle_band * 100
+
+    Measures volatility expansion (high width) vs contraction (low width).
+    Squeeze occurs when width is historically low.
+
+    Args:
+        close: Close price series
+        period: BB period (default: 20)
+        num_std: Standard deviation multiplier (default: 2.0)
+
+    Returns:
+        BB width as percentage series
+    """
+    middle = close.rolling(window=period).mean()
+    std = close.rolling(window=period).std()
+
+    upper = middle + (std * num_std)
+    lower = middle - (std * num_std)
+
+    # Width as percentage (avoid division by zero)
+    return ((upper - lower) / middle.where(middle.abs() > EPSILON, np.nan)) * 100
+
+
+def compute_keltner_channels(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    ema_period: int = 20,
+    atr_period: int = 10,
+    atr_multiplier: float = 2.0,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Compute Keltner Channels (upper, middle, lower).
+
+    Middle = EMA of close
+    Upper = Middle + (ATR * multiplier)
+    Lower = Middle - (ATR * multiplier)
+
+    Similar to Bollinger Bands but uses ATR instead of standard deviation.
+    More responsive to volatility changes.
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        ema_period: EMA period for middle line (default: 20)
+        atr_period: ATR period (default: 10)
+        atr_multiplier: ATR multiplier (default: 2.0)
+
+    Returns:
+        Tuple of (upper_channel, middle_channel, lower_channel)
+    """
+    # Middle band: EMA of close
+    middle = close.ewm(span=ema_period, adjust=False).mean()
+
+    # ATR
+    atr_series = compute_atr(high, low, close, period=atr_period)
+
+    # Upper and lower bands
+    upper = middle + (atr_series * atr_multiplier)
+    lower = middle - (atr_series * atr_multiplier)
+
+    return upper, middle, lower
+
+
+def compute_donchian_width(
+    high: pd.Series,
+    low: pd.Series,
+    period: int = 20,
+) -> pd.Series:
+    """
+    Compute Donchian Channel Width as percentage.
+
+    Width = (upper_channel - lower_channel) / middle_channel * 100
+
+    Similar to BB Width but based on high/low extremes rather than
+    standard deviation. Useful for breakout detection.
+
+    Args:
+        high: High price series
+        low: Low price series
+        period: Donchian period (default: 20)
+
+    Returns:
+        Donchian width as percentage series
+    """
+    upper, middle, lower = compute_donchian_channels(high, low, period=period)
+
+    # Width as percentage (avoid division by zero)
+    return ((upper - lower) / middle.where(middle.abs() > EPSILON, np.nan)) * 100
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
