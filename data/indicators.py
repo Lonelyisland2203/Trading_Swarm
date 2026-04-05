@@ -171,6 +171,65 @@ def compute_donchian_channels_long(
     return compute_donchian_channels(high, low, period=period)
 
 
+def compute_ichimoku_cloud(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    tenkan_period: int = 9,
+    kijun_period: int = 26,
+    senkou_span_b_period: int = 52,
+) -> dict[str, pd.Series]:
+    """
+    Compute Ichimoku Cloud components.
+
+    Components:
+    - Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+    - Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+    - Senkou Span A (Leading Span A): (Tenkan + Kijun) / 2, shifted forward 26
+    - Senkou Span B (Leading Span B): (52-period high + low) / 2, shifted forward 26
+    - Chikou Span (Lagging Span): Close shifted backward 26
+
+    Args:
+        high: High price series
+        low: Low price series
+        close: Close price series
+        tenkan_period: Conversion line period (default: 9)
+        kijun_period: Base line period (default: 26)
+        senkou_span_b_period: Leading Span B period (default: 52)
+
+    Returns:
+        Dict with keys: tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span
+    """
+    # Tenkan-sen (Conversion Line)
+    tenkan_high = high.rolling(window=tenkan_period).max()
+    tenkan_low = low.rolling(window=tenkan_period).min()
+    tenkan_sen = (tenkan_high + tenkan_low) / 2.0
+
+    # Kijun-sen (Base Line)
+    kijun_high = high.rolling(window=kijun_period).max()
+    kijun_low = low.rolling(window=kijun_period).min()
+    kijun_sen = (kijun_high + kijun_low) / 2.0
+
+    # Senkou Span A (Leading Span A) - shifted forward 26 periods
+    senkou_span_a = ((tenkan_sen + kijun_sen) / 2.0).shift(kijun_period)
+
+    # Senkou Span B (Leading Span B) - shifted forward 26 periods
+    senkou_high = high.rolling(window=senkou_span_b_period).max()
+    senkou_low = low.rolling(window=senkou_span_b_period).min()
+    senkou_span_b = ((senkou_high + senkou_low) / 2.0).shift(kijun_period)
+
+    # Chikou Span (Lagging Span) - close shifted backward 26 periods
+    chikou_span = close.shift(-kijun_period)
+
+    return {
+        'tenkan_sen': tenkan_sen,
+        'kijun_sen': kijun_sen,
+        'senkou_span_a': senkou_span_a,
+        'senkou_span_b': senkou_span_b,
+        'chikou_span': chikou_span,
+    }
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.

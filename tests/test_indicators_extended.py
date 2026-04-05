@@ -102,3 +102,63 @@ class TestDonchianChannels:
         assert upper.iloc[9] == 100.0
         assert middle.iloc[9] == 100.0
         assert lower.iloc[9] == 100.0
+
+
+class TestIchimokuCloud:
+    """Tests for Ichimoku Cloud indicator."""
+
+    def test_ichimoku_cloud_standard(self, sample_ohlcv):
+        """Ichimoku cloud with standard parameters on 50 bars."""
+        from data.indicators import compute_ichimoku_cloud
+
+        components = compute_ichimoku_cloud(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"]
+        )
+
+        # Check return type
+        assert isinstance(components, dict)
+
+        # Check all components present
+        expected_keys = {
+            'tenkan_sen', 'kijun_sen', 'senkou_span_a',
+            'senkou_span_b', 'chikou_span'
+        }
+        assert set(components.keys()) == expected_keys
+
+        # Check all are Series
+        for key, series in components.items():
+            assert isinstance(series, pd.Series)
+            assert len(series) == 50
+
+        # Tenkan-sen and Kijun-sen should not be NaN at end (sufficient data)
+        assert not pd.isna(components['tenkan_sen'].iloc[-1])
+        assert not pd.isna(components['kijun_sen'].iloc[-1])
+
+    def test_ichimoku_cloud_insufficient_data(self):
+        """Ichimoku with minimal data returns NaN."""
+        from data.indicators import compute_ichimoku_cloud
+
+        high = pd.Series([100, 101, 102])
+        low = pd.Series([98, 99, 100])
+        close = pd.Series([99, 100, 101])
+
+        components = compute_ichimoku_cloud(high, low, close)
+
+        # Tenkan (9-period) should be NaN with only 3 bars
+        assert pd.isna(components['tenkan_sen'].iloc[-1])
+
+    def test_ichimoku_cloud_flat_price(self):
+        """Ichimoku with flat price returns same values for all lines."""
+        from data.indicators import compute_ichimoku_cloud
+
+        high = pd.Series([100.0] * 60)
+        low = pd.Series([100.0] * 60)
+        close = pd.Series([100.0] * 60)
+
+        components = compute_ichimoku_cloud(high, low, close)
+
+        # All lines should equal 100 (except shifted ones which may be NaN)
+        assert abs(components['tenkan_sen'].iloc[-1] - 100.0) < 1e-6
+        assert abs(components['kijun_sen'].iloc[-1] - 100.0) < 1e-6
