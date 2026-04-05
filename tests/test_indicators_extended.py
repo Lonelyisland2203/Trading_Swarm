@@ -842,19 +842,45 @@ def test_open_interest_stub():
 
 @pytest.fixture
 def fvg_pattern_df():
-    """OHLCV data with known FVG patterns."""
-    return pd.DataFrame({
-        'timestamp': [
-            1704067200000,  # 0: Low bar before bullish gap
-            1704070800000,  # 1: Bullish FVG gap candle (middle, extended high)
-            1704074400000,  # 2: Completes bullish FVG (gap: 101 to 104)
-            1704078000000,  # 3: Stays above gap, overlaps bar 1 (no new gap, no fill)
-        ],
-        'open': [100.0, 101.0, 105.0, 104.5],
-        'high': [101.0, 104.5, 106.0, 106.5],
-        'low': [99.0, 100.0, 104.0, 104.2],
-        'close': [100.5, 102.0, 105.5, 105.0],
-    })
+    """OHLCV data with known bullish and bearish FVG patterns."""
+    # Bullish FVG: candle1.high < candle3.low (gap between them)
+    # Index 10-12: bullish FVG (gap zone: 100.0 to 101.0)
+    # Index 20-22: bearish FVG (gap zone: 103.0 to 104.0)
+
+    data = []
+    for i in range(30):
+        if 10 <= i <= 12:
+            # Bullish FVG pattern
+            if i == 10:
+                bar = {'high': 100.0, 'low': 99.0}
+            elif i == 11:
+                bar = {'high': 103.0, 'low': 102.0}  # Gap candle
+            else:  # i == 12
+                bar = {'high': 105.0, 'low': 101.0}  # candle3.low > candle1.high
+        elif 20 <= i <= 22:
+            # Bearish FVG pattern
+            if i == 20:
+                bar = {'high': 105.0, 'low': 104.0}
+            elif i == 21:
+                bar = {'high': 102.0, 'low': 101.5}  # Gap candle
+            else:  # i == 22
+                bar = {'high': 103.0, 'low': 101.5}  # candle3.high < candle1.low
+        else:
+            # Default bars: must not fill either gap
+            # Bullish gap zone: [100.0, 101.0] - need low >= 101.0
+            # Bearish gap zone: [103.0, 104.0] - need high <= 103.0
+            # Use range [101.5, 102.5] which is above bullish gap and below bearish gap
+            bar = {'high': 102.5, 'low': 101.5}
+
+        data.append({
+            'timestamp': i * 60000,
+            'high': bar['high'],
+            'low': bar['low'],
+            'open': bar['low'],
+            'close': bar['high'],
+        })
+
+    return pd.DataFrame(data)
 
 
 def test_fvg_bullish_detection(fvg_pattern_df):
@@ -863,23 +889,26 @@ def test_fvg_bullish_detection(fvg_pattern_df):
 
     gaps = fair_value_gaps(fvg_pattern_df, min_gap_pct=0.1)
 
-    # Should detect bullish FVG at index 1 (candle 0 high=101.0 < candle 2 low=104.0)
-    assert len(gaps) == 1
-    gap = gaps[0]
-    assert gap['index'] == 1
-    assert gap['direction'] == 'bullish'
-    assert gap['gap_bottom'] == 101.0
-    assert gap['gap_top'] == 104.0
-    assert gap['timestamp'] == 1704070800000
-    # Gap size = (104.0 - 101.0) / 101.0 * 100 = 2.97%
-    assert abs(gap['gap_size_pct'] - 2.97) < 0.01
+    # Should detect bullish FVG at index 11 (candle 10 high=100.0 < candle 12 low=101.0)
+    # and bearish FVG at index 21 (candle 20 low=104.0 > candle 22 high=103.0)
+    assert len(gaps) == 2
+
+    # First gap should be bullish at index 11
+    bullish_gap = gaps[0]
+    assert bullish_gap['index'] == 11
+    assert bullish_gap['direction'] == 'bullish'
+    assert bullish_gap['gap_bottom'] == 100.0
+    assert bullish_gap['gap_top'] == 101.0
+    assert bullish_gap['timestamp'] == 11 * 60000
+    # Gap size = (101.0 - 100.0) / 100.0 * 100 = 1.0%
+    assert abs(bullish_gap['gap_size_pct'] - 1.0) < 0.01
 
 
 def test_fvg_min_gap_filter(fvg_pattern_df):
     """Filters tiny gaps below threshold."""
     from data.indicators import fair_value_gaps
 
-    # Set threshold to 5% - should exclude our 2.97% bullish gap
+    # Set threshold to 5% - should exclude both 1.0% gaps (bullish and bearish)
     gaps = fair_value_gaps(fvg_pattern_df, min_gap_pct=5.0)
 
     assert len(gaps) == 0
