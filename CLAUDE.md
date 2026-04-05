@@ -16,10 +16,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 **Completed:**
 - Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
-- Session 11: Fee Model Implementation (Tasks 1-10)
-  - Task 1-5: FeeModelSettings, compute_holding_periods_8h, apply_fee_model
-  - Task 6-9: Verifier integration, DPO pipeline integration, fee flip diagnostic, env vars
-  - Task 10: End-to-end integration test and validation (COMPLETE)
+- Session 11: Realistic Fee Model - COMPLETE (all 10 tasks)
+
+**Next:** Session 12 - TBD (evaluation integration or production deployment)
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -31,17 +30,21 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Nested Pydantic settings with flat env var mapping
 - Reward weights validated to sum to 1.0 via `@model_validator`
 - DatasetGenerationSettings: window_count=15, stride=100, completeness=0.95, retries=2
-- **FeeModelSettings:** Binance Futures USDT-M fee model with configurable order types
-  - Base fees: maker 0.02%, taker 0.05%, 10% BNB discount applied
-  - Funding: 0.01% per 8h period (configurable via `include_funding`)
-  - Slippage: 0.02% round-trip
-  - Methods: `round_trip_cost_pct()`, `net_return()`, `minimum_profitable_return_pct()`
-  - Order types: `entry_order_type`, `exit_order_type` (maker/taker)
-  - Validates holding_periods_8h >= 0
+
+### Fee Model Implementation (Session 11)
+- **Purpose:** Binance Futures USDT-M realistic fee model to filter unprofitable signals
+- **FeeModelSettings:** Pydantic config with env var support (FEE_MODEL_*)
+- **Defaults:** maker 0.02%, taker 0.05%, 10% BNB discount, 0.01% funding/8h, 0.02% slippage
+- **Core API:** `round_trip_cost_pct()`, `net_return()`, `minimum_profitable_return_pct()`
+- **Order types:** Configurable entry/exit (maker/taker)
+- **Holding periods:** `compute_holding_periods_8h()` converts (timeframe, bars) to funding periods
+- **Verifier integration:** `apply_fee_model()` with exact log/pct conversions
+- **DPO integration:** Fee-adjusted returns flow through reward computation
+- **Validation:** +0.10% gross signals correctly identified as unprofitable after fees
 
 ### Data Layer
 - Async caching: diskcache wrapped in `asyncio.to_thread()`
-- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time; passes `end_ts=as_of` to `fetch_ohlcv()` to anchor exchange queries historically (without this, all windows fail)
+- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time; passes `end_ts=as_of` to `fetch_ohlcv()` to anchor exchange queries historically
 - Regime classification: Realized volatility percentiles (no VIX for crypto)
 - Task sampling: Weighted by difficulty with isolated RNG
 - Historical windows: Configurable stride, >95% completeness threshold
@@ -72,7 +75,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **5-Phase CLI:** Load -> Verify -> Reward -> Pairs -> Train
 - **Phase 1:** Filters examples requiring direction in generator_signal
 - **Phase 2:** Async batch verification via MarketDataService
-- **Phase 3:** Reward computation per matched pair
+- **Phase 3:** Reward computation per matched pair (now fee-adjusted)
 - **Phase 4:** Preference pair construction, optional `--save-pairs`
 - **Phase 5:** Calls `train_dpo()`, exits 1 on failure
 - **CLI flags:** `--dataset` (required), `--output`, `--save-pairs`, `--dry-run`, `--min-delta`, `--force`
@@ -89,8 +92,6 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Timeframe-adaptive horizons (1m->60 bars, 1h->24 bars, 1d->5 bars)
 - Log returns for additivity and DPO compatibility
 - Entry at next bar open (realistic execution)
-- **Holding periods:** `compute_holding_periods_8h()` converts (timeframe, bars) to 8h funding periods
-- **Fee model:** `apply_fee_model()` with exact log/pct conversions (no linear approximations), bounds checking for extreme losses
 
 ### Reward Layer
 - Clipped linear reward bounded to [-1, 1] for stable DPO gradients
@@ -145,26 +146,26 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ### Verifier Layer
 - `verifier/constants.py` - Timeframe constants + `compute_holding_periods_8h()`
-- `verifier/outcome.py` - OutcomeData + `apply_fee_model()` (deprecated: `compute_net_return()`)
+- `verifier/outcome.py` - OutcomeData + `apply_fee_model()`
 - `verifier/config.py`, `verifier/validator.py`, `verifier/engine.py` - Core verification logic
 
 ### Evaluation Layer
 - `eval/` - config, metrics, engine
 
-### Tests (580 total)
+### Tests
 - `tests/test_config.py` - 40 tests (18 original + 22 FeeModelSettings)
 - `tests/test_indicators.py` - 19 tests
 - `tests/test_data_layer.py` - 21 tests
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
 - `tests/test_critic.py` - 22 tests
-- `tests/test_orchestrator.py` - 23 tests (5 pre-existing failures unrelated to fee model)
-- `tests/test_verifier/` - 77 tests (64 original + 8 holding_periods + 5 apply_fee_model)
+- `tests/test_orchestrator.py` - 23 tests (5 pre-existing failures)
+- `tests/test_verifier/` - 77 tests (64 original + 13 fee model)
 - `tests/test_reward/` - 63 tests
 - `tests/test_eval/` - 49 tests
 - `tests/test_training/` - 71 tests + `test_dpo_pipeline.py` (23 tests)
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
-- `tests/test_integration/test_fee_model_integration.py` - 6 tests (new: config, timeframes, exact conversions, env vars, end-to-end)
+- `tests/test_integration/test_fee_model_integration.py` - 6 tests (end-to-end fee model validation)
 
 ## Known Issues & Gotchas
 
@@ -193,5 +194,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 575 passing (580 collected, 5 pre-existing failures in test_orchestrator)
+**Total Tests:** 580 (575 passing, 5 pre-existing orchestrator failures)
 **Python Version:** 3.13.7

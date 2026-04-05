@@ -467,3 +467,91 @@ class TestVolumeIndicators:
 
         expected = (102.0 + 98.0 + 100.0) / 3.0
         assert abs(result.iloc[0] - expected) < 1e-6
+
+    def test_cmf_concrete_calculation(self):
+        """Verify CMF calculation with known values."""
+        from data.indicators import compute_cmf
+
+        # Simple scenario with manual calculation
+        high = pd.Series([105, 110, 108, 112, 115])
+        low = pd.Series([95, 100, 102, 104, 105])
+        close = pd.Series([100, 108, 103, 110, 112])
+        volume = pd.Series([1000, 1500, 1200, 1800, 1600])
+
+        result = compute_cmf(high, low, close, volume, period=3)
+
+        # Bar 2 (first valid with period=3): bars 0-2
+        # MFM[0] = ((100-95)-(105-100))/(105-95) = 0.0
+        # MFM[1] = ((108-100)-(110-108))/(110-100) = 0.6
+        # MFM[2] = ((103-102)-(108-103))/(108-102) = -0.6667
+        # CMF = sum(MFM*vol) / sum(vol)
+        # = (0*1000 + 0.6*1500 + -0.6667*1200) / (1000+1500+1200)
+        # = (0 + 900 - 800) / 3700 = 100 / 3700 = 0.027027
+        expected_cmf = 0.027027
+        assert abs(result.iloc[2] - expected_cmf) < 1e-5
+
+    def test_vwap_first_value_precision(self, sample_ohlcv):
+        """Verify VWAP first value equals typical price."""
+        from data.indicators import compute_vwap
+
+        result = compute_vwap(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            sample_ohlcv["volume"]
+        )
+
+        # Verify first value equals typical price on bar 0
+        expected_first = (
+            sample_ohlcv["high"].iloc[0] +
+            sample_ohlcv["low"].iloc[0] +
+            sample_ohlcv["close"].iloc[0]
+        ) / 3.0
+        assert abs(result.iloc[0] - expected_first) < 1e-6
+
+    def test_cmf_custom_period(self, sample_ohlcv):
+        """Test CMF with custom period."""
+        from data.indicators import compute_cmf
+
+        result = compute_cmf(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            sample_ohlcv["volume"],
+            period=10
+        )
+
+        # First 9 values should be NaN (need 10 bars)
+        assert result.iloc[:9].isna().all()
+        assert not pd.isna(result.iloc[9])
+
+    def test_mfi_custom_period(self, sample_ohlcv):
+        """Test MFI with custom period."""
+        from data.indicators import compute_mfi
+
+        result = compute_mfi(
+            sample_ohlcv["high"],
+            sample_ohlcv["low"],
+            sample_ohlcv["close"],
+            sample_ohlcv["volume"],
+            period=20
+        )
+
+        # First 19 values should be NaN (need 20 bars for rolling window)
+        assert result.iloc[:19].isna().all()
+        assert not pd.isna(result.iloc[19])
+
+    def test_cmf_extreme_values(self):
+        """Test CMF with extreme close positions."""
+        from data.indicators import compute_cmf
+
+        # All closes at high (maximum bullish) should give CMF near +1
+        high = pd.Series([110, 115, 120, 125, 130])
+        low = pd.Series([100, 105, 110, 115, 120])
+        close = pd.Series([110, 115, 120, 125, 130])  # All at high
+        volume = pd.Series([1000] * 5)
+
+        result = compute_cmf(high, low, close, volume, period=3)
+
+        # MFM when close=high is +1.0, so CMF should be +1.0
+        assert abs(result.iloc[-1] - 1.0) < 1e-6
