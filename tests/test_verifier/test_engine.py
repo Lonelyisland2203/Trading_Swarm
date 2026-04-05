@@ -1,5 +1,7 @@
 """Tests for verification engine with mocked market data."""
 
+import math
+
 import pandas as pd
 import pytest
 
@@ -227,6 +229,18 @@ class TestVerifyExample:
         # (not the flat 0.1% from the old compute_net_return)
         assert outcome.net_return is not None
         assert isinstance(outcome.net_return, float)
+
+        # Verify custom high fees are actually applied
+        # Net return should be materially lower than realized return due to fees
+        assert outcome.net_return < outcome.realized_return, \
+            "Custom fee model should reduce net return below realized return"
+
+        # The gap should be meaningful (custom fees are 0.15% + funding + slippage)
+        gross_pct = (math.exp(outcome.realized_return) - 1) * 100
+        net_pct = (math.exp(outcome.net_return) - 1) * 100
+        fee_impact_pct = gross_pct - net_pct
+        assert fee_impact_pct > 0.1, \
+            f"Expected fee impact >0.1%, got {fee_impact_pct:.3f}%"
 
     @pytest.mark.asyncio
     async def test_verify_example_uses_default_fee_model(self, sample_ohlcv, sample_example):
