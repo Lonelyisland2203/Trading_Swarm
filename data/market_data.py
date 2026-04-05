@@ -217,6 +217,7 @@ class MarketDataService:
         symbol: str,
         timeframe: str,
         lookback_bars: int,
+        end_ts: int | None = None,
     ) -> pd.DataFrame:
         """
         Fetch OHLCV data with caching.
@@ -225,13 +226,17 @@ class MarketDataService:
             symbol: Trading pair
             timeframe: Candle timeframe
             lookback_bars: Number of historical bars
+            end_ts: End timestamp in Unix ms. Defaults to now.
+                    Required for historical windows so the fetch targets
+                    the correct time period instead of always fetching recent data.
 
         Returns:
             DataFrame with columns: timestamp, open, high, low, close, volume
         """
-        # Calculate time range
+        # Calculate time range - use provided end_ts or default to now
         bar_duration_ms = self._timeframe_to_ms(timeframe)
-        end_ts = int(time.time() * 1000)
+        if end_ts is None:
+            end_ts = int(time.time() * 1000)
         start_ts = end_ts - (lookback_bars * bar_duration_ms)
 
         # Check cache first
@@ -301,8 +306,9 @@ class MarketDataService:
             ... )
             >>> # Only includes bars that closed before 10:00:00
         """
-        # Fetch data
-        df = await self.fetch_ohlcv(symbol, timeframe, lookback_bars)
+        # Fetch data anchored to as_of so the exchange query targets the
+        # correct historical period, not the current time.
+        df = await self.fetch_ohlcv(symbol, timeframe, lookback_bars, end_ts=as_of)
 
         # Calculate bar close time (when the bar becomes "known")
         bar_duration_ms = self._timeframe_to_ms(timeframe)

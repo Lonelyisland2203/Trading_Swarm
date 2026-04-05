@@ -30,7 +30,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ### Data Layer
 - Async caching: diskcache wrapped in `asyncio.to_thread()`
-- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time
+- Point-in-time safety: `get_ohlcv_as_of()` filters by bar close time; passes `end_ts=as_of` to `fetch_ohlcv()` to anchor exchange queries historically (without this, all windows fail)
 - Regime classification: Realized volatility percentiles (no VIX for crypto)
 - Task sampling: Weighted by difficulty with isolated RNG
 - Historical windows: Configurable stride, >95% completeness threshold

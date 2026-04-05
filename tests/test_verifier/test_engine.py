@@ -19,6 +19,7 @@ class MockMarketData:
         symbol: str,
         timeframe: str,
         lookback_bars: int,
+        end_ts: int | None = None,
     ) -> pd.DataFrame:
         """Return mock data."""
         # Return last N bars
