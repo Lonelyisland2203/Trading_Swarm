@@ -208,3 +208,62 @@ class TestIchimokuCloud:
         # Kijun (22-period) should have first 21 NaN, then valid at index 21
         assert components['kijun_sen'].iloc[:21].isna().all()
         assert not pd.isna(components['kijun_sen'].iloc[21])
+
+
+@pytest.fixture
+def trending_series():
+    """Trending price series for KAMA testing."""
+    # Strong uptrend: high efficiency ratio
+    return pd.Series([100 + i for i in range(30)])
+
+
+@pytest.fixture
+def choppy_series():
+    """Choppy price series for KAMA testing."""
+    # Alternating up/down: low efficiency ratio
+    return pd.Series([100 + (i % 2) * 2 for i in range(30)])
+
+
+class TestKAMA:
+    """Tests for Kaufman Adaptive Moving Average."""
+
+    def test_kama_trending_market(self, trending_series):
+        """KAMA in trending market stays responsive (close to price)."""
+        from data.indicators import compute_kama
+
+        result = compute_kama(trending_series, period=10)
+
+        # Check return type
+        assert isinstance(result, pd.Series)
+        assert len(result) == 30
+
+        # Last value should not be NaN (sufficient data)
+        assert not pd.isna(result.iloc[-1])
+
+        # In strong trend, KAMA should be close to current price
+        # (efficiency ratio high, smoothing constant closer to fast)
+        assert abs(result.iloc[-1] - trending_series.iloc[-1]) < 5.0
+
+    def test_kama_choppy_market(self, choppy_series):
+        """KAMA in choppy market smooths aggressively."""
+        from data.indicators import compute_kama
+
+        result = compute_kama(choppy_series, period=10)
+
+        # Last value should not be NaN
+        assert not pd.isna(result.iloc[-1])
+
+        # In choppy market, KAMA should lag behind current price
+        # (efficiency ratio low, smoothing constant closer to slow)
+        # Current price alternates 100/102, KAMA should be between them
+        assert 99.0 < result.iloc[-1] < 103.0
+
+    def test_kama_warmup_period(self):
+        """KAMA with insufficient data returns NaN."""
+        from data.indicators import compute_kama
+
+        short_series = pd.Series([100, 101, 102])
+        result = compute_kama(short_series, period=10)
+
+        # Not enough data for period=10
+        assert pd.isna(result.iloc[-1])

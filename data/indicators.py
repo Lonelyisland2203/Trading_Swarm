@@ -230,6 +230,67 @@ def compute_ichimoku_cloud(
     }
 
 
+def compute_kama(
+    close: pd.Series,
+    period: int = 10,
+    fast_ema: int = 2,
+    slow_ema: int = 30,
+) -> pd.Series:
+    """
+    Compute Kaufman Adaptive Moving Average.
+
+    Adjusts smoothing based on market efficiency ratio:
+    - High efficiency (trending) → fast smoothing (responsive)
+    - Low efficiency (choppy) → slow smoothing (filters noise)
+
+    Efficiency Ratio = |price_change| / sum(|bar_changes|)
+    Smoothing Constant = [ER * (fast_sc - slow_sc) + slow_sc]^2
+    KAMA = prev_KAMA + SC * (price - prev_KAMA)
+
+    Args:
+        close: Close price series
+        period: Efficiency ratio period (default: 10)
+        fast_ema: Fast EMA constant (default: 2)
+        slow_ema: Slow EMA constant (default: 30)
+
+    Returns:
+        KAMA series
+    """
+    # Convert EMA periods to smoothing constants
+    fast_sc = 2.0 / (fast_ema + 1)
+    slow_sc = 2.0 / (slow_ema + 1)
+
+    # Calculate price changes
+    price_change = (close - close.shift(period)).abs()
+
+    # Calculate sum of absolute bar-to-bar changes
+    volatility = close.diff().abs().rolling(window=period).sum()
+
+    # Efficiency Ratio (avoid division by zero)
+    er = price_change / volatility.where(volatility > EPSILON, np.nan)
+
+    # Smoothing Constant
+    sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
+
+    # Calculate KAMA iteratively
+    kama_values = pd.Series(index=close.index, dtype=float)
+
+    # First valid value: use SMA
+    first_valid_idx = period
+    if first_valid_idx < len(close):
+        kama_values.iloc[first_valid_idx] = close.iloc[:first_valid_idx + 1].mean()
+
+        # Iterate from first_valid + 1 to end
+        for i in range(first_valid_idx + 1, len(close)):
+            if pd.notna(sc.iloc[i]) and pd.notna(kama_values.iloc[i - 1]):
+                kama_values.iloc[i] = (
+                    kama_values.iloc[i - 1] +
+                    sc.iloc[i] * (close.iloc[i] - kama_values.iloc[i - 1])
+                )
+
+    return kama_values
+
+
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate OHLCV data integrity and fix common issues.
