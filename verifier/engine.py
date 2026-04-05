@@ -10,15 +10,16 @@ from typing import Protocol
 import pandas as pd
 from loguru import logger
 
+from config.fee_model import FeeModelSettings
 from data.market_data import MarketDataService
 from swarm.training_capture import TrainingExample
 from .config import BacktestConfig
-from .constants import get_horizon_bars
+from .constants import get_horizon_bars, compute_holding_periods_8h
 from .outcome import (
     VerifiedOutcome,
     compute_log_return,
     compute_mae,
-    compute_net_return,
+    apply_fee_model,
     determine_direction,
 )
 from .validator import validate_forward_data_completeness, validate_no_lookahead
@@ -43,24 +44,31 @@ async def verify_example(
     example: TrainingExample,
     market_data: MarketDataProvider,
     config: BacktestConfig = BacktestConfig(),
+    fee_model: FeeModelSettings = FeeModelSettings(),
 ) -> VerifiedOutcome | None:
     """
     Verify a single training example - compute realized outcome.
-    
+
     Point-in-time safety:
     1. Signal was generated at example.timestamp_ms (bar close)
     2. Entry is at next bar open (or close if config.entry_on="close" for testing)
     3. Forward data starts AFTER entry
     4. Outcome measured over timeframe-adaptive horizon
-    
+
+    Fees are applied realistically based on:
+    - Maker/taker fees with optional BNB discount
+    - Funding costs proportional to holding period
+    - Slippage estimates
+
     Args:
         example: Training example to verify
         market_data: Market data provider
         config: Backtest configuration
-    
+        fee_model: Fee model for realistic transaction costs (default: FeeModelSettings)
+
     Returns:
         VerifiedOutcome if data available, None if insufficient data
-        
+
     Example:
         async with MarketDataService() as market_data:
             outcome = await verify_example(example, market_data)
@@ -159,7 +167,7 @@ async def verify_example(
         
         # Compute log return
         log_return = compute_log_return(entry_price, exit_price)
-        
+
         # Compute MAE
         predicted_direction = example.generator_signal.get("direction", "UNKNOWN")
         if predicted_direction in ("HIGHER", "LOWER"):
@@ -170,12 +178,15 @@ async def verify_example(
                 direction=predicted_direction,
             )
             mae = 0.0
-        
-        # Compute net return after transaction costs
-        net_return = compute_net_return(
+
+        # Compute holding period for fee calculation
+        holding_periods_8h = compute_holding_periods_8h(timeframe, horizon_bars)
+
+        # Apply realistic fees
+        net_return = apply_fee_model(
             log_return,
-            txn_cost_pct=config.txn_cost_pct,
-            num_trades=2,
+            fee_model,
+            holding_periods_8h,
         )
         
         # Determine actual direction
@@ -216,23 +227,25 @@ async def verify_batch(
     examples: list[TrainingExample],
     market_data: MarketDataProvider,
     config: BacktestConfig = BacktestConfig(),
+    fee_model: FeeModelSettings = FeeModelSettings(),
     batch_size: int = 100,
 ) -> list[VerifiedOutcome]:
     """
     Verify batch of training examples with efficient grouping.
-    
+
     Groups examples by (symbol, timeframe) to reduce redundant data fetches.
     Processes in batches to control memory usage.
-    
+
     Args:
         examples: List of training examples to verify
         market_data: Market data provider
         config: Backtest configuration
+        fee_model: Fee model for realistic transaction costs (default: FeeModelSettings)
         batch_size: Maximum examples per batch (default 100)
-    
+
     Returns:
         List of verified outcomes (excludes examples with insufficient data)
-        
+
     Example:
         examples = load_training_examples(Path("outputs/training"))
         outcomes = await verify_batch(examples, market_data)
@@ -268,10 +281,10 @@ async def verify_batch(
         # Process in batches to control memory
         for i in range(0, len(group_list), batch_size):
             batch = group_list[i : i + batch_size]
-            
+
             # Verify each example in batch
             for example in batch:
-                outcome = await verify_example(example, market_data, config)
+                outcome = await verify_example(example, market_data, config, fee_model)
                 if outcome:
                     results.append(outcome)
                 else:

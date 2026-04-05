@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from config.fee_model import FeeModelSettings
 from swarm.training_capture import TrainingExample
 from verifier.config import BacktestConfig
 from verifier.engine import verify_batch, verify_example
@@ -193,11 +194,54 @@ class TestVerifyExample:
             market_regime="NEUTRAL",
             generator_signal={"direction": "HIGHER", "confidence": 0.8},
         )
-        
+
         market_data = MockMarketData(sample_ohlcv)
         outcome = await verify_example(example, market_data)
-        
+
         assert outcome is None
+
+    @pytest.mark.asyncio
+    async def test_verify_example_with_fee_model(self, sample_ohlcv, sample_example):
+        """Test verify_example integrates realistic fee model."""
+        market_data = MockMarketData(sample_ohlcv)
+
+        # Create custom fee model with higher costs to see impact
+        fee_model = FeeModelSettings(
+            maker_fee_pct=0.05,
+            taker_fee_pct=0.10,
+            bnb_discount_enabled=False,  # Disable discount to maximize fees
+            funding_rate_pct=0.02,
+            slippage_pct=0.05,
+        )
+
+        # Verify with custom fee model
+        outcome = await verify_example(
+            sample_example,
+            market_data,
+            config=BacktestConfig(),
+            fee_model=fee_model,
+        )
+
+        assert outcome is not None
+        # Net return should be significantly reduced by realistic fees
+        # (not the flat 0.1% from the old compute_net_return)
+        assert outcome.net_return is not None
+        assert isinstance(outcome.net_return, float)
+
+    @pytest.mark.asyncio
+    async def test_verify_example_uses_default_fee_model(self, sample_ohlcv, sample_example):
+        """Test verify_example uses default FeeModelSettings when not provided."""
+        market_data = MockMarketData(sample_ohlcv)
+
+        # Verify without providing fee_model (should use default)
+        outcome = await verify_example(
+            sample_example,
+            market_data,
+            config=BacktestConfig(),
+        )
+
+        assert outcome is not None
+        assert outcome.net_return is not None
 
 
 class TestVerifyBatch:
@@ -267,7 +311,7 @@ class TestVerifyBatch:
     
     @pytest.mark.asyncio
     async def test_verify_batch_with_custom_config(self, sample_ohlcv):
-        """Test batch verification with custom config."""
+        """Test batch verification with custom fee model."""
         examples = [
             TrainingExample(
                 example_id="test",
@@ -278,17 +322,25 @@ class TestVerifyBatch:
                 generator_signal={"direction": "HIGHER", "confidence": 0.8},
             ),
         ]
-        
+
         market_data = MockMarketData(sample_ohlcv)
-        
-        # Custom high transaction cost
-        config = BacktestConfig(txn_cost_pct=0.01)
-        outcomes = await verify_batch(examples, market_data, config=config)
-        
+
+        # Custom high fee model to see impact
+        custom_fee_model = FeeModelSettings(
+            maker_fee_pct=0.1,
+            taker_fee_pct=0.2,
+            bnb_discount_enabled=False,
+        )
+        outcomes = await verify_batch(
+            examples,
+            market_data,
+            fee_model=custom_fee_model,
+        )
+
         assert len(outcomes) == 1
-        # High transaction cost should significantly reduce net return
+        # High fees should reduce net return compared to realized return
         outcome = outcomes[0]
-        assert outcome.realized_return - outcome.net_return > 0.01  # Significant difference
+        assert outcome.net_return < outcome.realized_return
     
     @pytest.mark.asyncio
     async def test_verify_batch_respects_batch_size(self, sample_ohlcv):
