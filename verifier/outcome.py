@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from config.fee_model import FeeModelSettings
+
 
 @dataclass(slots=True, frozen=True)
 class VerifiedOutcome:
@@ -69,25 +71,72 @@ def compute_log_return(entry_price: float, exit_price: float) -> float:
     return math.log(exit_price / entry_price)
 
 
+def apply_fee_model(
+    gross_log_return: float,
+    fee_model: FeeModelSettings,
+    holding_periods_8h: float,
+) -> float:
+    """
+    Apply realistic fee model to gross return.
+
+    Uses EXACT conversions (no linear approximations):
+    - pct = (exp(log_return) - 1) * 100
+    - log_return = ln(1 + net_pct / 100)
+
+    Args:
+        gross_log_return: Gross log return before fees
+        fee_model: Fee model configuration
+        holding_periods_8h: Holding period for funding calculation
+
+    Returns:
+        Net log return after all fees
+
+    Examples:
+        >>> fee_model = FeeModelSettings()
+        >>> gross_log = math.log(1 + 0.15 / 100)  # +0.15%
+        >>> net_log = apply_fee_model(gross_log, fee_model, 0)
+        >>> net_pct = (math.exp(net_log) - 1) * 100
+        >>> abs(net_pct - 0.067) < 1e-9  # 0.15 - 0.083 = 0.067
+        True
+    """
+    # Convert log → percentage (EXACT)
+    gross_pct = (math.exp(gross_log_return) - 1) * 100
+
+    # Subtract fees
+    net_pct = fee_model.net_return(gross_pct, holding_periods_8h)
+
+    # Convert percentage → log (EXACT)
+    net_log_return = math.log(1 + net_pct / 100)
+
+    return net_log_return
+
+
 def compute_net_return(
     log_return: float,
     txn_cost_pct: float = 0.001,  # 0.1% default
     num_trades: int = 2,          # Entry + exit
 ) -> float:
     """
-    Compute net return after transaction costs (still log scale).
-    
-    Transaction costs reduce return by approximately cost * num_trades
-    for small costs. We use exact log arithmetic for precision.
-    
+    DEPRECATED: Use apply_fee_model() for realistic fees.
+
+    Compute net return after flat transaction cost.
+
+    This function uses a flat 0.1% transaction cost and does not account for:
+    - Maker/taker fee differences
+    - Funding costs
+    - BNB discounts
+    - Realistic slippage
+
+    For training and backtesting, use apply_fee_model() instead.
+
     Args:
         log_return: Gross log return (before costs)
         txn_cost_pct: Transaction cost per trade (e.g., 0.001 = 0.1%)
         num_trades: Number of trades (default 2 for entry + exit)
-    
+
     Returns:
         Net log return after transaction costs
-        
+
     Example:
         >>> log_ret = compute_log_return(100.0, 105.0)  # ~0.0488
         >>> compute_net_return(log_ret, txn_cost_pct=0.001, num_trades=2)

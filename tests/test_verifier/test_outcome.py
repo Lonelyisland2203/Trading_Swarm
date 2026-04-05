@@ -5,8 +5,10 @@ import math
 import pandas as pd
 import pytest
 
+from config.fee_model import FeeModelSettings
 from verifier.outcome import (
     VerifiedOutcome,
+    apply_fee_model,
     compute_log_return,
     compute_mae,
     compute_net_return,
@@ -263,9 +265,80 @@ class TestDetermineDirection:
         assert determine_direction(-0.006, threshold=0.005) == "LOWER"
 
 
+class TestApplyFeeModel:
+    """Test apply_fee_model with exact log conversions."""
+
+    def test_apply_fee_model_positive_return(self):
+        """Test apply_fee_model with profitable trade."""
+        fee_model = FeeModelSettings()  # Default settings
+
+        # Gross +0.15% as log return
+        gross_log = math.log(1 + 0.15 / 100)
+
+        # Apply fees (0.083% base cost with 0 holding)
+        net_log = apply_fee_model(gross_log, fee_model, holding_periods_8h=0)
+
+        # Convert back to percentage to verify
+        net_pct = (math.exp(net_log) - 1) * 100
+
+        # Should be: 0.15% - 0.083% = 0.067%
+        assert abs(net_pct - 0.067) < 1e-9
+
+    def test_apply_fee_model_negative_return(self):
+        """Test apply_fee_model with losing trade."""
+        fee_model = FeeModelSettings()
+
+        # Gross -0.10% as log return
+        gross_log = math.log(1 + (-0.10) / 100)
+
+        net_log = apply_fee_model(gross_log, fee_model, holding_periods_8h=0)
+        net_pct = (math.exp(net_log) - 1) * 100
+
+        # Should be: -0.10% - 0.083% = -0.183%
+        assert abs(net_pct - (-0.183)) < 1e-9
+
+    def test_apply_fee_model_with_funding(self):
+        """Test apply_fee_model with funding costs included."""
+        fee_model = FeeModelSettings()
+
+        # Gross +0.15% as log return
+        gross_log = math.log(1 + 0.15 / 100)
+
+        # 3 funding periods: base 0.083% + funding 0.03% = 0.113%
+        net_log = apply_fee_model(gross_log, fee_model, holding_periods_8h=3)
+        net_pct = (math.exp(net_log) - 1) * 100
+
+        # Should be: 0.15% - 0.113% = 0.037%
+        assert abs(net_pct - 0.037) < 1e-9
+
+    def test_apply_fee_model_exact_conversion(self):
+        """Test that apply_fee_model uses exact log conversions, not linear approximation."""
+        fee_model = FeeModelSettings()
+
+        # Large return where linear approximation would differ
+        gross_pct = 5.0  # +5%
+        gross_log = math.log(1 + gross_pct / 100)
+
+        net_log = apply_fee_model(gross_log, fee_model, holding_periods_8h=0)
+        net_pct = (math.exp(net_log) - 1) * 100
+
+        # Exact: 5.0 - 0.083 = 4.917%
+        expected_exact = 4.917
+
+        # Linear approximation would be: gross_log - 0.00083 (wrong!)
+        linear_approx_log = gross_log - 0.00083
+        linear_approx_pct = (math.exp(linear_approx_log) - 1) * 100
+
+        # Verify we match exact calculation
+        assert abs(net_pct - expected_exact) < 1e-9
+
+        # Verify we DON'T match linear approximation (proves we're using exact)
+        assert abs(net_pct - linear_approx_pct) > 1e-6
+
+
 class TestVerifiedOutcome:
     """Test VerifiedOutcome dataclass."""
-    
+
     def test_create_outcome(self):
         """Test creating a verified outcome."""
         outcome = VerifiedOutcome(
