@@ -26,6 +26,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import math
 import sys
 import time
 from collections import Counter
@@ -34,9 +35,11 @@ from pathlib import Path
 
 from loguru import logger
 
+from config.fee_model import FeeModelSettings
 from swarm.training_capture import TrainingExample, load_examples_from_jsonl
 from training.dpo_export import PreferencePair, construct_preference_pairs, export_to_jsonl
 from training.reward_engine import ComputedReward, compute_reward
+from verifier.constants import compute_holding_periods_8h, get_horizon_bars
 from verifier.engine import verify_batch
 from verifier.outcome import VerifiedOutcome
 
@@ -122,6 +125,138 @@ def phase2_verify(
 
 
 # --------------------------------------------------------------------------- #
+# Fee flip diagnostic
+# --------------------------------------------------------------------------- #
+
+FEE_FLIP_WARNING_THRESHOLD = 0.15  # 15% flip rate triggers warning
+
+
+def compute_fee_flip_diagnostic(
+    examples_and_outcomes: list[tuple[TrainingExample, VerifiedOutcome]],
+    fee_model: FeeModelSettings,
+) -> None:
+    """
+    Print diagnostic showing examples that flip from positive to negative
+    under realistic fees, grouped by timeframe.
+
+    Args:
+        examples_and_outcomes: List of (example, outcome) tuples
+        fee_model: Fee model to use for realistic cost calculation
+    """
+    if not examples_and_outcomes:
+        return
+
+    # Group by timeframe
+    by_timeframe: dict[str, list[tuple[TrainingExample, VerifiedOutcome]]] = {}
+    for example, outcome in examples_and_outcomes:
+        tf = example.timeframe
+        if tf not in by_timeframe:
+            by_timeframe[tf] = []
+        by_timeframe[tf].append((example, outcome))
+
+    # Compute flips per timeframe
+    flip_stats: dict[str, dict] = {}
+    for tf, pairs in by_timeframe.items():
+        total = len(pairs)
+        flipped = 0
+        old_net_sum = 0.0
+        new_net_sum = 0.0
+
+        horizon_bars = get_horizon_bars(tf)
+        holding_periods = compute_holding_periods_8h(tf, horizon_bars)
+
+        for example, outcome in pairs:
+            # Convert log return to percentage
+            gross_pct = (math.exp(outcome.realized_return) - 1) * 100
+
+            # Old: flat 0.1% cost (deprecated model)
+            old_net_pct = gross_pct - 0.1
+
+            # New: realistic fees
+            new_net_pct = fee_model.net_return(gross_pct, holding_periods)
+
+            old_net_sum += old_net_pct
+            new_net_sum += new_net_pct
+
+            # Check for flip: was positive under old model, negative under new
+            if old_net_pct > 0 and new_net_pct < 0:
+                flipped += 1
+
+        flip_stats[tf] = {
+            "total": total,
+            "flipped": flipped,
+            "flip_rate": flipped / total if total > 0 else 0,
+            "avg_old_net": old_net_sum / total if total > 0 else 0,
+            "avg_new_net": new_net_sum / total if total > 0 else 0,
+        }
+
+    # Print table
+    print()
+    print("=== FEE FLIP DIAGNOSTIC ===")
+    print(
+        "Examples that were profitable under flat 0.1% fees but are unprofitable "
+        "with realistic Binance Futures fees:"
+    )
+    print()
+    print(
+        "Timeframe | Total Examples | Flipped to Negative | Flip Rate | "
+        "Avg Old Net | Avg New Net"
+    )
+    print(
+        "----------|----------------|---------------------|-----------|"
+        "-------------|-------------"
+    )
+
+    total_examples = 0
+    total_flipped = 0
+
+    for tf in sorted(flip_stats.keys()):
+        stats = flip_stats[tf]
+        print(
+            f"{tf:>9} | {stats['total']:>14} | {stats['flipped']:>19} | "
+            f"{stats['flip_rate']:>8.1%} | {stats['avg_old_net']:>+10.2f}% | "
+            f"{stats['avg_new_net']:>+10.2f}%"
+        )
+        total_examples += stats["total"]
+        total_flipped += stats["flipped"]
+
+    print(
+        "----------|----------------|---------------------|-----------|"
+        "-------------|-------------"
+    )
+    overall_flip_rate = total_flipped / total_examples if total_examples > 0 else 0
+    print(
+        f"{'TOTAL':>9} | {total_examples:>14} | {total_flipped:>19} | "
+        f"{overall_flip_rate:>8.1%} |             |"
+    )
+    print()
+
+    # 1d funding breakdown
+    if "1d" in flip_stats:
+        horizon_1d = get_horizon_bars("1d")
+        periods_1d = compute_holding_periods_8h("1d", horizon_1d)
+        funding_1d = fee_model.funding_rate_pct * periods_1d
+        print(
+            f"1d funding cost alone: {funding_1d:.2f}% "
+            f"({periods_1d:.0f} periods × {fee_model.funding_rate_pct:.2f}%)"
+        )
+        print()
+
+    # Warnings
+    for tf, stats in flip_stats.items():
+        if stats["flip_rate"] > FEE_FLIP_WARNING_THRESHOLD:
+            print(
+                f"WARNING: {tf} timeframe has {stats['flip_rate']:.1%} flip rate - "
+                "signals may not clear fee hurdle."
+            )
+            print(
+                "Consider focusing training on longer timeframes or increasing "
+                "signal selectivity."
+            )
+            print()
+
+
+# --------------------------------------------------------------------------- #
 # Phase 3 – Reward
 # --------------------------------------------------------------------------- #
 
@@ -146,6 +281,11 @@ def phase3_reward(
             mean_reward=f"{mean_r:.3f}",
             pct_positive=f"{pct_pos:.1%}",
         )
+
+    # Phase 3 diagnostic
+    examples_and_outcomes = [(ex, outcome) for ex, outcome, _ in result]
+    compute_fee_flip_diagnostic(examples_and_outcomes, fee_model=FeeModelSettings())
+
     return result
 
 

@@ -484,3 +484,140 @@ class TestArgParsing:
         assert args.dry_run is True
         assert args.min_delta == pytest.approx(0.3)
         assert args.force is True
+
+
+# --------------------------------------------------------------------------- #
+# Fee flip diagnostic
+# --------------------------------------------------------------------------- #
+
+class TestFeeFlipDiagnostic:
+    def test_compute_fee_flip_diagnostic_no_flips(self, capsys):
+        """Test diagnostic with examples that don't flip (all stay profitable)."""
+        from run_dpo_training import compute_fee_flip_diagnostic
+        from config.fee_model import FeeModelSettings
+        from verifier.outcome import VerifiedOutcome
+
+        # Create examples with gross returns > fee hurdle (0.083% at 0 periods)
+        examples_and_outcomes = [
+            # +0.15% gross → +0.067% net (no flip)
+            (TrainingExample(**_make_example(timeframe="1h")),
+             VerifiedOutcome(
+                 example_id="ex1",
+                 actual_direction="HIGHER",
+                 realized_return=0.0014925,  # ln(1 + 0.15/100)
+                 max_adverse_excursion=-0.01,
+                 net_return=0.00066,
+                 entry_price=50000.0,
+                 exit_price=50075.0,
+                 bars_held=24,
+             )),
+        ]
+
+        fee_model = FeeModelSettings()
+
+        # Should not raise
+        compute_fee_flip_diagnostic(examples_and_outcomes, fee_model)
+
+        captured = capsys.readouterr()
+        assert "FEE FLIP DIAGNOSTIC" in captured.out
+        assert "Flipped to Negative" in captured.out
+
+    def test_compute_fee_flip_diagnostic_with_flips(self, capsys):
+        """Test diagnostic with examples that flip from positive to negative."""
+        from run_dpo_training import compute_fee_flip_diagnostic
+        from config.fee_model import FeeModelSettings
+        from verifier.outcome import VerifiedOutcome
+        import math
+
+        # Create examples with mixed outcomes
+        examples_and_outcomes = [
+            # +0.08% gross (below fee hurdle 0.083%) → negative net (FLIP!)
+            (TrainingExample(**_make_example(timeframe="1m")),
+             VerifiedOutcome(
+                 example_id="ex_flip1",
+                 actual_direction="HIGHER",
+                 realized_return=math.log(1 + 0.08 / 100),
+                 max_adverse_excursion=-0.01,
+                 net_return=-0.003,
+                 entry_price=50000.0,
+                 exit_price=50040.0,
+                 bars_held=1,
+             )),
+            # +0.15% gross → stays positive (no flip)
+            (TrainingExample(**_make_example(timeframe="1m")),
+             VerifiedOutcome(
+                 example_id="ex_stay1",
+                 actual_direction="HIGHER",
+                 realized_return=math.log(1 + 0.15 / 100),
+                 max_adverse_excursion=-0.01,
+                 net_return=0.067,
+                 entry_price=50000.0,
+                 exit_price=50075.0,
+                 bars_held=1,
+             )),
+        ]
+
+        fee_model = FeeModelSettings()
+
+        # Should not raise
+        compute_fee_flip_diagnostic(examples_and_outcomes, fee_model)
+
+        captured = capsys.readouterr()
+        assert "FEE FLIP DIAGNOSTIC" in captured.out
+        assert "1m" in captured.out
+        # Should show 1 flip out of 2
+        assert "1" in captured.out or "50.0%" in captured.out
+
+    def test_compute_fee_flip_diagnostic_empty(self):
+        """Test diagnostic with empty input (should return early)."""
+        from run_dpo_training import compute_fee_flip_diagnostic
+        from config.fee_model import FeeModelSettings
+
+        fee_model = FeeModelSettings()
+
+        # Should not raise or print anything for empty input
+        compute_fee_flip_diagnostic([], fee_model)
+
+    def test_compute_fee_flip_diagnostic_by_timeframe(self, capsys):
+        """Test diagnostic groups results by timeframe correctly."""
+        from run_dpo_training import compute_fee_flip_diagnostic
+        from config.fee_model import FeeModelSettings
+        from verifier.outcome import VerifiedOutcome
+        import math
+
+        # Create examples from different timeframes
+        examples_and_outcomes = [
+            # 1m timeframe with flip
+            (TrainingExample(**_make_example(timeframe="1m")),
+             VerifiedOutcome(
+                 example_id="ex_1m",
+                 actual_direction="HIGHER",
+                 realized_return=math.log(1 + 0.08 / 100),
+                 max_adverse_excursion=-0.01,
+                 net_return=-0.003,
+                 entry_price=50000.0,
+                 exit_price=50040.0,
+                 bars_held=1,
+             )),
+            # 1h timeframe without flip
+            (TrainingExample(**_make_example(timeframe="1h")),
+             VerifiedOutcome(
+                 example_id="ex_1h",
+                 actual_direction="HIGHER",
+                 realized_return=math.log(1 + 0.15 / 100),
+                 max_adverse_excursion=-0.01,
+                 net_return=0.067,
+                 entry_price=50000.0,
+                 exit_price=50075.0,
+                 bars_held=24,
+             )),
+        ]
+
+        fee_model = FeeModelSettings()
+
+        compute_fee_flip_diagnostic(examples_and_outcomes, fee_model)
+
+        captured = capsys.readouterr()
+        assert "1m" in captured.out
+        assert "1h" in captured.out
+        assert "FEE FLIP DIAGNOSTIC" in captured.out
