@@ -888,6 +888,8 @@ Your prediction must account for these costs. Signals with expected moves smalle
             higher_tf_data: Optional dict of higher timeframe OHLCV DataFrames
                            Keys are timeframe strings (e.g., "4h", "1d")
                            Values are OHLCV DataFrames
+            fee_model: Optional FeeModelSettings for execution cost context.
+                      When None, no execution context is added to prompts.
 
         Returns:
             Rendered prompt string
