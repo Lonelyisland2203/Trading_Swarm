@@ -720,7 +720,7 @@ class TestGetMarketContext:
     async def test_get_market_context_calculates_oi_change(
         self, mock_cache, mock_exchange_class
     ):
-        """Calculates 24-hour open interest change when sufficient data available."""
+        """Calculates 24-hour open interest change correctly for different timeframes."""
         mock_exchange = AsyncMock()
         mock_exchange_class.return_value = mock_exchange
 
@@ -730,46 +730,57 @@ class TestGetMarketContext:
             'fetchOpenInterestHistory': True
         }
 
-        # Mock OHLCV cache
-        ohlcv_cache = [
-            {'timestamp': 1609459200000, 'open': 29000, 'high': 29500, 'low': 28800, 'close': 29200, 'volume': 1000}
+        # Test multiple timeframes
+        test_cases = [
+            # (timeframe, bar_duration_ms, num_bars, bars_for_24h)
+            ('1h', 3600000, 30, 24),  # 1h bars: need 24 bars for 24h
+            ('4h', 14400000, 10, 6),  # 4h bars: need 6 bars for 24h
+            ('1m', 60000, 1500, 1440),  # 1m bars: need 1440 bars for 24h
         ]
 
-        # Create OI data with 30 hourly records
-        # Index -1 (last) is most recent, index -24 is 24 hours ago
-        oi_timestamps = [1609459200000 + (i * 3600000) for i in range(30)]  # 30 hours
-        oi_values = [1000000000 + (i * 1000000) for i in range(30)]  # Increasing OI
-        oi_cache = pd.DataFrame({
-            'timestamp': pd.to_datetime(oi_timestamps, unit='ms', utc=True),
-            'open_interest_value': oi_values
-        })
+        for timeframe, bar_duration_ms, num_bars, bars_for_24h in test_cases:
+            # Mock OHLCV cache
+            ohlcv_cache = [
+                {'timestamp': 1609459200000, 'open': 29000, 'high': 29500, 'low': 28800, 'close': 29200, 'volume': 1000}
+            ]
 
-        mock_cache_instance = AsyncMock()
-        mock_cache.return_value = mock_cache_instance
-        mock_cache_instance.get.side_effect = [
-            ohlcv_cache,  # OHLCV cache hit
-            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for funding
-            None,  # funding cache miss (skip funding for this test)
-            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for OI
-            oi_cache,  # OI cache hit
-        ]
+            # Create OI data with enough bars for this timeframe
+            # Index -1 (last) is most recent, index -bars_for_24h is 24 hours ago
+            oi_timestamps = [1609459200000 + (i * bar_duration_ms) for i in range(num_bars)]
+            oi_values = [1000000000 + (i * 1000000) for i in range(num_bars)]  # Increasing OI
+            oi_cache = pd.DataFrame({
+                'timestamp': pd.to_datetime(oi_timestamps, unit='ms', utc=True),
+                'open_interest_value': oi_values
+            })
 
-        service = MarketDataService()
+            mock_cache_instance = AsyncMock()
+            mock_cache.return_value = mock_cache_instance
+            mock_cache_instance.get.side_effect = [
+                ohlcv_cache,  # OHLCV cache hit
+                {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for funding
+                None,  # funding cache miss (skip funding for this test)
+                {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for OI
+                oi_cache,  # OI cache hit
+            ]
 
-        result = await service.get_market_context(
-            symbol='BTC/USDT',
-            timeframe='1h',
-            limit=100
-        )
+            service = MarketDataService()
 
-        # Verify OI values
-        # Latest (index -1): 1000000000 + 29*1000000 = 1029000000
-        # 24h ago (iloc[-24] = index 6): 1000000000 + 6*1000000 = 1006000000
-        assert result['open_interest'] == 1029000000
-        assert result['open_interest_change_pct'] is not None
+            result = await service.get_market_context(
+                symbol='BTC/USDT',
+                timeframe=timeframe,
+                limit=100
+            )
 
-        # Calculate expected change (iloc[-24] means 24th from end, which is index 6)
-        latest_oi = 1029000000
-        oi_24h_ago = 1006000000
-        expected_change = ((latest_oi - oi_24h_ago) / oi_24h_ago) * 100
-        assert abs(result['open_interest_change_pct'] - expected_change) < 0.01
+            # Verify OI values
+            # Latest (index -1): 1000000000 + (num_bars-1)*1000000
+            # 24h ago: index from end is -bars_for_24h, which is index (num_bars - bars_for_24h)
+            latest_oi = 1000000000 + (num_bars - 1) * 1000000
+            oi_24h_ago = 1000000000 + (num_bars - bars_for_24h) * 1000000
+
+            assert result['open_interest'] == latest_oi, f"Failed for {timeframe}"
+            assert result['open_interest_change_pct'] is not None, f"Failed for {timeframe}"
+
+            # Calculate expected change
+            expected_change = ((latest_oi - oi_24h_ago) / oi_24h_ago) * 100
+            assert abs(result['open_interest_change_pct'] - expected_change) < 0.01, \
+                f"Failed for {timeframe}: expected {expected_change}, got {result['open_interest_change_pct']}"

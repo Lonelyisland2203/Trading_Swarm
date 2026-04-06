@@ -297,6 +297,31 @@ class MarketDataService:
 
         return num * units[unit]
 
+    def _bars_for_24_hours(self, timeframe: str) -> int:
+        """
+        Calculate number of bars needed for 24-hour lookback.
+
+        Args:
+            timeframe: Timeframe string (e.g., '1m', '1h', '1d')
+
+        Returns:
+            Number of bars representing 24 hours
+
+        Examples:
+            - '1m' -> 1440 bars (24 * 60)
+            - '1h' -> 24 bars
+            - '4h' -> 6 bars
+            - '1d' -> 1 bar (but would need more data for accurate calculation)
+        """
+        # Map common timeframes to minutes
+        timeframe_minutes = {
+            '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+            '1h': 60, '4h': 240, '1d': 1440
+        }
+
+        minutes = timeframe_minutes.get(timeframe, 60)  # default to 1h
+        return int(1440 / minutes)  # 1440 minutes in 24 hours
+
     def _compute_adaptive_ttl(self, data_timestamp: datetime, as_of: datetime) -> int:
         """
         Compute adaptive cache TTL based on data age.
@@ -684,8 +709,10 @@ class MarketDataService:
             if 'open_interest_value' in oi_df.columns:
                 latest_oi = float(oi_df['open_interest_value'].iloc[-1])
                 # Calculate 24-hour change if enough data
-                if len(oi_df) >= 24:
-                    oi_24h_ago = float(oi_df['open_interest_value'].iloc[-24])
+                # Number of bars depends on timeframe (e.g., 1m=1440 bars, 1h=24 bars, 4h=6 bars)
+                bars_needed = self._bars_for_24_hours(timeframe)
+                if len(oi_df) >= bars_needed:
+                    oi_24h_ago = float(oi_df['open_interest_value'].iloc[-bars_needed])
                     oi_change_pct = ((latest_oi - oi_24h_ago) / oi_24h_ago) * 100
                 else:
                     oi_change_pct = None
