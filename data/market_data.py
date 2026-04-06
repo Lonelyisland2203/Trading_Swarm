@@ -159,7 +159,7 @@ class ExchangeClient:
                     f"Failed to fetch {symbol} {timeframe} from {self.exchange_id}: {e}"
                 )
 
-    def fetch_funding_rate_history(
+    async def fetch_funding_rate_history(
         self,
         symbol: str,
         since: int | None = None,
@@ -175,14 +175,27 @@ class ExchangeClient:
 
         Returns:
             List of funding rate records from CCXT
-        """
-        return self.exchange.fetch_funding_rate_history(
-            symbol,
-            since=since,
-            limit=limit
-        )
 
-    def fetch_open_interest_history(
+        Raises:
+            DataUnavailableError: If funding rate data cannot be fetched
+        """
+        async with self.throttler:
+            async def _fetch():
+                return await asyncio.to_thread(
+                    self.exchange.fetch_funding_rate_history,
+                    symbol,
+                    since=since,
+                    limit=limit
+                )
+
+            try:
+                return await retry_with_backoff(_fetch)
+            except Exception as e:
+                raise DataUnavailableError(
+                    f"Failed to fetch funding rate history for {symbol}: {e}"
+                )
+
+    async def fetch_open_interest_history(
         self,
         symbol: str,
         timeframe: str = '1h',
@@ -200,13 +213,26 @@ class ExchangeClient:
 
         Returns:
             List of open interest records from CCXT
+
+        Raises:
+            DataUnavailableError: If open interest data cannot be fetched
         """
-        return self.exchange.fetch_open_interest_history(
-            symbol,
-            timeframe=timeframe,
-            since=since,
-            limit=limit
-        )
+        async with self.throttler:
+            async def _fetch():
+                return await asyncio.to_thread(
+                    self.exchange.fetch_open_interest_history,
+                    symbol,
+                    timeframe=timeframe,
+                    since=since,
+                    limit=limit
+                )
+
+            try:
+                return await retry_with_backoff(_fetch)
+            except Exception as e:
+                raise DataUnavailableError(
+                    f"Failed to fetch open interest history for {symbol}: {e}"
+                )
 
     async def close(self):
         """Close exchange connection."""

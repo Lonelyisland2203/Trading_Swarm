@@ -145,8 +145,7 @@ class TestExchangeClientDerivatives:
 
         client = ExchangeClient(exchange_id='binance')
 
-        result = await asyncio.to_thread(
-            client.fetch_funding_rate_history,
+        result = await client.fetch_funding_rate_history(
             'BTC/USDT:USDT',
             since=1609459200000,
             limit=100
@@ -174,8 +173,7 @@ class TestExchangeClientDerivatives:
 
         client = ExchangeClient(exchange_id='binance')
 
-        result = await asyncio.to_thread(
-            client.fetch_open_interest_history,
+        result = await client.fetch_open_interest_history(
             'BTC/USDT:USDT',
             timeframe='1h',
             since=1609459200000,

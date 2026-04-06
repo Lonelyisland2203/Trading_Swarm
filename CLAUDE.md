@@ -20,7 +20,17 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Session 11b: Technical Indicator Expansion (17 indicators, 5 groups, compute_all_indicators aggregation)
 - Session 12: Multi-Timeframe Context (4-indicator voting, confluence detection, optional higher_tf_data parameter)
 
-**Next:** TBD (likely evaluation integration or production deployment)
+**In Progress: Session 13 - Funding Rates & Open Interest Integration**
+- [x] Task 1: Adaptive TTL calculation (_compute_adaptive_ttl: 24h/2h/30min tiered caching)
+- [x] Task 2: Perpetual market mapping (_load_perpetual_markets, _get_perpetual_symbol, 24h cached)
+- [ ] Task 3: ExchangeClient methods for derivatives
+- [ ] Task 4: Funding rate fetching with capability checking
+- [ ] Task 5: Open interest fetching with capability checking
+- [ ] Task 6: get_market_context() orchestration
+- [ ] Task 7: Integration tests
+- [ ] Task 8: Full test suite run
+- [ ] Task 9: Final CLAUDE.md update
+- [ ] Task 10: Session summary
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -28,19 +38,22 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ## Architecture Decisions
 
+### Derivatives Data (Session 13 - In Progress)
+- **Adaptive TTL:** Historical (>7d) = 24h, recent (1h-7d) = 2h, live (<1h) = 30min
+- **Perpetual Mapping:** Disk-cached market metadata (24h TTL), graceful None on missing perpetuals
+- **New methods:** `_compute_adaptive_ttl()`, `_load_perpetual_markets()`, `_get_perpetual_symbol()`, `load_markets()` wrapper
+
 ### Multi-Timeframe Context (Session 12)
 - **Hierarchy:** TIMEFRAME_HIERARCHY = ["1m", "5m", "15m", "1h", "4h", "1d"] - adaptive selection of up to 2 nearest higher TFs
 - **4-Indicator Voting:** Ichimoku cloud position, KAMA slope, Donchian channel position, RSI zone -> trend classification (bullish/bearish/neutral)
 - **Confluence Detection:** Multi-TF alignment categorized as aligned, mixed, or conflicting
-- **Integration:** Optional `higher_tf_data` parameter throughout stack (backward compatible) - orchestrator -> PromptBuilder -> prompt templates
+- **Integration:** Optional `higher_tf_data` parameter throughout stack (backward compatible)
 - **Functions:** `get_higher_timeframes()`, `summarize_timeframe()`, `compute_confluence()`
-- **Test coverage:** 37 tests in `test_prompt_builder_mtf.py` + fixtures in `tests/fixtures/timeframe_fixtures.py`
 
 ### Indicator System (Session 11b)
 - **17 indicators across 5 groups:** Momentum (Donchian, Ichimoku, KAMA), Volume (OBV, CMF, MFI, VWAP), Volatility (ATR, BB bandwidth, Keltner, historical vol), Structure (TTM Squeeze, FVG, Swing Points), Crypto (funding_rate, open_interest stubs)
 - **Pattern:** All indicators use `compute_` prefix with pd.Series parameters
 - **Aggregation:** `compute_all_indicators()` returns dict of all indicator values for PromptBuilder integration
-- **Test coverage:** 82 tests (19 original + 63 extended)
 
 ### Configuration Layer
 - Nested Pydantic settings with flat env var mapping
@@ -107,11 +120,11 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `config/fee_model.py` - FeeModelSettings for Binance Futures USDT-M fee calculations
 
 ### Data Layer
-- `data/indicators.py` - 17 indicators + compute_all_indicators() aggregation (82 tests)
+- `data/indicators.py` - 17 indicators + compute_all_indicators() aggregation
 - `data/cache_wrapper.py` - AsyncDiskCache with asyncio.to_thread()
-- `data/market_data.py` - CCXT client with context manager
+- `data/market_data.py` - CCXT client + adaptive TTL + perpetual mapping
 - `data/regime_filter.py` - RegimeClassifier with volatility percentiles
-- `data/prompt_builder.py` - Task sampling, compute_all_indicators integration, multi-TF context (get_higher_timeframes, summarize_timeframe, compute_confluence)
+- `data/prompt_builder.py` - Task sampling, compute_all_indicators integration, multi-TF context
 - `data/historical_windows.py` - Window walking with completeness validation
 - `data/inference_queue.py` - Sequential job processor with JSONL streaming
 
@@ -157,6 +170,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_indicators_extended.py` - 63 tests (extended indicators)
 - `tests/test_data_layer.py` - 21 tests
 - `tests/test_prompt_builder_mtf.py` - 37 tests (multi-timeframe context)
+- `tests/test_market_data_derivatives.py` - 6 tests (adaptive TTL, perpetual mapping)
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
 - `tests/test_critic.py` - 22 tests
@@ -197,5 +211,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 676 passing (5 pre-existing orchestrator failures excluded)
+**Total Tests:** 682 passing (5 pre-existing orchestrator failures excluded)
 **Python Version:** 3.13.7
