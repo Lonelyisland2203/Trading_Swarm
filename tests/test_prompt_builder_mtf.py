@@ -102,3 +102,12 @@ class TestTimeframeFixtures:
 
         # RSI should be near 50
         assert 45 <= indicators["rsi"] <= 55
+
+    def test_fixtures_survive_validation(self):
+        """Fixtures should not lose bars when validated."""
+        from data.indicators import validate_ohlcv
+
+        for fixture_fn in [create_test_df_bullish, create_test_df_bearish, create_test_df_neutral]:
+            df = fixture_fn()
+            validated = validate_ohlcv(df)
+            assert len(validated) == len(df), f"{fixture_fn.__name__} lost {len(df)-len(validated)} bars"

@@ -24,7 +24,8 @@ def create_test_df_bullish(bars: int = 100, base_price: float = 50000.0) -> pd.D
     """
     np.random.seed(42)  # Reproducible
 
-    timestamps = pd.date_range(end=pd.Timestamp.now(), periods=bars, freq="1h")
+    end_time = pd.Timestamp("2024-01-01 00:00:00")
+    timestamps = pd.date_range(end=end_time, periods=bars, freq="1h")
     timestamps_ms = (timestamps.astype(int) // 10**6).values
 
     # Generate uptrending prices
@@ -51,6 +52,10 @@ def create_test_df_bullish(bars: int = 100, base_price: float = 50000.0) -> pd.D
         "volume": volume,
     })
 
+    # Ensure OHLC relationship
+    df["high"] = df[["open", "close", "high"]].max(axis=1)
+    df["low"] = df[["open", "close", "low"]].min(axis=1)
+
     return df
 
 
@@ -74,7 +79,8 @@ def create_test_df_bearish(bars: int = 100, base_price: float = 50000.0) -> pd.D
     """
     np.random.seed(43)  # Reproducible, different from bullish
 
-    timestamps = pd.date_range(end=pd.Timestamp.now(), periods=bars, freq="1h")
+    end_time = pd.Timestamp("2024-01-01 00:00:00")
+    timestamps = pd.date_range(end=end_time, periods=bars, freq="1h")
     timestamps_ms = (timestamps.astype(int) // 10**6).values
 
     # Generate downtrending prices
@@ -101,6 +107,10 @@ def create_test_df_bearish(bars: int = 100, base_price: float = 50000.0) -> pd.D
         "volume": volume,
     })
 
+    # Ensure OHLC relationship
+    df["high"] = df[["open", "close", "high"]].max(axis=1)
+    df["low"] = df[["open", "close", "low"]].min(axis=1)
+
     return df
 
 
@@ -124,7 +134,8 @@ def create_test_df_neutral(bars: int = 100, base_price: float = 50000.0) -> pd.D
     """
     np.random.seed(44)  # Reproducible
 
-    timestamps = pd.date_range(end=pd.Timestamp.now(), periods=bars, freq="1h")
+    end_time = pd.Timestamp("2024-01-01 00:00:00")
+    timestamps = pd.date_range(end=end_time, periods=bars, freq="1h")
     timestamps_ms = (timestamps.astype(int) // 10**6).values
 
     # Generate sideways prices with mean reversion
@@ -147,5 +158,9 @@ def create_test_df_neutral(bars: int = 100, base_price: float = 50000.0) -> pd.D
         "close": close_prices,
         "volume": volume,
     })
+
+    # Ensure OHLC relationship
+    df["high"] = df[["open", "close", "high"]].max(axis=1)
+    df["low"] = df[["open", "close", "low"]].min(axis=1)
 
     return df
