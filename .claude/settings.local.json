@@ -14,7 +14,10 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git show:*)",
-      "Bash(git restore:*)"
-    ]
+      "Bash(git restore:*)",
+      "Bash(claude config list:*)",
+      "Bash(cd /Users/javierlee/Trading Swarm:*)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

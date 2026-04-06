@@ -23,6 +23,7 @@ from execution.exceptions import (
     PositionLimitError,
     SignalRejectedError,
 )
+from execution.position_sizing import PositionSizeResult, calculate_position_size
 from execution.state_manager import StateManager
 
 __all__ = [
@@ -37,4 +38,6 @@ __all__ = [
     "OrderRejectedError",
     "SignalRejectedError",
     "StateManager",
+    "calculate_position_size",
+    "PositionSizeResult",
 ]
