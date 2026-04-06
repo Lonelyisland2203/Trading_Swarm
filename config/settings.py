@@ -371,6 +371,40 @@ class DatasetGenerationSettings(BaseModel):
     )
 
 
+class ExecutionSettings(BaseModel):
+    """Execution layer configuration with safety limits."""
+
+    # Connection settings
+    testnet: bool = Field(default=True, description="Use testnet")
+    api_key: str = Field(default="", description="Binance API key")
+    api_secret: str = Field(default="", description="Binance API secret")
+
+    # Trading mode
+    mode: str = Field(default="futures", pattern="^(spot|futures)$", description="Trading mode")
+
+    # Safety limits
+    max_daily_trades: int = Field(default=10, ge=1, le=100, description="Maximum trades per day")
+    max_daily_loss_pct: float = Field(default=2.0, ge=0.1, le=10.0, description="Maximum daily loss %")
+    max_open_positions: int = Field(default=3, ge=1, le=20, description="Maximum concurrent positions")
+    max_position_pct: float = Field(default=0.02, ge=0.001, le=0.10, description="Maximum position size %")
+    order_cooldown_seconds: int = Field(default=60, ge=0, le=3600, description="Minimum seconds between orders")
+
+    # Signal thresholds
+    min_confidence: float = Field(default=0.6, ge=0.0, le=1.0, description="Minimum signal confidence")
+    min_expected_return_pct: float = Field(default=0.1, ge=0.0, description="Minimum expected return %")
+
+    # State persistence
+    state_dir: Path = Field(default=Path("execution/state"), description="Directory for state files")
+
+    @field_validator("state_dir", mode="before")
+    @classmethod
+    def parse_state_dir(cls, v):
+        """Convert string path to Path object."""
+        if isinstance(v, str):
+            return Path(v)
+        return v
+
+
 class AppSettings(BaseSettings):
     """Main application settings.
 
@@ -392,6 +426,7 @@ class AppSettings(BaseSettings):
     dpo: DPOTrainingSettings = Field(default_factory=DPOTrainingSettings)
     dataset: DatasetGenerationSettings = Field(default_factory=DatasetGenerationSettings)
     fee_model: FeeModelSettings = Field(default_factory=FeeModelSettings)
+    execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
 
     # Paths
     model_save_dir: Path = Field(
@@ -489,6 +524,20 @@ class AppSettings(BaseSettings):
             "FEE_FUNDING_RATE_PER_8H": ("fee_model", "funding_rate_pct"),
             "FEE_INCLUDE_FUNDING": ("fee_model", "include_funding"),
             "FEE_SLIPPAGE_PCT": ("fee_model", "slippage_pct"),
+
+            # Execution settings
+            "EXECUTION_TESTNET": ("execution", "testnet"),
+            "BINANCE_API_KEY": ("execution", "api_key"),
+            "BINANCE_API_SECRET": ("execution", "api_secret"),
+            "EXECUTION_MODE": ("execution", "mode"),
+            "EXECUTION_MAX_DAILY_TRADES": ("execution", "max_daily_trades"),
+            "EXECUTION_MAX_DAILY_LOSS_PCT": ("execution", "max_daily_loss_pct"),
+            "EXECUTION_MAX_OPEN_POSITIONS": ("execution", "max_open_positions"),
+            "EXECUTION_MAX_POSITION_PCT": ("execution", "max_position_pct"),
+            "EXECUTION_ORDER_COOLDOWN": ("execution", "order_cooldown_seconds"),
+            "EXECUTION_MIN_CONFIDENCE": ("execution", "min_confidence"),
+            "EXECUTION_MIN_EXPECTED_RETURN_PCT": ("execution", "min_expected_return_pct"),
+            "EXECUTION_STATE_DIR": ("execution", "state_dir"),
         }
 
         for env_var, (group, field) in env_mappings.items():
@@ -525,6 +574,7 @@ class AppSettings(BaseSettings):
         self.market_data = MarketDataSettings.model_validate(self.market_data.model_dump())
         self.dpo = DPOTrainingSettings.model_validate(self.dpo.model_dump())
         self.fee_model = FeeModelSettings.model_validate(self.fee_model.model_dump())
+        self.execution = ExecutionSettings.model_validate(self.execution.model_dump())
 
 
 async def validate_ollama_models() -> dict:
