@@ -13,7 +13,7 @@ from loguru import logger
 
 from config.settings import settings
 from data.indicators import compute_bb_position, compute_macd, compute_rsi
-from data.prompt_builder import TaskType, PromptBuilder, sample_task
+from data.prompt_builder import TaskType, PromptBuilder, sample_task, TaskConfig, TASK_CONFIGS
 from data.regime_filter import MarketRegime
 from .critic import evaluate_signal
 from .generator import generate_signal, TradingPersona
@@ -134,6 +134,29 @@ def should_accept_signal(
     return True, f"Score {score:.2f} above threshold {threshold}, alignment {technical_alignment:.2f}"
 
 
+def _get_task_config_by_type(task_type: TaskType) -> TaskConfig:
+    """
+    Look up TaskConfig by task_type.
+
+    Args:
+        task_type: The task type to look up
+
+    Returns:
+        TaskConfig for the given task_type
+
+    Raises:
+        ValueError: If task_type not found in TASK_CONFIGS
+    """
+    for config in TASK_CONFIGS:
+        if config.task_type == task_type:
+            return config
+
+    raise ValueError(
+        f"Task type {task_type} not found in TASK_CONFIGS. "
+        f"Available types: {[c.task_type for c in TASK_CONFIGS]}"
+    )
+
+
 async def run_swarm_workflow(
     symbol: str,
     timeframe: str,
@@ -157,17 +180,24 @@ async def run_swarm_workflow(
         ohlcv_df: OHLCV DataFrame with sufficient history
         market_regime: Current market regime
         task_prompt: Rendered prompt from PromptBuilder
-        task_type: Task type for signal generation
+        task_type: Task type for signal generation (default: PREDICT_DIRECTION)
         higher_tf_data: Optional dict of higher timeframe OHLCV DataFrames
                        Keys are timeframe strings (e.g., "4h", "1d")
                        Values are OHLCV DataFrames
+
+    Note on higher_tf_data:
+        When higher_tf_data is provided, the task_prompt will be rebuilt with
+        multi-timeframe context using the specified task_type. This ensures
+        the task intent is preserved while incorporating higher timeframe data.
 
     Returns:
         Tuple of (final_state, training_example)
 
     Example:
         state, example = await run_swarm_workflow(
-            "BTC/USDT", "1h", df, MarketRegime.NEUTRAL, prompt
+            "BTC/USDT", "1h", df, MarketRegime.NEUTRAL, prompt,
+            task_type=TaskType.SUPPORT_RESISTANCE,
+            higher_tf_data={"4h": df_4h}
         )
         if state["workflow_status"] == "success":
             print(f"Signal: {state['final_signal']['direction']}")
@@ -182,10 +212,11 @@ async def run_swarm_workflow(
             "Rebuilding prompt with higher timeframe context",
             timeframe=timeframe,
             higher_tfs=list(higher_tf_data.keys()),
+            task_type=task_type.value,
         )
 
-        # Sample task based on available data
-        task = sample_task(available_bars=len(ohlcv_df))
+        # Get task config for the specified task_type
+        task = _get_task_config_by_type(task_type)
 
         # Build prompt with higher TF context
         builder = PromptBuilder()
@@ -201,6 +232,7 @@ async def run_swarm_workflow(
         logger.debug(
             "Prompt rebuilt with higher TF context",
             prompt_length=len(task_prompt),
+            task_type=task_type.value,
         )
 
     # Initialize state

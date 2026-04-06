@@ -381,6 +381,9 @@ async def test_run_swarm_workflow_accepts_higher_tf_data():
     # Verify higher TF context appears in task_prompt
     assert "Higher Timeframe Context" in state["task_prompt"]
 
+    # Verify task_type is preserved (PREDICT_DIRECTION prompt should mention "predict the price direction")
+    assert "predict the price direction" in state["task_prompt"].lower()
+
 
 @pytest.mark.asyncio
 async def test_run_swarm_workflow_backward_compatible():
@@ -403,3 +406,37 @@ async def test_run_swarm_workflow_backward_compatible():
 
     # Should not have higher TF context
     assert "Higher Timeframe Context" not in state["task_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_run_swarm_workflow_preserves_task_type_with_higher_tf():
+    """Should preserve task_type when rebuilding prompt with higher_tf_data."""
+    from tests.fixtures.timeframe_fixtures import create_test_df_bullish
+    from swarm.orchestrator import run_swarm_workflow
+    from data.prompt_builder import TaskType
+
+    # Create test data
+    df = create_test_df_bullish(bars=100)
+    higher_tf_data = {
+        "4h": create_test_df_bullish(bars=100),
+    }
+
+    # Test with SUPPORT_RESISTANCE task type
+    state, example = await run_swarm_workflow(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        ohlcv_df=df,
+        market_regime=MarketRegime.NEUTRAL,
+        task_prompt="Test prompt for support resistance",
+        task_type=TaskType.IDENTIFY_SUPPORT_RESISTANCE,
+        higher_tf_data=higher_tf_data,
+    )
+
+    # Verify higher TF context appears
+    assert "Higher Timeframe Context" in state["task_prompt"]
+
+    # Verify task_type is preserved (SUPPORT_RESISTANCE prompt should mention support/resistance)
+    prompt_lower = state["task_prompt"].lower()
+    assert "support" in prompt_lower or "resistance" in prompt_lower
+    # Should NOT contain direction prediction language
+    assert "predict the price direction" not in prompt_lower
