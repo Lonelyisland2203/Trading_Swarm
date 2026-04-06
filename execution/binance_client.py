@@ -383,44 +383,27 @@ class BinanceExecutionClient:
         Evaluate signal against safety checks and return trading decision.
 
         Implements 7-stage safety pipeline:
-        1. Kill switch check
-        2. Confidence threshold
-        3. Expected return threshold
-        4. Daily loss circuit breaker
-        5. Position limit check
-        6. Order cooldown
-        7. Balance check
+        1. Kill switch status
+        2. Daily trade count limit
+        3. Daily loss circuit breaker
+        4. Open position limit
+        5. Order cooldown
+        6. Signal confidence threshold
+        7. Expected return vs fee threshold
+
+        Note: This method NEVER places orders - only returns decision.
 
         Args:
             signal: SignalInput from signal generation pipeline
 
         Returns:
             TradeDecision with execute flag and reason
-            Note: This method NEVER places orders - only returns decision
         """
         # Stage 1: Kill switch check
         if self.state_manager.is_kill_switch_active():
             return TradeDecision(
                 execute=False,
                 reason="Kill switch active - trading halted",
-                symbol=signal.symbol,
-            )
-
-        # Stage 2: Confidence threshold
-        if signal.confidence < self.execution_settings.min_confidence:
-            return TradeDecision(
-                execute=False,
-                reason=f"Confidence {signal.confidence:.2%} below threshold "
-                       f"{self.execution_settings.min_confidence:.2%}",
-                symbol=signal.symbol,
-            )
-
-        # Stage 3: Expected return threshold
-        if signal.expected_return_pct < self.execution_settings.min_expected_return_pct:
-            return TradeDecision(
-                execute=False,
-                reason=f"Expected return {signal.expected_return_pct:.2f}% below threshold "
-                       f"{self.execution_settings.min_expected_return_pct:.2f}%",
                 symbol=signal.symbol,
             )
 
@@ -437,7 +420,15 @@ class BinanceExecutionClient:
                 symbol=signal.symbol,
             )
 
-        # Stage 4: Daily loss circuit breaker
+        # Stage 2: Daily trade count limit
+        if daily_stats.trade_count >= self.execution_settings.max_daily_trades:
+            return TradeDecision(
+                execute=False,
+                reason=f"Daily trade limit reached: {daily_stats.trade_count}/{self.execution_settings.max_daily_trades}",
+                symbol=signal.symbol,
+            )
+
+        # Stage 3: Daily loss circuit breaker
         if daily_stats.daily_loss_pct >= self.execution_settings.max_daily_loss_pct:
             return TradeDecision(
                 execute=False,
@@ -457,7 +448,7 @@ class BinanceExecutionClient:
                 symbol=signal.symbol,
             )
 
-        # Stage 5: Position limit check
+        # Stage 4: Position limit check
         if len(open_positions) >= self.execution_settings.max_open_positions:
             return TradeDecision(
                 execute=False,
@@ -465,7 +456,7 @@ class BinanceExecutionClient:
                 symbol=signal.symbol,
             )
 
-        # Stage 6: Order cooldown
+        # Stage 5: Order cooldown
         if daily_stats.last_order_timestamp:
             time_since_last_order = datetime.now() - daily_stats.last_order_timestamp
             if time_since_last_order.total_seconds() < self.execution_settings.order_cooldown_seconds:
@@ -479,15 +470,25 @@ class BinanceExecutionClient:
                     symbol=signal.symbol,
                 )
 
-        # Daily trade count check
-        if daily_stats.trade_count >= self.execution_settings.max_daily_trades:
+        # Stage 6: Confidence threshold
+        if signal.confidence < self.execution_settings.min_confidence:
             return TradeDecision(
                 execute=False,
-                reason=f"Daily trade limit reached: {daily_stats.trade_count}/{self.execution_settings.max_daily_trades}",
+                reason=f"Confidence {signal.confidence:.2%} below threshold "
+                       f"{self.execution_settings.min_confidence:.2%}",
                 symbol=signal.symbol,
             )
 
-        # Stage 7: Balance check and position sizing
+        # Stage 7: Expected return vs fee threshold
+        min_profitable = self.fee_model_settings.minimum_profitable_return_pct(holding_periods_8h=1)
+        if signal.expected_return_pct < min_profitable:
+            return TradeDecision(
+                execute=False,
+                reason=f"Expected return {signal.expected_return_pct:.3f}% below fee threshold {min_profitable:.3f}%",
+                symbol=signal.symbol,
+            )
+
+        # All safety checks passed - calculate position sizing for execution
         try:
             # Get current price
             ticker = await self.exchange.fetch_ticker(signal.symbol)

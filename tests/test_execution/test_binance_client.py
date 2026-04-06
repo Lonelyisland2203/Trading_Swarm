@@ -559,6 +559,20 @@ class TestBinanceClientSignalAcceptance:
     async def test_accept_signal_below_confidence_threshold(self, binance_client):
         """Test signal rejected when confidence is below threshold."""
         binance_client.state_manager.is_kill_switch_active = MagicMock(return_value=False)
+        binance_client.state_manager.get_daily_stats = MagicMock(
+            return_value=DailyStats(
+                date=datetime.now().strftime("%Y-%m-%d"),
+                trade_count=0,
+                realized_pnl=0.0,
+                starting_balance=10000.0,
+            )
+        )
+        binance_client.exchange = AsyncMock()
+        binance_client.exchange.fetch_balance = AsyncMock(
+            return_value={
+                "USDT": {"free": 5000.0, "used": 0.0, "total": 5000.0},
+            }
+        )
 
         signal = SignalInput(
             symbol="BTC/USDT",
@@ -575,21 +589,35 @@ class TestBinanceClientSignalAcceptance:
 
     @pytest.mark.asyncio
     async def test_accept_signal_below_expected_return_threshold(self, binance_client):
-        """Test signal rejected when expected return is below threshold."""
+        """Test signal rejected when expected return is below fee threshold."""
         binance_client.state_manager.is_kill_switch_active = MagicMock(return_value=False)
+        binance_client.state_manager.get_daily_stats = MagicMock(
+            return_value=DailyStats(
+                date=datetime.now().strftime("%Y-%m-%d"),
+                trade_count=0,
+                realized_pnl=0.0,
+                starting_balance=10000.0,
+            )
+        )
+        binance_client.exchange = AsyncMock()
+        binance_client.exchange.fetch_balance = AsyncMock(
+            return_value={
+                "USDT": {"free": 5000.0, "used": 0.0, "total": 5000.0},
+            }
+        )
 
         signal = SignalInput(
             symbol="BTC/USDT",
             direction="long",
             confidence=0.8,
-            expected_return_pct=0.05,  # Below default 0.1% threshold
+            expected_return_pct=0.05,  # Below default fee threshold
             stop_loss_pct=2.0,
         )
 
         decision = await binance_client.accept_signal(signal)
 
         assert decision.execute is False
-        assert "expected return" in decision.reason.lower()
+        assert "expected return" in decision.reason.lower() or "fee threshold" in decision.reason.lower()
 
     @pytest.mark.asyncio
     async def test_accept_signal_daily_loss_limit_exceeded(self, binance_client):
