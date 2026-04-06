@@ -19,6 +19,44 @@ import numpy as np
 # Thread-local random generator to avoid global state pollution
 _task_rng = random.Random()
 
+# Timeframe hierarchy for multi-timeframe analysis
+TIMEFRAME_HIERARCHY = ["1m", "5m", "15m", "1h", "4h", "1d"]
+
+
+def get_higher_timeframes(current_tf: str, available_tfs: list[str]) -> list[str]:
+    """
+    Get up to 2 nearest higher timeframes from available set.
+
+    Args:
+        current_tf: Current timeframe (e.g., "1h")
+        available_tfs: List of available higher timeframes
+
+    Returns:
+        List of up to 2 nearest higher timeframes in hierarchy order
+
+    Examples:
+        >>> get_higher_timeframes("1m", ["5m", "15m", "1h"])
+        ["5m", "15m"]
+        >>> get_higher_timeframes("1h", ["4h"])
+        ["4h"]
+        >>> get_higher_timeframes("1d", ["1h", "4h"])
+        []
+    """
+    if current_tf not in TIMEFRAME_HIERARCHY:
+        logger.warning("Unknown current timeframe", timeframe=current_tf)
+        return []
+
+    current_idx = TIMEFRAME_HIERARCHY.index(current_tf)
+
+    # Filter to only recognized timeframes higher in hierarchy
+    higher_tfs = []
+    for tf in TIMEFRAME_HIERARCHY[current_idx + 1:]:
+        if tf in available_tfs:
+            higher_tfs.append(tf)
+
+    # Return up to 2 nearest
+    return higher_tfs[:2]
+
 
 class TaskType(Enum):
     """Training task types for signal generation."""
