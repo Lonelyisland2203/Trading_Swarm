@@ -1184,3 +1184,71 @@ def test_compute_all_indicators_atr_normalized():
     # atr_normalized = 4.0 / 100.0 * 100 = 4.0%
     assert result['atr_normalized'] is not None
     assert 3.5 < result['atr_normalized'] < 4.5
+
+
+def test_compute_all_indicators_volume_flag(sample_ohlcv):
+    """Verify include_volume=False sets volume indicators to None."""
+    from data.indicators import compute_all_indicators
+
+    result = compute_all_indicators(sample_ohlcv, include_volume=False, include_structure=False)
+
+    # Volume indicators should be None
+    assert result['obv'] is None
+    assert result['cmf'] is None
+    assert result['mfi'] is None
+    assert result['vwap'] is None
+
+    # Non-volume indicators should still be present
+    assert result['rsi'] is not None
+    assert result['macd_line'] is not None
+    assert result['kama'] is not None
+    assert result['atr_normalized'] is not None
+
+
+def test_compute_all_indicators_structure_flag(sample_ohlcv):
+    """Verify include_structure=False skips FVG/swing calculations."""
+    from data.indicators import compute_all_indicators
+
+    result = compute_all_indicators(sample_ohlcv, include_volume=False, include_structure=False)
+
+    # Structure scalars should be None (except open_fvg_count which is 0)
+    assert result['nearest_bullish_fvg_pct'] is None
+    assert result['nearest_bearish_fvg_pct'] is None
+    assert result['open_fvg_count'] == 0
+    assert result['nearest_swing_high_pct'] is None
+    assert result['nearest_swing_low_pct'] is None
+
+    # Structure raw data should be empty
+    assert result['raw_fvgs'] == []
+    assert result['raw_swing_points'] == {'highs': [], 'lows': []}
+
+    # Non-structure indicators should still be present
+    assert result['rsi'] is not None
+    assert result['donchian_upper'] is not None
+
+
+def test_compute_all_indicators_empty_dataframe():
+    """Verify empty DataFrame raises ValueError."""
+    from data.indicators import compute_all_indicators
+
+    df = pd.DataFrame()
+
+    with pytest.raises(ValueError, match="Cannot compute indicators on empty DataFrame"):
+        compute_all_indicators(df)
+
+
+def test_compute_all_indicators_missing_columns():
+    """Verify missing columns raises KeyError."""
+    from data.indicators import compute_all_indicators
+
+    # Missing 'high' column
+    df = pd.DataFrame({
+        'timestamp': [0, 60000],
+        'open': [100.0, 101.0],
+        'low': [98.0, 99.0],
+        'close': [101.0, 102.0],
+        'volume': [1000.0, 1100.0],
+    })
+
+    with pytest.raises(KeyError):
+        compute_all_indicators(df)
