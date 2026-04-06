@@ -6,6 +6,7 @@ Implements point-in-time safety and data validation.
 
 import asyncio
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -211,6 +212,26 @@ class MarketDataService:
             raise ValueError(f"Invalid timeframe unit: {unit}")
 
         return num * units[unit]
+
+    def _compute_adaptive_ttl(self, data_timestamp: datetime, as_of: datetime) -> int:
+        """
+        Compute adaptive cache TTL based on data age.
+
+        Args:
+            data_timestamp: Timestamp of the data point
+            as_of: Current timestamp for age calculation
+
+        Returns:
+            Cache TTL in seconds
+        """
+        age = as_of - data_timestamp
+
+        if age > timedelta(days=7):
+            return 86400  # Historical: 24 hours
+        elif age > timedelta(hours=1):
+            return 7200   # Recent: 2 hours
+        else:
+            return 1800   # Live: 30 minutes
 
     async def fetch_ohlcv(
         self,
