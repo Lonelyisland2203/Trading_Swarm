@@ -11,6 +11,7 @@ layer and the exchange, handling all state management, risk controls, and
 order lifecycle management.
 """
 
+from execution.binance_client import BinanceExecutionClient
 from execution.exceptions import (
     CooldownActiveError,
     DailyLossLimitError,
@@ -27,6 +28,7 @@ from execution.position_sizing import PositionSizeResult, calculate_position_siz
 from execution.state_manager import StateManager
 
 __all__ = [
+    "BinanceExecutionClient",
     "ExecutionError",
     "KillSwitchActiveError",
     "DailyLossLimitError",
