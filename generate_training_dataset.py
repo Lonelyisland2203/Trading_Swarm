@@ -43,6 +43,7 @@ from typing import Optional
 
 from loguru import logger
 
+from config.fee_model import FeeModelSettings
 from config.settings import settings
 from data.historical_windows import (
     HistoricalWindow,
@@ -72,6 +73,37 @@ class DatasetConfig:
     task_types: list[TaskType]
     output_dir: Path
     resume_from: Optional[Path] = None
+    fee_mode: str = "futures_usdt"  # Fee mode for prompt generation
+
+
+def create_fee_model(mode: str) -> FeeModelSettings | None:
+    """
+    Create fee model based on selected mode.
+
+    Args:
+        mode: Fee mode ("futures_usdt", "spot", "none")
+
+    Returns:
+        FeeModelSettings for the selected mode, or None if mode is "none"
+    """
+    if mode == "none":
+        return None
+    elif mode == "futures_usdt":
+        # Default Binance Futures USDT-M fees
+        return FeeModelSettings()
+    elif mode == "spot":
+        # Binance Spot fees (no funding, 25% BNB discount)
+        return FeeModelSettings(
+            maker_fee_pct=0.10,
+            taker_fee_pct=0.10,
+            bnb_discount_enabled=True,
+            bnb_discount_pct=25.0,
+            funding_rate_pct=0.0,
+            include_funding=False,
+            slippage_pct=0.01,
+        )
+    else:
+        raise ValueError(f"Invalid fee mode: {mode}")
 
 
 async def phase1_prepare_contexts(config: DatasetConfig) -> list[InferenceJob]:
@@ -100,6 +132,7 @@ async def phase1_prepare_contexts(config: DatasetConfig) -> list[InferenceJob]:
     jobs = []
     regime_classifier = RegimeClassifier()
     prompt_builder = PromptBuilder()
+    fee_model = create_fee_model(config.fee_mode)
 
     async with MarketDataService() as service:
         # Parallel: Fetch latest data for all symbol/timeframe pairs
@@ -192,6 +225,7 @@ async def phase1_prepare_contexts(config: DatasetConfig) -> list[InferenceJob]:
                         symbol=window.symbol,
                         timeframe=window.timeframe,
                         market_regime=market_regime,
+                        fee_model=fee_model,
                     )
                 except ValueError as e:
                     logger.warning(
@@ -329,6 +363,7 @@ async def phase3_postprocess(config: DatasetConfig) -> dict:
             "window_count": config.window_count,
             "window_stride_bars": config.window_stride_bars,
             "task_types": [t.value for t in config.task_types],
+            "fee_mode": config.fee_mode,
         },
         "total_examples": len(examples),
         "examples_by_regime": dict(Counter(ex["market_regime"] for ex in examples)),
@@ -393,6 +428,7 @@ async def main_workflow(config: DatasetConfig) -> None:
         task_types=[t.value for t in config.task_types],
         output_dir=str(config.output_dir),
         resume=bool(config.resume_from),
+        fee_mode=config.fee_mode,
     )
 
     # Phase 1: Prepare (parallel)
@@ -509,6 +545,13 @@ Examples:
         action="store_true",
         help="Quick test mode: 1 symbol, 1 timeframe, 3 windows",
     )
+    parser.add_argument(
+        "--fee-mode",
+        type=str,
+        choices=["futures_usdt", "spot", "none"],
+        default="futures_usdt",
+        help="Fee model to use in prompts: futures_usdt (default), spot, or none (legacy 0.1%% flat)",
+    )
 
     args = parser.parse_args()
 
@@ -543,6 +586,7 @@ Examples:
         task_types=task_types,
         output_dir=output_dir,
         resume_from=resume_from,
+        fee_mode=args.fee_mode,
     )
 
 

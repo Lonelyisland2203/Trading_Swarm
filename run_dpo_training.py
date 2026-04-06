@@ -355,6 +355,40 @@ def phase5_train(pairs: list[PreferencePair], force: bool) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Fee Model Helper
+# --------------------------------------------------------------------------- #
+
+def create_fee_model(mode: str) -> FeeModelSettings | None:
+    """
+    Create fee model based on selected mode.
+
+    Args:
+        mode: Fee mode ("futures_usdt", "spot", "none")
+
+    Returns:
+        FeeModelSettings for the selected mode, or None if mode is "none"
+    """
+    if mode == "none":
+        return None
+    elif mode == "futures_usdt":
+        # Default Binance Futures USDT-M fees
+        return FeeModelSettings()
+    elif mode == "spot":
+        # Binance Spot fees (no funding, 25% BNB discount)
+        return FeeModelSettings(
+            maker_fee_pct=0.10,
+            taker_fee_pct=0.10,
+            bnb_discount_enabled=True,
+            bnb_discount_pct=25.0,
+            funding_rate_pct=0.0,
+            include_funding=False,
+            slippage_pct=0.01,
+        )
+    else:
+        raise ValueError(f"Invalid fee mode: {mode}")
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
@@ -372,6 +406,12 @@ Examples:
 
   # Skip promotion cooldown (first run)
   python run_dpo_training.py --dataset outputs/dataset/examples.jsonl --force
+
+  # Use Spot fee model
+  python run_dpo_training.py --dataset outputs/dataset/examples.jsonl --fee-mode spot
+
+  # Disable fee model (legacy 0.1% flat cost)
+  python run_dpo_training.py --dataset outputs/dataset/examples.jsonl --fee-mode none
         """,
     )
     parser.add_argument(
@@ -407,6 +447,13 @@ Examples:
         action="store_true",
         help="Skip 24h promotion cooldown check",
     )
+    parser.add_argument(
+        "--fee-mode",
+        type=str,
+        choices=["futures_usdt", "spot", "none"],
+        default="futures_usdt",
+        help="Fee model to use: futures_usdt (default), spot, or none (legacy 0.1%% flat)",
+    )
     return parser.parse_args()
 
 
@@ -421,6 +468,9 @@ def main() -> None:
         output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Create fee model based on CLI argument
+    fee_model = create_fee_model(args.fee_mode)
+
     start_time = time.time()
 
     logger.info("=" * 60)
@@ -434,19 +484,20 @@ def main() -> None:
         dry_run=args.dry_run,
         save_pairs=args.save_pairs,
         force=args.force,
+        fee_mode=args.fee_mode,
     )
 
     # Phase 1: Load
     examples = phase1_load(args.dataset)
 
     # Phase 2: Verify
-    matched = phase2_verify(examples, fee_model=FeeModelSettings())
+    matched = phase2_verify(examples, fee_model=fee_model or FeeModelSettings())
     if not matched:
         logger.error("No examples verified — cannot build preference pairs")
         sys.exit(1)
 
     # Phase 3: Reward
-    examples_with_rewards = phase3_reward(matched, fee_model=FeeModelSettings())
+    examples_with_rewards = phase3_reward(matched, fee_model=fee_model or FeeModelSettings())
 
     # Phase 4: Preference pairs
     pairs = phase4_pairs(

@@ -11,6 +11,13 @@ from config.fee_model import FeeModelSettings
 from verifier.constants import compute_holding_periods_8h, get_horizon_bars
 from verifier.outcome import apply_fee_model
 
+# Import create_fee_model from both scripts
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from run_dpo_training import create_fee_model as create_fee_model_dpo
+from generate_training_dataset import create_fee_model as create_fee_model_dataset
+
 
 def test_fee_model_in_app_settings():
     """Test fee model is properly integrated into AppSettings."""
@@ -139,3 +146,95 @@ def test_end_to_end_fee_impact():
     # Verify the loss is meaningful
     assert net_pct < -0.01, \
         f"Expected meaningful loss after fees, got {net_pct:.3f}%"
+
+
+# ============================================================================
+# CLI Fee Mode Tests
+# ============================================================================
+
+def test_create_fee_model_futures_usdt():
+    """Test create_fee_model with futures_usdt mode (both scripts)."""
+    # Test DPO training script
+    fm_dpo = create_fee_model_dpo("futures_usdt")
+    assert isinstance(fm_dpo, FeeModelSettings)
+    assert fm_dpo.maker_fee_pct == 0.02
+    assert fm_dpo.taker_fee_pct == 0.05
+    assert fm_dpo.bnb_discount_enabled == True
+    assert fm_dpo.bnb_discount_pct == 10.0
+    assert fm_dpo.funding_rate_pct == 0.01
+    assert fm_dpo.include_funding == True
+
+    # Test dataset generation script
+    fm_dataset = create_fee_model_dataset("futures_usdt")
+    assert isinstance(fm_dataset, FeeModelSettings)
+    assert fm_dataset.maker_fee_pct == 0.02
+    assert fm_dataset.taker_fee_pct == 0.05
+
+
+def test_create_fee_model_spot():
+    """Test create_fee_model with spot mode (both scripts)."""
+    # Test DPO training script
+    fm_dpo = create_fee_model_dpo("spot")
+    assert isinstance(fm_dpo, FeeModelSettings)
+    assert fm_dpo.maker_fee_pct == 0.10
+    assert fm_dpo.taker_fee_pct == 0.10
+    assert fm_dpo.bnb_discount_enabled == True
+    assert fm_dpo.bnb_discount_pct == 25.0  # Spot gets 25% BNB discount
+    assert fm_dpo.funding_rate_pct == 0.0
+    assert fm_dpo.include_funding == False
+    assert fm_dpo.slippage_pct == 0.01
+
+    # Test dataset generation script
+    fm_dataset = create_fee_model_dataset("spot")
+    assert isinstance(fm_dataset, FeeModelSettings)
+    assert fm_dataset.maker_fee_pct == 0.10
+    assert fm_dataset.taker_fee_pct == 0.10
+    assert fm_dataset.bnb_discount_pct == 25.0
+
+
+def test_create_fee_model_none():
+    """Test create_fee_model with none mode (both scripts)."""
+    # Test DPO training script
+    fm_dpo = create_fee_model_dpo("none")
+    assert fm_dpo is None
+
+    # Test dataset generation script
+    fm_dataset = create_fee_model_dataset("none")
+    assert fm_dataset is None
+
+
+def test_create_fee_model_invalid_mode():
+    """Test create_fee_model with invalid mode raises error."""
+    with pytest.raises(ValueError, match="Invalid fee mode"):
+        create_fee_model_dpo("invalid")
+
+    with pytest.raises(ValueError, match="Invalid fee mode"):
+        create_fee_model_dataset("invalid")
+
+
+def test_spot_vs_futures_fee_difference():
+    """Test that spot and futures modes have meaningfully different cost structures."""
+    fm_spot = create_fee_model_dpo("spot")
+    fm_futures = create_fee_model_dpo("futures_usdt")
+
+    # Verify spot doesn't include funding (cost is constant)
+    cost_spot_0 = fm_spot.round_trip_cost_pct(0)
+    cost_spot_10 = fm_spot.round_trip_cost_pct(10)
+    assert cost_spot_0 == cost_spot_10, \
+        "Spot cost should not vary with holding period"
+
+    # Verify futures cost increases with holding period
+    cost_futures_0 = fm_futures.round_trip_cost_pct(0)
+    cost_futures_10 = fm_futures.round_trip_cost_pct(10)
+    assert cost_futures_10 > cost_futures_0, \
+        "Futures cost should increase with holding period"
+
+    # For very short holding periods (0 funding), futures is cheaper than spot
+    # because futures has lower base fees (0.02+0.05=0.07 vs 0.10+0.10=0.20)
+    assert cost_futures_0 < cost_spot_0, \
+        f"Futures with no funding ({cost_futures_0}%) should be cheaper than Spot ({cost_spot_0}%)"
+
+    # For very long holding periods, futures becomes more expensive due to funding
+    cost_futures_100 = fm_futures.round_trip_cost_pct(100)
+    assert cost_futures_100 > cost_spot_0, \
+        f"Futures with 100 periods ({cost_futures_100}%) should be more expensive than Spot ({cost_spot_0}%)"
