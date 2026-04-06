@@ -16,7 +16,10 @@
       "Bash(git show:*)",
       "Bash(git restore:*)",
       "Bash(claude config list:*)",
-      "Bash(cd /Users/javierlee/Trading Swarm:*)"
+      "Bash(cd /Users/javierlee/Trading Swarm:*)",
+      "Bash(git checkout execution/binance_client.py tests/test_execution/test_binance_client.py)",
+      "Bash(find:*)",
+      "Bash(for f in tests/test_execution/test_*.py)"
     ],
     "defaultMode": "bypassPermissions"
   }
