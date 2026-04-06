@@ -21,8 +21,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Session 12: Multi-Timeframe Context (4-indicator voting, confluence detection, optional higher_tf_data parameter)
 - Session 13: Derivatives Data Integration (funding rates, open interest, adaptive TTL caching, perpetual mapping)
 - Session 14: Fee-Aware DPO Training (execution context in prompts, net returns in rewards, fee model integration)
+- Session 15: Binance Execution Client (execution module, safety controls, fee-aware sizing)
 
-**Next:** Session 15 - TBD
+**Next:** Session 16 - TBD
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -37,6 +38,21 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **Net Return Impact:** Signals with positive gross but negative net returns now receive negative rewards, teaching model to account for trading costs
 - **Optional Integration:** PromptBuilder.build_prompt() accepts optional fee_model parameter - backward compatible when omitted
 - **Fee Model Calculation:** Uses compute_holding_periods_8h() for timeframe-adaptive fee estimation
+
+### Execution Layer (Session 15)
+- **Purpose:** Production execution layer for deploying signals to Binance
+- **Safety-First Design:** Testnet by default, live trading requires ALLOW_LIVE_TRADING=true
+- **Kill Switch:** STOP file in execution/state/ halts all trading immediately
+- **Circuit Breakers:**
+  - Daily loss limit (default 2%) - auto-activates kill switch at 1.5x
+  - Daily trade count limit (default 10)
+  - Max open positions (default 3)
+  - Order cooldown (default 60s between orders)
+  - Max position size (default 2% of portfolio)
+- **Fee-Aware Sizing:** Position sizing accounts for fees, respects risk limits
+- **Signal Flow:** accept_signal() evaluates and returns decision; does NOT auto-execute
+- **State Persistence:** daily_stats.json, order_log.jsonl in execution/state/
+- **Integration:** Uses existing FeeModelSettings from config/fee_model.py
 
 ### Derivatives Data (Session 13)
 - **Adaptive TTL:** Historical (>7d) = 24h, recent (1h-7d) = 2h, live (<1h) = 30min
@@ -122,6 +138,14 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `config/settings.py` - Pydantic settings + DPOTrainingSettings + DatasetGenerationSettings
 - `config/fee_model.py` - FeeModelSettings for Binance Futures USDT-M fee calculations
 
+### Execution Layer
+- `execution/__init__.py` - Package exports
+- `execution/exceptions.py` - ExecutionError hierarchy
+- `execution/models.py` - OrderResult, Position, TradeDecision, DailyStats, SignalInput
+- `execution/state_manager.py` - Kill switch, daily stats, order logging
+- `execution/position_sizing.py` - Fee-aware position sizing
+- `execution/binance_client.py` - BinanceExecutionClient main class
+
 ### Data Layer
 - `data/indicators.py` - 17 indicators + compute_all_indicators() aggregation
 - `data/cache_wrapper.py` - AsyncDiskCache with asyncio.to_thread()
@@ -187,6 +211,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
 - `tests/test_integration/test_fee_model_integration.py` - 6 tests
 - `tests/test_fee_aware_integration.py` - 11 tests (end-to-end fee-aware workflow)
+- `tests/test_execution/` - 176 tests (exceptions, models, settings, state, sizing, client, safety controls)
 
 ## Known Issues & Gotchas
 
