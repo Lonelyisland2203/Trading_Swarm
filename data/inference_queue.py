@@ -100,8 +100,15 @@ class InferenceQueue:
         # Create output directory
         self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Load resume state
-        self.completed_contexts = self._load_resume_state() if resume else set()
+        # Load resume state or truncate stale output from prior runs
+        if resume:
+            self.completed_contexts = self._load_resume_state()
+        else:
+            self.completed_contexts = set()
+            # Truncate existing file so append-mode writes start fresh
+            if self.output_file.exists():
+                self.output_file.unlink()
+                logger.info("Cleared stale output file", file=str(self.output_file))
 
         if resume and self.completed_contexts:
             logger.info(

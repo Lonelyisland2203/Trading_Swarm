@@ -196,6 +196,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_indicators.py` - 19 tests (original indicators)
 - `tests/test_indicators_extended.py` - 63 tests (extended indicators)
 - `tests/test_data_layer.py` - 23 tests
+- `tests/test_data_layer/test_inference_queue.py` - 16 tests
 - `tests/test_prompt_builder_mtf.py` - 37 tests (multi-timeframe context)
 - `tests/test_prompt_builder_fee_context.py` - 7 tests (execution context in prompts)
 - `tests/test_market_data_derivatives.py` - 23 tests (adaptive TTL, perpetual mapping, derivatives fetching)
@@ -230,6 +231,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Custom EnumJSONEncoder for JSON serialization of task types and personas
 - **Indicator pattern:** `compute_` prefix, pd.Series params, return pd.Series or dict of Series
 - **Multi-TF pattern:** Optional `higher_tf_data` parameter cascaded through orchestrator -> PromptBuilder
+- **InferenceQueue init:** Deletes existing output file when `resume=False`; preserves it when `resume=True`
 
 ## Working Decisions
 
@@ -242,5 +244,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 904 passing (5 pre-existing orchestrator failures excluded)
+**Total Tests:** 906 passing (5 pre-existing orchestrator failures excluded)
 **Python Version:** 3.13.7

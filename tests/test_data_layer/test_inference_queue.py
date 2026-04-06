@@ -77,6 +77,33 @@ class TestInferenceQueue:
 
         assert len(queue.completed_contexts) == 0
 
+    def test_init_no_resume_truncates_existing_file(self, tmp_path):
+        """Test that resume=False removes stale output from a prior run."""
+        output_file = tmp_path / "examples.jsonl"
+
+        # Simulate a prior run leaving data behind
+        output_file.write_text('{"context_id": "stale_ctx", "symbol": "BTC"}\n')
+        assert output_file.exists()
+
+        queue = InferenceQueue(output_file, resume=False)
+
+        # File should be deleted so appends start fresh
+        assert not output_file.exists()
+        assert len(queue.completed_contexts) == 0
+
+    def test_init_resume_preserves_existing_file(self, tmp_path):
+        """Test that resume=True does NOT truncate the existing output file."""
+        output_file = tmp_path / "examples.jsonl"
+
+        # Write data that should survive resume init
+        output_file.write_text('{"context_id": "keep_me"}\n')
+
+        queue = InferenceQueue(output_file, resume=True)
+
+        # File must still exist with its content
+        assert output_file.exists()
+        assert output_file.read_text().strip() == '{"context_id": "keep_me"}'
+
     def test_init_creates_output_directory(self, tmp_path):
         """Test output directory is created."""
         output_file = tmp_path / "subdir" / "examples.jsonl"
