@@ -188,3 +188,148 @@ class TestExchangeClientDerivatives:
             since=1609459200000,
             limit=100
         )
+
+
+class TestFundingRateFetching:
+    """Test funding rate fetching with capability checking."""
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_funding_rates_checks_capability(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Method checks exchange capability before fetching."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchFundingRateHistory': False}
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = {'BTC/USDT': 'BTC/USDT:USDT'}
+
+        service = MarketDataService()
+
+        result = await service.fetch_funding_rates('BTC/USDT')
+
+        # Should return None when capability not supported
+        assert result is None
+        # Should NOT call fetch_funding_rate_history
+        mock_exchange.fetch_funding_rate_history.assert_not_called()
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_funding_rates_success(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Successful funding rate fetch returns DataFrame."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchFundingRateHistory': True}
+        mock_exchange.fetch_funding_rate_history.return_value = [
+            {'timestamp': 1609459200000, 'fundingRate': 0.0001},
+            {'timestamp': 1609488000000, 'fundingRate': 0.00015},
+        ]
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perpetual mapping
+            None  # funding rates cache miss
+        ]
+
+        service = MarketDataService()
+
+        result = await service.fetch_funding_rates('BTC/USDT')
+
+        assert result is not None
+        assert len(result) == 2
+        assert 'timestamp' in result.columns
+        assert 'funding_rate' in result.columns
+        assert result['funding_rate'].iloc[0] == 0.0001
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_funding_rates_applies_point_in_time_filter(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Point-in-time filter excludes future funding rates."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchFundingRateHistory': True}
+
+        # Create mock DataFrame
+        import pandas as pd
+        from datetime import timezone
+        mock_df = pd.DataFrame({
+            'timestamp': pd.to_datetime([1609459200000, 1609488000000], unit='ms', utc=True),
+            'funding_rate': [0.0001, 0.00015]
+        })
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perpetual mapping
+            mock_df  # funding rates cache hit
+        ]
+
+        service = MarketDataService()
+
+        # Filter to only include first timestamp
+        as_of = pd.to_datetime(1609459200000, unit='ms', utc=True)
+        result = await service.fetch_funding_rates('BTC/USDT', as_of=as_of)
+
+        assert len(result) == 1
+        assert result['funding_rate'].iloc[0] == 0.0001
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_funding_rates_returns_none_for_missing_perpetual(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Returns None if no perpetual symbol found."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchFundingRateHistory': True}
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = {}  # Empty mapping - no perpetual
+
+        service = MarketDataService()
+
+        result = await service.fetch_funding_rates('UNKNOWN/USDT')
+
+        assert result is None
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_funding_rates_uses_cache(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Cached funding rates are returned without exchange call."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchFundingRateHistory': True}
+
+        # Create mock DataFrame
+        import pandas as pd
+        mock_df = pd.DataFrame({
+            'timestamp': pd.to_datetime([1609459200000], unit='ms', utc=True),
+            'funding_rate': [0.0001]
+        })
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perpetual mapping
+            mock_df  # funding rates cache hit
+        ]
+
+        service = MarketDataService()
+
+        result = await service.fetch_funding_rates('BTC/USDT')
+
+        assert result is not None
+        assert len(result) == 1
+        # Should NOT call exchange since we got cache hit
+        mock_exchange.fetch_funding_rate_history.assert_not_called()
