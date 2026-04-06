@@ -159,6 +159,55 @@ class ExchangeClient:
                     f"Failed to fetch {symbol} {timeframe} from {self.exchange_id}: {e}"
                 )
 
+    def fetch_funding_rate_history(
+        self,
+        symbol: str,
+        since: int | None = None,
+        limit: int = 100
+    ) -> list[dict]:
+        """
+        Fetch funding rate history for a perpetual contract.
+
+        Args:
+            symbol: Perpetual symbol (e.g., 'BTC/USDT:USDT')
+            since: Timestamp in milliseconds (optional)
+            limit: Maximum number of records to fetch
+
+        Returns:
+            List of funding rate records from CCXT
+        """
+        return self.exchange.fetch_funding_rate_history(
+            symbol,
+            since=since,
+            limit=limit
+        )
+
+    def fetch_open_interest_history(
+        self,
+        symbol: str,
+        timeframe: str = '1h',
+        since: int | None = None,
+        limit: int = 100
+    ) -> list[dict]:
+        """
+        Fetch open interest history for a perpetual contract.
+
+        Args:
+            symbol: Perpetual symbol (e.g., 'BTC/USDT:USDT')
+            timeframe: Candle timeframe (e.g., '1h', '4h')
+            since: Timestamp in milliseconds (optional)
+            limit: Maximum number of records to fetch
+
+        Returns:
+            List of open interest records from CCXT
+        """
+        return self.exchange.fetch_open_interest_history(
+            symbol,
+            timeframe=timeframe,
+            since=since,
+            limit=limit
+        )
+
     async def close(self):
         """Close exchange connection."""
         await self.exchange.close()

@@ -1,8 +1,9 @@
 """Tests for derivatives data fetching (funding rates and open interest)."""
+import asyncio
 import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from data.market_data import MarketDataService
+from data.market_data import MarketDataService, ExchangeClient
 
 class TestAdaptiveTTL:
     """Test adaptive cache TTL calculation."""
@@ -125,3 +126,67 @@ class TestPerpetualMapping:
         perp_symbol = await service._get_perpetual_symbol('UNKNOWN/USDT')
 
         assert perp_symbol is None
+
+
+class TestExchangeClientDerivatives:
+    """Test ExchangeClient methods for derivatives data."""
+
+    @patch('data.market_data.ccxt.binance')
+    async def test_fetch_funding_rate_history_success(self, mock_binance_class):
+        """Successful funding rate history fetch."""
+        mock_exchange = MagicMock()
+        mock_binance_class.return_value = mock_exchange
+
+        # Mock CCXT response
+        mock_exchange.fetch_funding_rate_history.return_value = [
+            {'timestamp': 1609459200000, 'fundingRate': 0.0001},
+            {'timestamp': 1609488000000, 'fundingRate': 0.00015},
+        ]
+
+        client = ExchangeClient(exchange_id='binance')
+
+        result = await asyncio.to_thread(
+            client.fetch_funding_rate_history,
+            'BTC/USDT:USDT',
+            since=1609459200000,
+            limit=100
+        )
+
+        assert len(result) == 2
+        assert result[0]['fundingRate'] == 0.0001
+        mock_exchange.fetch_funding_rate_history.assert_called_once_with(
+            'BTC/USDT:USDT',
+            since=1609459200000,
+            limit=100
+        )
+
+    @patch('data.market_data.ccxt.binance')
+    async def test_fetch_open_interest_history_success(self, mock_binance_class):
+        """Successful open interest history fetch."""
+        mock_exchange = MagicMock()
+        mock_binance_class.return_value = mock_exchange
+
+        # Mock CCXT response
+        mock_exchange.fetch_open_interest_history.return_value = [
+            {'timestamp': 1609459200000, 'openInterestValue': 1000000000},
+            {'timestamp': 1609488000000, 'openInterestValue': 1050000000},
+        ]
+
+        client = ExchangeClient(exchange_id='binance')
+
+        result = await asyncio.to_thread(
+            client.fetch_open_interest_history,
+            'BTC/USDT:USDT',
+            timeframe='1h',
+            since=1609459200000,
+            limit=100
+        )
+
+        assert len(result) == 2
+        assert result[0]['openInterestValue'] == 1000000000
+        mock_exchange.fetch_open_interest_history.assert_called_once_with(
+            'BTC/USDT:USDT',
+            timeframe='1h',
+            since=1609459200000,
+            limit=100
+        )
