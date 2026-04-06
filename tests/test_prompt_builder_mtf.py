@@ -436,3 +436,178 @@ class TestTemplateIntegration:
 
         assert "## Higher Timeframe Context" in prompt
         assert "Neutral" in prompt
+
+
+class TestPromptBuilderMultiTimeframe:
+    """Test PromptBuilder with multi-timeframe data."""
+
+    def test_build_prompt_includes_higher_tf_section(self):
+        """Should include higher TF section when data provided."""
+        from data.prompt_builder import PromptBuilder, TaskConfig, TaskType
+        from data.regime_filter import MarketRegime
+
+        builder = PromptBuilder()
+        task = TaskConfig(
+            task_type=TaskType.PREDICT_DIRECTION,
+            weight=1.0,
+            difficulty=2,
+            min_bars_required=50,
+        )
+
+        df_current = create_test_df_bullish(bars=100)
+        higher_tf_data = {
+            "4h": create_test_df_bullish(bars=100),
+            "1d": create_test_df_bullish(bars=100),
+        }
+
+        prompt = builder.build_prompt(
+            task=task,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1h",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=higher_tf_data,
+        )
+
+        assert "## Higher Timeframe Context" in prompt
+        assert "4h:" in prompt
+        assert "1d:" in prompt
+        assert "Confluence:" in prompt
+
+    def test_build_prompt_omits_section_when_no_data(self):
+        """Should omit higher TF section when higher_tf_data=None."""
+        from data.prompt_builder import PromptBuilder, TaskConfig, TaskType
+        from data.regime_filter import MarketRegime
+
+        builder = PromptBuilder()
+        task = TaskConfig(
+            task_type=TaskType.PREDICT_DIRECTION,
+            weight=1.0,
+            difficulty=2,
+            min_bars_required=50,
+        )
+
+        df_current = create_test_df_bullish(bars=100)
+
+        prompt = builder.build_prompt(
+            task=task,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1h",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=None,
+        )
+
+        assert "## Higher Timeframe Context" not in prompt
+
+    def test_build_prompt_selects_2_nearest_timeframes(self):
+        """Should select only 2 nearest higher timeframes."""
+        from data.prompt_builder import PromptBuilder, TaskConfig, TaskType
+        from data.regime_filter import MarketRegime
+
+        builder = PromptBuilder()
+        task = TaskConfig(
+            task_type=TaskType.PREDICT_DIRECTION,
+            weight=1.0,
+            difficulty=2,
+            min_bars_required=50,
+        )
+
+        df_current = create_test_df_bullish(bars=100)
+        higher_tf_data = {
+            "5m": create_test_df_bullish(bars=100),
+            "15m": create_test_df_bullish(bars=100),
+            "1h": create_test_df_bullish(bars=100),
+            "4h": create_test_df_bullish(bars=100),
+        }
+
+        prompt = builder.build_prompt(
+            task=task,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1m",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=higher_tf_data,
+        )
+
+        # Should only include 5m and 15m (2 nearest)
+        assert "5m:" in prompt
+        assert "15m:" in prompt
+        # Should NOT include 1h or 4h in the summary lines (but may in confluence message)
+        # More specific: 1h and 4h should not appear as timeframe labels
+        lines = prompt.split("\n")
+        summary_lines = [l for l in lines if ":" in l and "1m" in prompt[:prompt.find(l)] and "Confluence:" not in l]
+        assert not any("1h:" in l for l in summary_lines) or "1h:" not in prompt.split("## Higher Timeframe Context")[1].split("Confluence")[0]
+
+    def test_build_prompt_works_for_all_task_types(self):
+        """Should work for all 3 task types."""
+        from data.prompt_builder import PromptBuilder, TaskConfig, TaskType
+        from data.regime_filter import MarketRegime
+
+        builder = PromptBuilder()
+        df_current = create_test_df_bullish(bars=100)
+        higher_tf_data = {"4h": create_test_df_bullish(bars=100)}
+
+        # Direction prediction
+        task_direction = TaskConfig(TaskType.PREDICT_DIRECTION, 1.0, 2, 50)
+        prompt_direction = builder.build_prompt(
+            task=task_direction,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1h",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=higher_tf_data,
+        )
+        assert "## Higher Timeframe Context" in prompt_direction
+
+        # Momentum assessment
+        task_momentum = TaskConfig(TaskType.ASSESS_MOMENTUM, 0.8, 2, 30)
+        prompt_momentum = builder.build_prompt(
+            task=task_momentum,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1h",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=higher_tf_data,
+        )
+        assert "## Higher Timeframe Context" in prompt_momentum
+
+        # Support/Resistance
+        task_sr = TaskConfig(TaskType.IDENTIFY_SUPPORT_RESISTANCE, 0.6, 3, 100)
+        prompt_sr = builder.build_prompt(
+            task=task_sr,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1h",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=higher_tf_data,
+        )
+        assert "## Higher Timeframe Context" in prompt_sr
+
+    def test_build_prompt_handles_insufficient_data_gracefully(self):
+        """Should skip timeframes with insufficient data."""
+        from data.prompt_builder import PromptBuilder, TaskConfig, TaskType
+        from data.regime_filter import MarketRegime
+
+        builder = PromptBuilder()
+        task = TaskConfig(TaskType.PREDICT_DIRECTION, 1.0, 2, 50)
+
+        df_current = create_test_df_bullish(bars=100)
+        higher_tf_data = {
+            "4h": create_test_df_bullish(bars=30),  # Insufficient
+            "1d": create_test_df_bullish(bars=100),  # OK
+        }
+
+        prompt = builder.build_prompt(
+            task=task,
+            df=df_current,
+            symbol="BTC/USDT",
+            timeframe="1h",
+            market_regime=MarketRegime.NEUTRAL,
+            higher_tf_data=higher_tf_data,
+        )
+
+        # Should include 1d but not 4h
+        assert "1d:" in prompt
+        # The insufficient 4h should be skipped, so we should still have higher TF context
+        assert "## Higher Timeframe Context" in prompt

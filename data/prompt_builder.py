@@ -831,6 +831,7 @@ class PromptBuilder:
         symbol: str,
         timeframe: str,
         market_regime: MarketRegime,
+        higher_tf_data: dict[str, pd.DataFrame] | None = None,
     ) -> str:
         """
         Build prompt for given task and market data.
@@ -841,6 +842,9 @@ class PromptBuilder:
             symbol: Trading pair
             timeframe: Candle timeframe
             market_regime: Current market regime
+            higher_tf_data: Optional dict of higher timeframe OHLCV DataFrames
+                           Keys are timeframe strings (e.g., "4h", "1d")
+                           Values are OHLCV DataFrames
 
         Returns:
             Rendered prompt string
@@ -856,6 +860,56 @@ class PromptBuilder:
         template = self.templates.get(task.task_type)
         if template is None:
             raise ValueError(f"No template for task type: {task.task_type}")
+
+        # Validate and filter higher_tf_data
+        validated_higher_tf_data = None
+        if higher_tf_data is not None:
+            if not isinstance(higher_tf_data, dict):
+                logger.warning("Invalid higher_tf_data type", type=type(higher_tf_data))
+            else:
+                valid_data = {}
+                for tf, tf_df in higher_tf_data.items():
+                    if not isinstance(tf_df, pd.DataFrame):
+                        logger.warning("Invalid DataFrame", timeframe=tf, type=type(tf_df))
+                        continue
+                    if len(tf_df) == 0:
+                        logger.warning("Empty DataFrame", timeframe=tf)
+                        continue
+                    if len(tf_df) < 52:  # Minimum for Ichimoku (26*2)
+                        logger.warning("Insufficient data", timeframe=tf, bars=len(tf_df))
+                        continue
+                    valid_data[tf] = tf_df
+
+                validated_higher_tf_data = valid_data if valid_data else None
+
+        # Build higher timeframe context section
+        higher_tf_context = None
+        if validated_higher_tf_data:
+            # Select up to 2 nearest higher timeframes
+            selected_tfs = get_higher_timeframes(timeframe, list(validated_higher_tf_data.keys()))
+
+            if selected_tfs:
+                summaries = []
+                for tf in selected_tfs:
+                    try:
+                        summary = summarize_timeframe(validated_higher_tf_data[tf], tf)
+                        summaries.append(summary)
+                    except Exception as e:
+                        logger.warning("Failed to summarize timeframe", timeframe=tf, error=str(e))
+                        continue
+
+                if summaries:
+                    # Build context text
+                    summary_lines = [s["text"] for s in summaries]
+                    confluence_result = compute_confluence(summaries)
+                    summary_lines.append(confluence_result["description"])
+                    higher_tf_context = "\n".join(summary_lines)
+
+                    logger.debug(
+                        "Higher TF context built",
+                        timeframes=selected_tfs,
+                        num_summaries=len(summaries),
+                    )
 
         # Calculate all indicators once
         indicators = compute_all_indicators(df, include_volume=True, include_structure=True)
@@ -885,6 +939,7 @@ class PromptBuilder:
                 macd_signal=macd_signal,
                 bb_position=bb_pos,
                 price_summary=price_summary,
+                higher_tf_context=higher_tf_context,
             )
 
         elif task.task_type == TaskType.ASSESS_MOMENTUM:
@@ -918,6 +973,7 @@ class PromptBuilder:
                 bb_width=current_bb_width,
                 bb_trend=bb_trend,
                 price_summary=price_summary,
+                higher_tf_context=higher_tf_context,
             )
 
         elif task.task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE:
@@ -945,6 +1001,7 @@ class PromptBuilder:
                 swing_highs=swing_highs_str,
                 swing_lows=swing_lows_str,
                 price_summary=price_summary,
+                higher_tf_context=higher_tf_context,
             )
 
         else:
@@ -956,6 +1013,7 @@ class PromptBuilder:
             symbol=symbol,
             timeframe=timeframe,
             prompt_length=len(prompt),
+            has_higher_tf=higher_tf_context is not None,
         )
 
         return prompt
