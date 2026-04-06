@@ -24,6 +24,14 @@ from execution.exceptions import (
     PositionLimitError,
     SignalRejectedError,
 )
+from execution.models import (
+    DailyStats,
+    OrderResult,
+    OrderStatus,
+    Position,
+    SignalInput,
+    TradeDecision,
+)
 from execution.position_sizing import PositionSizeResult, calculate_position_size
 from execution.state_manager import StateManager
 
@@ -42,4 +50,10 @@ __all__ = [
     "StateManager",
     "calculate_position_size",
     "PositionSizeResult",
+    "OrderResult",
+    "OrderStatus",
+    "Position",
+    "TradeDecision",
+    "DailyStats",
+    "SignalInput",
 ]
