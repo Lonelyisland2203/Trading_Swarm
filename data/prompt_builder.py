@@ -494,7 +494,7 @@ Symbol: {symbol}
 Timeframe: {timeframe}
 Current Price: ${current_price:.4f}
 Market Regime: {market_regime}
-{higher_tf_section}
+{higher_tf_section}{execution_context}
 ## Technical Indicators
 RSI(14): {rsi:.2f} (previous: {rsi_prev:.2f}, change: {rsi_delta:+.2f})
 MACD: {macd:.4f} (Signal: {macd_signal:.4f})
@@ -533,6 +533,7 @@ Respond in JSON format:
         price_summary: str,
         num_bars: int = 10,
         higher_tf_context: str | None = None,
+        execution_context: str = "",
     ) -> str:
         """Render momentum assessment prompt."""
         # Build higher timeframe section
@@ -557,6 +558,7 @@ Respond in JSON format:
             price_summary=price_summary,
             num_bars=num_bars,
             higher_tf_section=higher_tf_section,
+            execution_context=execution_context,
         )
 
 
@@ -573,7 +575,7 @@ Symbol: {symbol}
 Timeframe: {timeframe}
 Current Price: ${current_price:.4f}
 Market Regime: {market_regime}
-{higher_tf_section}
+{higher_tf_section}{execution_context}
 ## Price History (last 50 bars)
 High: ${price_high:.4f}
 Low: ${price_low:.4f}
@@ -617,6 +619,7 @@ Respond in JSON format:
         price_summary: str,
         num_bars: int = 10,
         higher_tf_context: str | None = None,
+        execution_context: str = "",
     ) -> str:
         """Render support/resistance prompt."""
         # Build higher timeframe section
@@ -637,6 +640,7 @@ Respond in JSON format:
             price_summary=price_summary,
             num_bars=num_bars,
             higher_tf_section=higher_tf_section,
+            execution_context=execution_context,
         )
 
 
@@ -1040,6 +1044,7 @@ Your prediction must account for these costs. Signals with expected moves smalle
                 bb_trend=bb_trend,
                 price_summary=price_summary,
                 higher_tf_context=higher_tf_context,
+                execution_context=execution_context,
             )
 
         elif task.task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE:
@@ -1068,6 +1073,7 @@ Your prediction must account for these costs. Signals with expected moves smalle
                 swing_lows=swing_lows_str,
                 price_summary=price_summary,
                 higher_tf_context=higher_tf_context,
+                execution_context=execution_context,
             )
 
         else:
