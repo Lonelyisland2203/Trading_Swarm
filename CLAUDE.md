@@ -16,11 +16,10 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 **Completed:**
 - Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
-- Session 11a: Realistic Fee Model (10 tasks)
+- Session 11a: Realistic Fee Model
+- Session 11b: Technical Indicator Expansion (17 indicators, 5 groups, compute_all_indicators aggregation)
 
-**In Progress:** Session 11b - Indicator Expansion (9/14 tasks)
-- Tasks 1-9 complete: Donchian, Ichimoku, KAMA, Volume (OBV/CMF/MFI/VWAP), ATR, Bollinger bandwidth, Keltner, TTM Squeeze, Crypto Stubs, Fair Value Gaps, Swing Points
-- Next: Task 10 (compute_all_indicators Part 1 - core calculation)
+**Next:** Session 12 - TBD (likely evaluation integration or production deployment)
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -28,14 +27,11 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ## Architecture Decisions
 
-### Indicator Expansion (Session 11b)
-- **Pattern:** All new indicators use `compute_` prefix with pd.Series parameters
-- **Volume indicators:** OBV (cumulative), CMF (-1 to +1), MFI (0-100), VWAP (price-weighted)
-- **Trend indicators:** Donchian (high/low/mid channels), Ichimoku (5 lines), KAMA (adaptive EMA)
-- **Volatility indicators:** ATR, Bollinger bandwidth (%), Keltner Channels, TTM Squeeze (boolean)
-- **Price action:** Fair Value Gaps (3-candle pattern), Swing Points (local extrema)
-- **Crypto stubs:** funding_rate(), open_interest() return None (placeholder)
-- **Test file:** `test_indicators_extended.py` (56 tests total)
+### Indicator System (Session 11b)
+- **17 indicators across 5 groups:** Momentum (Donchian, Ichimoku, KAMA), Volume (OBV, CMF, MFI, VWAP), Volatility (ATR, BB bandwidth, Keltner, historical vol), Structure (TTM Squeeze, FVG, Swing Points), Crypto (funding_rate, open_interest stubs)
+- **Pattern:** All indicators use `compute_` prefix with pd.Series parameters
+- **Aggregation:** `compute_all_indicators()` returns dict of all indicator values for PromptBuilder integration
+- **Test coverage:** 82 tests (19 original + 63 extended)
 
 ### Configuration Layer
 - Nested Pydantic settings with flat env var mapping
@@ -47,7 +43,6 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **FeeModelSettings:** Pydantic config with env var support (FEE_MODEL_*)
 - **Defaults:** maker 0.02%, taker 0.05%, 10% BNB discount, 0.01% funding/8h, 0.02% slippage
 - **Core API:** `round_trip_cost_pct()`, `net_return()`, `minimum_profitable_return_pct()`
-- **Verifier integration:** `apply_fee_model()` with exact log/pct conversions
 
 ### Data Layer
 - Async caching: diskcache wrapped in `asyncio.to_thread()`
@@ -75,13 +70,11 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ### DPO Pipeline (Session 10)
 - **5-Phase CLI:** Load -> Verify -> Reward -> Pairs -> Train
-- **Phase 3:** Reward computation per matched pair (fee-adjusted)
 - **CLI flags:** `--dataset` (required), `--output`, `--save-pairs`, `--dry-run`, `--min-delta`, `--force`
 
 ### Dataset Generation (Session 9)
 - **Scale:** 13,500 examples (10 symbols x 6 timeframes x 15 windows x 3 tasks x 5 personas)
 - **3-Phase Parallelization:** Phase 1 parallel data prep, Phase 2 sequential VRAM inference, Phase 3 parallel post-processing
-- **Task Types:** PREDICT_DIRECTION, ASSESS_MOMENTUM, IDENTIFY_SUPPORT_RESISTANCE
 
 ### Verifier Layer
 - Timeframe-adaptive horizons (1m->60 bars, 1h->24 bars, 1d->5 bars)
@@ -103,11 +96,11 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `config/fee_model.py` - FeeModelSettings for Binance Futures USDT-M fee calculations
 
 ### Data Layer
-- `data/indicators.py` - 16 technical indicators (RSI, MACD, BB, Donchian, Ichimoku, KAMA, OBV, CMF, MFI, VWAP, ATR, BB bandwidth, Keltner, TTM Squeeze, FVG, Swing Points)
+- `data/indicators.py` - 17 indicators + compute_all_indicators() aggregation (82 tests)
 - `data/cache_wrapper.py` - AsyncDiskCache with asyncio.to_thread()
 - `data/market_data.py` - CCXT client with context manager
 - `data/regime_filter.py` - RegimeClassifier with volatility percentiles
-- `data/prompt_builder.py` - Task sampling with isolated RNG
+- `data/prompt_builder.py` - Task sampling with isolated RNG, integrated with compute_all_indicators()
 - `data/historical_windows.py` - Window walking with completeness validation
 - `data/inference_queue.py` - Sequential job processor with JSONL streaming
 
@@ -147,15 +140,15 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `eval/` - config, metrics, engine
 
 ### Tests
-- `tests/test_config.py` - 40 tests (18 original + 22 FeeModelSettings)
+- `tests/test_config.py` - 40 tests
 - `tests/test_indicators.py` - 19 tests (original indicators)
-- `tests/test_indicators_extended.py` - 56 tests (Donchian 5 + Ichimoku 4 + KAMA 5 + Volume 12 + Volatility 10 + TTM 4 + Crypto 2 + FVG 3 + Swing 3 + compute_all 8)
+- `tests/test_indicators_extended.py` - 63 tests (extended indicators)
 - `tests/test_data_layer.py` - 21 tests
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
 - `tests/test_critic.py` - 22 tests
 - `tests/test_orchestrator.py` - 23 tests (5 pre-existing failures)
-- `tests/test_verifier/` - 77 tests (64 original + 13 fee model)
+- `tests/test_verifier/` - 77 tests
 - `tests/test_reward/` - 63 tests
 - `tests/test_eval/` - 49 tests
 - `tests/test_training/` - 71 tests + `test_dpo_pipeline.py` (23 tests)
@@ -190,5 +183,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 618 (613 passing, 5 pre-existing orchestrator failures)
+**Total Tests:** 489 passing (5 pre-existing orchestrator failures excluded)
 **Python Version:** 3.13.7
