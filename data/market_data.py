@@ -633,6 +633,80 @@ class MarketDataService:
         available_cols = [c for c in ['timestamp', 'open_interest', 'open_interest_value'] if c in df.columns]
         return df[available_cols]
 
+    async def get_market_context(
+        self,
+        symbol: str,
+        timeframe: str = '1h',
+        as_of: datetime | None = None,
+        limit: int = 100
+    ) -> dict:
+        """
+        Fetch unified market context including OHLCV, funding rates, and open interest.
+
+        Args:
+            symbol: Spot symbol (e.g., 'BTC/USDT')
+            timeframe: Candle timeframe for OHLCV and open interest
+            as_of: Point-in-time timestamp (filters all data)
+            limit: Maximum records to fetch
+
+        Returns:
+            Dict with keys:
+                - ohlcv_df: OHLCV DataFrame
+                - funding_rate: Most recent funding rate (float)
+                - funding_rate_history: Funding rate history DataFrame
+                - open_interest: Most recent open interest value (float or None)
+                - open_interest_change_pct: 24-hour change in open interest (float or None)
+        """
+        # Fetch OHLCV (always available)
+        if as_of is not None:
+            # Convert datetime to Unix ms if needed
+            if isinstance(as_of, datetime):
+                as_of_ms = int(as_of.timestamp() * 1000)
+            else:
+                as_of_ms = as_of
+            ohlcv_df = await self.get_ohlcv_as_of(symbol, timeframe, as_of_ms, limit)
+        else:
+            ohlcv_df = await self.fetch_ohlcv(symbol, timeframe, limit)
+
+        # Fetch funding rates (optional)
+        funding_df = await self.fetch_funding_rates(symbol, as_of=as_of, limit=limit)
+        if funding_df is not None and len(funding_df) > 0:
+            funding_rate = float(funding_df['funding_rate'].iloc[-1])
+            funding_rate_history = funding_df
+        else:
+            funding_rate = None
+            funding_rate_history = None
+
+        # Fetch open interest (optional)
+        oi_df = await self.fetch_open_interest(symbol, timeframe=timeframe, as_of=as_of, limit=limit)
+        if oi_df is not None and len(oi_df) > 0:
+            # Get most recent value
+            if 'open_interest_value' in oi_df.columns:
+                latest_oi = float(oi_df['open_interest_value'].iloc[-1])
+                # Calculate 24-hour change if enough data
+                if len(oi_df) >= 24:
+                    oi_24h_ago = float(oi_df['open_interest_value'].iloc[-24])
+                    oi_change_pct = ((latest_oi - oi_24h_ago) / oi_24h_ago) * 100
+                else:
+                    oi_change_pct = None
+            elif 'open_interest' in oi_df.columns:
+                latest_oi = float(oi_df['open_interest'].iloc[-1])
+                oi_change_pct = None  # Can't calculate value change from contract count
+            else:
+                latest_oi = None
+                oi_change_pct = None
+        else:
+            latest_oi = None
+            oi_change_pct = None
+
+        return {
+            'ohlcv_df': ohlcv_df,
+            'funding_rate': funding_rate,
+            'funding_rate_history': funding_rate_history,
+            'open_interest': latest_oi,
+            'open_interest_change_pct': oi_change_pct
+        }
+
     async def close(self):
         """Close connections and cache."""
         await self.exchange_client.close()

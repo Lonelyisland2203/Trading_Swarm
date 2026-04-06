@@ -1,6 +1,7 @@
 """Tests for derivatives data fetching (funding rates and open interest)."""
 import asyncio
 import pytest
+import pandas as pd
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from data.market_data import MarketDataService, ExchangeClient
@@ -481,3 +482,294 @@ class TestOpenInterestFetching:
         assert len(result) == 1
         # Should NOT call exchange since we got cache hit
         mock_exchange.fetch_open_interest_history.assert_not_called()
+
+
+class TestGetMarketContext:
+    """Test get_market_context() unified API."""
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_returns_all_data_types(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Returns dict with OHLCV, funding rates, and open interest."""
+        # Setup mocks for all data types
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        # Exchange supports all features
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': True
+        }
+
+        # Mock OHLCV response
+        mock_exchange.fetch_ohlcv.return_value = [
+            [1609459200000, 29000, 29500, 28800, 29200, 1000],
+        ]
+
+        # Mock funding rate response
+        mock_exchange.fetch_funding_rate_history.return_value = [
+            {'timestamp': 1609459200000, 'fundingRate': 0.0001},
+        ]
+
+        # Mock open interest response
+        mock_exchange.fetch_open_interest_history.return_value = [
+            {'timestamp': 1609459200000, 'openInterestValue': 1000000000},
+        ]
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+
+        # Mock OHLCV cache response (list of dicts format)
+        ohlcv_cache = [
+            {'timestamp': 1609459200000, 'open': 29000, 'high': 29500, 'low': 28800, 'close': 29200, 'volume': 1000}
+        ]
+
+        # Return perp mapping, then cache responses for all data
+        mock_cache_instance.get.side_effect = [
+            ohlcv_cache,  # OHLCV cache hit
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for funding rates
+            None,  # funding rates cache miss
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for open interest
+            None,  # open interest cache miss
+        ]
+
+        service = MarketDataService()
+
+        result = await service.get_market_context(
+            symbol='BTC/USDT',
+            timeframe='1h',
+            limit=100
+        )
+
+        # Should return dict with all components
+        assert 'ohlcv_df' in result
+        assert 'funding_rate' in result
+        assert 'funding_rate_history' in result
+        assert 'open_interest' in result
+        assert 'open_interest_change_pct' in result
+
+        # Verify data types
+        import pandas as pd
+        assert isinstance(result['ohlcv_df'], pd.DataFrame)
+        assert isinstance(result['funding_rate_history'], pd.DataFrame)
+        assert isinstance(result['funding_rate'], float)
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_spot_only_fallback(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Spot-only symbols return None for derivatives data."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        # Exchange supports derivatives but symbol has no perpetual
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': True
+        }
+
+        # Mock OHLCV cache response
+        ohlcv_cache = [
+            {'timestamp': 1609459200000, 'open': 29000, 'high': 29500, 'low': 28800, 'close': 29200, 'volume': 1000}
+        ]
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            ohlcv_cache,  # OHLCV cache hit
+            {},  # Empty perp mapping - no perpetual for this symbol (funding)
+            {},  # Empty perp mapping - no perpetual for this symbol (OI)
+        ]
+
+        service = MarketDataService()
+
+        result = await service.get_market_context(
+            symbol='UNKNOWN/USDT',
+            timeframe='1h',
+            limit=100
+        )
+
+        # OHLCV should be present
+        assert isinstance(result['ohlcv_df'], pd.DataFrame)
+
+        # Derivatives data should be None
+        assert result['funding_rate'] is None
+        assert result['funding_rate_history'] is None
+        assert result['open_interest'] is None
+        assert result['open_interest_change_pct'] is None
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_with_point_in_time(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Point-in-time filtering works across all data types."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': True
+        }
+
+        # Mock OHLCV fetch (for as_of case)
+        # Important: First bar should close BEFORE as_of, second bar AFTER
+        # For 1h timeframe, bar at 1609459200000 closes at 1609459200000 + 3600000 = 1609462800000
+        mock_exchange.fetch_ohlcv.return_value = [
+            [1609452000000, 28800, 29100, 28700, 29000, 900],   # Closes at 1609455600000 (before as_of)
+            [1609455600000, 29000, 29500, 28800, 29200, 1000],  # Closes at 1609459200000 (exactly at as_of)
+            [1609459200000, 29200, 29600, 29100, 29400, 1100],  # Closes at 1609462800000 (after as_of)
+        ]
+
+        # Mock funding rate cache with multiple timestamps
+        funding_cache = pd.DataFrame({
+            'timestamp': pd.to_datetime([1609455600000, 1609488000000], unit='ms', utc=True),
+            'funding_rate': [0.0001, 0.00015]
+        })
+
+        # Mock OI cache with multiple timestamps
+        oi_cache = pd.DataFrame({
+            'timestamp': pd.to_datetime([1609455600000, 1609488000000], unit='ms', utc=True),
+            'open_interest_value': [1000000000, 1050000000]
+        })
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            None,  # OHLCV cache miss
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for funding
+            funding_cache,  # funding rates cache hit
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for OI
+            oi_cache,  # OI cache hit
+        ]
+
+        service = MarketDataService()
+
+        # Filter to as_of = 1609459200000 (bars closing at or before this time)
+        as_of = pd.to_datetime(1609459200000, unit='ms', utc=True)
+        result = await service.get_market_context(
+            symbol='BTC/USDT',
+            timeframe='1h',
+            as_of=as_of,
+            limit=100
+        )
+
+        # Should have 2 OHLCV bars (closing at 1609455600000 and 1609459200000)
+        assert len(result['ohlcv_df']) == 2
+        # Should have 1 funding rate (at 1609455600000, second one is after as_of)
+        assert len(result['funding_rate_history']) == 1
+        assert result['funding_rate'] == 0.0001
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_partial_derivatives_data(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Handles case where only funding rates available, not open interest."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        # Exchange supports funding but not OI
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': False  # Not supported
+        }
+
+        # Mock OHLCV cache
+        ohlcv_cache = [
+            {'timestamp': 1609459200000, 'open': 29000, 'high': 29500, 'low': 28800, 'close': 29200, 'volume': 1000}
+        ]
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            ohlcv_cache,  # OHLCV cache hit
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for funding
+            None,  # funding cache miss
+        ]
+
+        mock_exchange.fetch_funding_rate_history.return_value = [
+            {'timestamp': 1609459200000, 'fundingRate': 0.0001}
+        ]
+
+        service = MarketDataService()
+
+        result = await service.get_market_context(
+            symbol='BTC/USDT',
+            timeframe='1h',
+            limit=100
+        )
+
+        # OHLCV and funding should be present
+        assert isinstance(result['ohlcv_df'], pd.DataFrame)
+        assert result['funding_rate'] == 0.0001
+
+        # Open interest should be None (not supported)
+        assert result['open_interest'] is None
+        assert result['open_interest_change_pct'] is None
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_calculates_oi_change(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Calculates 24-hour open interest change when sufficient data available."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': True
+        }
+
+        # Mock OHLCV cache
+        ohlcv_cache = [
+            {'timestamp': 1609459200000, 'open': 29000, 'high': 29500, 'low': 28800, 'close': 29200, 'volume': 1000}
+        ]
+
+        # Create OI data with 30 hourly records
+        # Index -1 (last) is most recent, index -24 is 24 hours ago
+        oi_timestamps = [1609459200000 + (i * 3600000) for i in range(30)]  # 30 hours
+        oi_values = [1000000000 + (i * 1000000) for i in range(30)]  # Increasing OI
+        oi_cache = pd.DataFrame({
+            'timestamp': pd.to_datetime(oi_timestamps, unit='ms', utc=True),
+            'open_interest_value': oi_values
+        })
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            ohlcv_cache,  # OHLCV cache hit
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for funding
+            None,  # funding cache miss (skip funding for this test)
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perp mapping for OI
+            oi_cache,  # OI cache hit
+        ]
+
+        service = MarketDataService()
+
+        result = await service.get_market_context(
+            symbol='BTC/USDT',
+            timeframe='1h',
+            limit=100
+        )
+
+        # Verify OI values
+        # Latest (index -1): 1000000000 + 29*1000000 = 1029000000
+        # 24h ago (iloc[-24] = index 6): 1000000000 + 6*1000000 = 1006000000
+        assert result['open_interest'] == 1029000000
+        assert result['open_interest_change_pct'] is not None
+
+        # Calculate expected change (iloc[-24] means 24th from end, which is index 6)
+        latest_oi = 1029000000
+        oi_24h_ago = 1006000000
+        expected_change = ((latest_oi - oi_24h_ago) / oi_24h_ago) * 100
+        assert abs(result['open_interest_change_pct'] - expected_change) < 0.01
