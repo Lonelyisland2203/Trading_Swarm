@@ -333,3 +333,151 @@ class TestFundingRateFetching:
         assert len(result) == 1
         # Should NOT call exchange since we got cache hit
         mock_exchange.fetch_funding_rate_history.assert_not_called()
+
+
+class TestOpenInterestFetching:
+    """Test open interest fetching with capability checking."""
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_open_interest_checks_capability(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Method checks exchange capability before fetching."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchOpenInterestHistory': False}
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = {'BTC/USDT': 'BTC/USDT:USDT'}
+
+        service = MarketDataService()
+
+        result = await service.fetch_open_interest('BTC/USDT', timeframe='1h')
+
+        # Should return None when capability not supported
+        assert result is None
+        mock_exchange.fetch_open_interest_history.assert_not_called()
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_open_interest_success(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Successful open interest fetch returns DataFrame."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchOpenInterestHistory': True}
+        mock_exchange.fetch_open_interest_history.return_value = [
+            {'timestamp': 1609459200000, 'openInterestValue': 1000000000, 'openInterest': 50000},
+            {'timestamp': 1609488000000, 'openInterestValue': 1050000000, 'openInterest': 51000},
+        ]
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perpetual mapping
+            None  # open interest cache miss
+        ]
+
+        service = MarketDataService()
+
+        result = await service.fetch_open_interest('BTC/USDT', timeframe='1h')
+
+        assert result is not None
+        assert len(result) == 2
+        assert 'timestamp' in result.columns
+        assert 'open_interest_value' in result.columns
+        assert 'open_interest' in result.columns
+        assert result['open_interest_value'].iloc[0] == 1000000000
+        assert result['open_interest'].iloc[0] == 50000
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_open_interest_applies_point_in_time_filter(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Point-in-time filter excludes future open interest data."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchOpenInterestHistory': True}
+
+        # Create mock DataFrame
+        import pandas as pd
+        from datetime import timezone
+        mock_df = pd.DataFrame({
+            'timestamp': pd.to_datetime([1609459200000, 1609488000000], unit='ms', utc=True),
+            'open_interest_value': [1000000000, 1050000000],
+            'open_interest': [50000, 51000]
+        })
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perpetual mapping
+            mock_df  # open interest cache hit
+        ]
+
+        service = MarketDataService()
+
+        # Filter to only include first timestamp
+        as_of = pd.to_datetime(1609459200000, unit='ms', utc=True)
+        result = await service.fetch_open_interest('BTC/USDT', timeframe='1h', as_of=as_of)
+
+        assert len(result) == 1
+        assert result['open_interest_value'].iloc[0] == 1000000000
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_open_interest_returns_none_for_missing_perpetual(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Returns None if no perpetual symbol found."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchOpenInterestHistory': True}
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = {}  # Empty mapping - no perpetual
+
+        service = MarketDataService()
+
+        result = await service.fetch_open_interest('UNKNOWN/USDT', timeframe='1h')
+
+        assert result is None
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_fetch_open_interest_uses_cache(
+        self, mock_cache, mock_exchange_class
+    ):
+        """Cached open interest data is returned without exchange call."""
+        mock_exchange = AsyncMock()
+        mock_exchange_class.return_value = mock_exchange
+        mock_exchange.exchange.has = {'fetchOpenInterestHistory': True}
+
+        # Create mock DataFrame
+        import pandas as pd
+        mock_df = pd.DataFrame({
+            'timestamp': pd.to_datetime([1609459200000], unit='ms', utc=True),
+            'open_interest_value': [1000000000],
+            'open_interest': [50000]
+        })
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.side_effect = [
+            {'BTC/USDT': 'BTC/USDT:USDT'},  # perpetual mapping
+            mock_df  # open interest cache hit
+        ]
+
+        service = MarketDataService()
+
+        result = await service.fetch_open_interest('BTC/USDT', timeframe='1h')
+
+        assert result is not None
+        assert len(result) == 1
+        # Should NOT call exchange since we got cache hit
+        mock_exchange.fetch_open_interest_history.assert_not_called()

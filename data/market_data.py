@@ -551,6 +551,88 @@ class MarketDataService:
 
         return df[['timestamp', 'funding_rate']]
 
+    async def fetch_open_interest(
+        self,
+        symbol: str,
+        timeframe: str = '1h',
+        as_of: datetime | None = None,
+        limit: int = 100
+    ) -> pd.DataFrame | None:
+        """
+        Fetch open interest history for a symbol with adaptive caching.
+
+        Args:
+            symbol: Spot symbol (e.g., 'BTC/USDT')
+            timeframe: Candle timeframe (e.g., '1h', '4h')
+            as_of: Point-in-time timestamp (filters results)
+            limit: Maximum records to fetch
+
+        Returns:
+            DataFrame with columns [timestamp, open_interest, open_interest_value] or None if unsupported
+        """
+        # Check exchange capability
+        if not self.exchange_client.exchange.has.get('fetchOpenInterestHistory', False):
+            logger.warning(
+                "Exchange does not support open interest history",
+                exchange=self.exchange_client.exchange_id
+            )
+            return None
+
+        # Get perpetual symbol
+        perp_symbol = await self._get_perpetual_symbol(symbol)
+        if perp_symbol is None:
+            logger.warning("No perpetual found for spot symbol", symbol=symbol)
+            return None
+
+        # Build cache key
+        cache_key = f"open_interest_{perp_symbol}_{timeframe}_{limit}"
+
+        # Try cache first
+        cached = await self.cache.get(cache_key)
+        if cached is not None:
+            df = cached
+        else:
+            # Fetch from exchange
+            try:
+                raw_data = await self.exchange_client.fetch_open_interest_history(
+                    perp_symbol,
+                    timeframe=timeframe,
+                    limit=limit
+                )
+            except DataUnavailableError as e:
+                logger.error("Failed to fetch open interest", symbol=symbol, error=str(e))
+                return None
+
+            # Convert to DataFrame
+            df = pd.DataFrame(raw_data)
+            if df.empty:
+                return None
+
+            # Standardize columns
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+
+            # Extract relevant columns (may have openInterestValue or openInterest)
+            if 'openInterestValue' in df.columns:
+                df = df.rename(columns={'openInterestValue': 'open_interest_value'})
+            if 'openInterest' in df.columns:
+                df = df.rename(columns={'openInterest': 'open_interest'})
+
+            # Determine TTL based on most recent data timestamp
+            most_recent = df['timestamp'].max()
+            now = datetime.now(timezone.utc)
+            ttl = self._compute_adaptive_ttl(most_recent, now)
+
+            # Cache result
+            await self.cache.set(cache_key, df, expire=ttl)
+
+        # Apply point-in-time filter if requested
+        if as_of is not None:
+            df = df[df['timestamp'] <= as_of]
+
+        # Return standardized columns
+        available_cols = [c for c in ['timestamp', 'open_interest', 'open_interest_value'] if c in df.columns]
+        return df[available_cols]
+
     async def close(self):
         """Close connections and cache."""
         await self.exchange_client.close()
