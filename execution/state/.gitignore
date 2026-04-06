@@ -1,0 +1,4 @@
+# Ignore all state files except this gitignore and gitkeep
+*
+!.gitignore
+!.gitkeep
