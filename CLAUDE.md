@@ -20,14 +20,23 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Session 11b: Technical Indicator Expansion (17 indicators, 5 groups, compute_all_indicators aggregation)
 - Session 12: Multi-Timeframe Context (4-indicator voting, confluence detection, optional higher_tf_data parameter)
 - Session 13: Derivatives Data Integration (funding rates, open interest, adaptive TTL caching, perpetual mapping)
+- Session 14: Fee-Aware DPO Training (execution context in prompts, net returns in rewards, fee model integration)
 
-**Next:** Session 14 - TBD
+**Next:** Session 15 - TBD
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
 - 4 tests in `test_process_lock.py` - Windows/fcntl platform incompatibility
 
 ## Architecture Decisions
+
+### Fee-Aware Training (Session 14)
+- **Teaching Pattern:** Execution context added to all three prompt templates (DirectionPredictionPrompt, MomentumAssessmentPrompt, SupportResistancePrompt)
+- **Execution Context Fields:** Exchange type, trading mode (Futures USDT-M/Spot), round-trip cost %, minimum profitable move %
+- **Enforcement:** RewardEngine switched from gross returns (realized_return) to net returns (net_return) for reward computation
+- **Net Return Impact:** Signals with positive gross but negative net returns now receive negative rewards, teaching model to account for trading costs
+- **Optional Integration:** PromptBuilder.build_prompt() accepts optional fee_model parameter - backward compatible when omitted
+- **Fee Model Calculation:** Uses compute_holding_periods_8h() for timeframe-adaptive fee estimation
 
 ### Derivatives Data (Session 13)
 - **Adaptive TTL:** Historical (>7d) = 24h, recent (1h-7d) = 2h, live (<1h) = 30min
@@ -65,6 +74,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Task sampling: Weighted by difficulty with isolated RNG
 - Historical windows: Configurable stride, >95% completeness threshold
 - Multi-timeframe context: Optional higher_tf_data parameter in PromptBuilder.build_prompt()
+- Fee-aware prompts: Optional fee_model parameter in PromptBuilder.build_prompt() adds execution context section
 
 ### Swarm Layer
 - VRAM Management: Semaphore + explicit unload between model switches
@@ -100,6 +110,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ### Reward Layer
 - Clipped linear reward bounded to [-1, 1] for stable DPO gradients
 - Three components: return (0.50), directional (0.30), MAE (0.20)
+- Net return enforcement: RewardEngine uses net_return (after fees) instead of realized_return (gross)
 
 ### Evaluation Layer
 - Spearman IC primary, BH-FDR correction for multiple hypothesis testing
@@ -162,6 +173,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_indicators_extended.py` - 63 tests (extended indicators)
 - `tests/test_data_layer.py` - 23 tests
 - `tests/test_prompt_builder_mtf.py` - 37 tests (multi-timeframe context)
+- `tests/test_prompt_builder_fee_context.py` - 7 tests (execution context in prompts)
 - `tests/test_market_data_derivatives.py` - 23 tests (adaptive TTL, perpetual mapping, derivatives fetching)
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
@@ -169,10 +181,12 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_orchestrator.py` - 23 tests (5 pre-existing failures)
 - `tests/test_verifier/` - 77 tests
 - `tests/test_reward/` - 63 tests
+- `tests/test_reward_net_returns.py` - 5 tests (net return enforcement in reward engine)
 - `tests/test_eval/` - 49 tests
 - `tests/test_training/` - 71 tests + `test_dpo_pipeline.py` (23 tests)
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
 - `tests/test_integration/test_fee_model_integration.py` - 6 tests
+- `tests/test_fee_aware_integration.py` - 11 tests (end-to-end fee-aware workflow)
 
 ## Known Issues & Gotchas
 
@@ -203,5 +217,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 701 passing (5 pre-existing orchestrator failures excluded)
+**Total Tests:** 738 passing (5 pre-existing orchestrator failures excluded)
 **Python Version:** 3.13.7
