@@ -290,14 +290,24 @@ class BinanceExecutionClient:
                 exchange_error=e,
             )
 
-    async def get_balance(self) -> dict:
+    async def get_balance(self, asset: str = "USDT") -> dict:
         """
         Fetch account balance.
 
+        Args:
+            asset: Asset symbol to fetch balance for (default: "USDT")
+                  Note: Currently returns full balance dict for all assets.
+                  Parameter included for API compatibility.
+
         Returns:
-            Balance dict with asset details
+            Balance dict with asset details for all assets
+
+        Raises:
+            OrderRejectedError: If balance fetch fails
         """
         try:
+            # Note: Parameter 'asset' is currently unused but maintained for API compatibility
+            # Future versions may filter to specific asset
             return await self.exchange.fetch_balance()
         except Exception as e:
             logger.error(f"Failed to fetch balance: {e}")
