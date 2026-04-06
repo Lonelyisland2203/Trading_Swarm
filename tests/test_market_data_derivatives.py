@@ -42,3 +42,85 @@ class TestAdaptiveTTL:
         ttl = service._compute_adaptive_ttl(live_timestamp, now)
 
         assert ttl == 1800  # 30 minutes in seconds
+
+
+class TestPerpetualMapping:
+    """Test spot to perpetual symbol mapping."""
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_load_perpetual_markets_caches_mapping(
+        self, mock_cache, mock_exchange
+    ):
+        """First call to load markets gets from API, subsequent calls use cache."""
+        # Mock load_markets response (synchronous method)
+        mock_exchange_instance = MagicMock()
+        mock_exchange.return_value = mock_exchange_instance
+        mock_exchange_instance.load_markets.return_value = {
+            'BTC/USDT': {'type': 'spot', 'symbol': 'BTC/USDT'},
+            'BTC/USDT:USDT': {'type': 'swap', 'symbol': 'BTC/USDT:USDT', 'settle': 'USDT'},
+            'ETH/USDT': {'type': 'spot', 'symbol': 'ETH/USDT'},
+            'ETH/USDT:USDT': {'type': 'swap', 'symbol': 'ETH/USDT:USDT', 'settle': 'USDT'},
+        }
+
+        # Mock cache get/set (synchronous methods called via asyncio.to_thread)
+        mock_cache_instance = MagicMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = None  # Not cached yet
+
+        service = MarketDataService()
+
+        # First call - should fetch from API
+        mapping = await service._load_perpetual_markets()
+
+        assert mapping == {
+            'BTC/USDT': 'BTC/USDT:USDT',
+            'ETH/USDT': 'ETH/USDT:USDT'
+        }
+        mock_exchange_instance.load_markets.assert_called_once()
+
+        # Should have cached the result
+        mock_cache_instance.set.assert_called_once()
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_perpetual_symbol_returns_perp_for_spot(
+        self, mock_cache, mock_exchange
+    ):
+        """Spot symbols are mapped to their perpetual equivalents."""
+        mock_exchange_instance = MagicMock()
+        mock_exchange.return_value = mock_exchange_instance
+
+        mock_cache_instance = MagicMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = {
+            'BTC/USDT': 'BTC/USDT:USDT',
+            'ETH/USDT': 'ETH/USDT:USDT'
+        }
+
+        service = MarketDataService()
+
+        perp_symbol = await service._get_perpetual_symbol('BTC/USDT')
+
+        assert perp_symbol == 'BTC/USDT:USDT'
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_perpetual_symbol_returns_none_if_no_mapping(
+        self, mock_cache, mock_exchange
+    ):
+        """Returns None if perpetual not found for spot symbol."""
+        mock_exchange_instance = MagicMock()
+        mock_exchange.return_value = mock_exchange_instance
+
+        mock_cache_instance = MagicMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = {
+            'BTC/USDT': 'BTC/USDT:USDT'
+        }
+
+        service = MarketDataService()
+
+        perp_symbol = await service._get_perpetual_symbol('UNKNOWN/USDT')
+
+        assert perp_symbol is None

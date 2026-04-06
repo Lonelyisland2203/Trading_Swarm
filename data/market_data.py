@@ -115,6 +115,15 @@ class ExchangeClient:
         # Binance: 1200 requests/minute = 20/second, use 15/sec to be conservative
         self.throttler = Throttler(rate_limit=15, period=1.0)
 
+    def load_markets(self) -> dict:
+        """
+        Load market metadata from exchange (synchronous).
+
+        Returns:
+            Dict mapping symbols to market metadata
+        """
+        return self.exchange.load_markets()
+
     async def fetch_ohlcv(
         self,
         symbol: str,
@@ -232,6 +241,57 @@ class MarketDataService:
             return 7200   # Recent: 2 hours
         else:
             return 1800   # Live: 30 minutes
+
+    async def _load_perpetual_markets(self) -> dict[str, str]:
+        """
+        Load spot->perpetual symbol mapping from exchange.
+
+        Returns:
+            Dict mapping spot symbols to perpetual symbols
+        """
+        cache_key = "perpetual_markets_mapping"
+
+        # Try cache first
+        cached = await asyncio.to_thread(self.cache.get, cache_key)
+        if cached is not None:
+            return cached
+
+        # Load markets from exchange
+        markets = await asyncio.to_thread(
+            self.exchange_client.load_markets
+        )
+
+        # Build spot -> perp mapping
+        mapping = {}
+        for symbol, market in markets.items():
+            if market.get('type') == 'swap' and market.get('settle') == 'USDT':
+                # Extract base symbol (BTC/USDT:USDT -> BTC/USDT)
+                base_symbol = symbol.split(':')[0]
+                if base_symbol != symbol:  # Ensure it's actually a perp
+                    mapping[base_symbol] = symbol
+
+        # Cache for 24 hours
+        await asyncio.to_thread(
+            self.cache.set,
+            cache_key,
+            mapping,
+            expire=86400
+        )
+
+        return mapping
+
+    async def _get_perpetual_symbol(self, spot_symbol: str) -> str | None:
+        """
+        Get perpetual symbol for a spot symbol.
+
+        Args:
+            spot_symbol: Spot symbol (e.g., 'BTC/USDT')
+
+        Returns:
+            Perpetual symbol (e.g., 'BTC/USDT:USDT') or None if not found
+        """
+        mapping = await self._load_perpetual_markets()
+        return mapping.get(spot_symbol)
 
     async def fetch_ohlcv(
         self,
