@@ -250,6 +250,78 @@ def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
     }
 
 
+def compute_confluence(summaries: list[dict]) -> dict:
+    """
+    Analyze trend alignment across multiple timeframes.
+
+    Args:
+        summaries: List of timeframe summaries from summarize_timeframe()
+
+    Returns:
+        Dict with structure:
+        {
+            "status": "aligned" | "mixed" | "conflicting",
+            "description": str (human-readable confluence description),
+            "aligned_count": int (number of timeframes contributing to alignment)
+        }
+
+    Examples:
+        >>> summaries = [{"trend": "bullish"}, {"trend": "bullish"}]
+        >>> compute_confluence(summaries)
+        {"status": "aligned", "description": "Confluence: Aligned with higher timeframes (bullish)", "aligned_count": 2}
+    """
+    if not summaries:
+        return {
+            "status": "aligned",
+            "description": "Confluence: No higher timeframe data",
+            "aligned_count": 0,
+        }
+
+    trends = [s["trend"] for s in summaries]
+
+    # Count trend types
+    bullish_count = trends.count("bullish")
+    bearish_count = trends.count("bearish")
+    neutral_count = trends.count("neutral")
+
+    total = len(trends)
+
+    # All same trend -> aligned
+    if bullish_count == total:
+        return {
+            "status": "aligned",
+            "description": "Confluence: Aligned with higher timeframes (bullish)",
+            "aligned_count": total,
+        }
+    elif bearish_count == total:
+        return {
+            "status": "aligned",
+            "description": "Confluence: Aligned with higher timeframes (bearish)",
+            "aligned_count": total,
+        }
+    elif neutral_count == total:
+        return {
+            "status": "aligned",
+            "description": "Confluence: Higher timeframes neutral",
+            "aligned_count": total,
+        }
+
+    # Opposite trends (bullish vs bearish) -> conflicting
+    if bullish_count > 0 and bearish_count > 0:
+        return {
+            "status": "conflicting",
+            "description": "Confluence: Conflicting signals across timeframes (bullish vs bearish)",
+            "aligned_count": 0,
+        }
+
+    # Mixed signals (includes neutral with other trends)
+    return {
+        "status": "mixed",
+        "description": "Confluence: Mixed signals across timeframes",
+        "aligned_count": max(bullish_count, bearish_count, neutral_count),
+    }
+
+
 class TaskType(Enum):
     """Training task types for signal generation."""
 

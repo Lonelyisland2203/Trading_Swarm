@@ -239,3 +239,99 @@ class TestSummarizeTimeframe:
 
         # With strong bullish trend, expect high confidence (>= 0.75 means 3+ indicators agree)
         assert result["confidence"] >= 0.75, f"Expected high confidence (>=0.75) for bullish setup, got {result['confidence']}"
+
+
+class TestComputeConfluence:
+    """Test multi-timeframe confluence detection."""
+
+    def test_aligned_bullish(self):
+        """All bullish trends should show aligned."""
+        from data.prompt_builder import compute_confluence
+
+        summaries = [
+            {"trend": "bullish", "timeframe": "4h"},
+            {"trend": "bullish", "timeframe": "1d"},
+        ]
+        result = compute_confluence(summaries)
+
+        assert isinstance(result, dict), "Should return a dict"
+        assert "status" in result, "Result must include 'status' field"
+        assert "description" in result, "Result must include 'description' field"
+        assert "aligned_count" in result, "Result must include 'aligned_count' field"
+
+        assert result["status"] == "aligned", f"Status should be 'aligned', got {result['status']}"
+        assert "bullish" in result["description"].lower()
+
+    def test_aligned_bearish(self):
+        """All bearish trends should show aligned."""
+        from data.prompt_builder import compute_confluence
+
+        summaries = [
+            {"trend": "bearish", "timeframe": "4h"},
+            {"trend": "bearish", "timeframe": "1d"},
+        ]
+        result = compute_confluence(summaries)
+
+        assert result["status"] == "aligned"
+        assert "bearish" in result["description"].lower()
+
+    def test_aligned_neutral(self):
+        """All neutral trends should show aligned."""
+        from data.prompt_builder import compute_confluence
+
+        summaries = [
+            {"trend": "neutral", "timeframe": "4h"},
+            {"trend": "neutral", "timeframe": "1d"},
+        ]
+        result = compute_confluence(summaries)
+
+        assert result["status"] == "aligned"
+        assert "neutral" in result["description"].lower()
+
+    def test_mixed_signals(self):
+        """Mixed bullish/bearish should show mixed."""
+        from data.prompt_builder import compute_confluence
+
+        summaries = [
+            {"trend": "bullish", "timeframe": "4h"},
+            {"trend": "bearish", "timeframe": "1d"},
+        ]
+        result = compute_confluence(summaries)
+
+        assert result["status"] == "conflicting"
+
+    def test_mixed_with_neutral(self):
+        """Bullish + neutral should show mixed."""
+        from data.prompt_builder import compute_confluence
+
+        summaries = [
+            {"trend": "bullish", "timeframe": "4h"},
+            {"trend": "neutral", "timeframe": "1d"},
+        ]
+        result = compute_confluence(summaries)
+
+        assert result["status"] == "mixed"
+
+    def test_single_timeframe(self):
+        """Single higher TF should still generate confluence text."""
+        from data.prompt_builder import compute_confluence
+
+        summaries = [
+            {"trend": "bullish", "timeframe": "4h"},
+        ]
+        result = compute_confluence(summaries)
+
+        assert result["status"] == "aligned"
+        assert "bullish" in result["description"].lower()
+        assert result["aligned_count"] == 1
+
+    def test_empty_summaries(self):
+        """Empty list should return neutral message."""
+        from data.prompt_builder import compute_confluence
+
+        result = compute_confluence([])
+
+        assert isinstance(result, dict)
+        assert "status" in result
+        # Empty case should indicate no data
+        assert result["status"] in ["aligned", "neutral"] or "no" in result["description"].lower()
