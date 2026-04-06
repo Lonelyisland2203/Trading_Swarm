@@ -63,10 +63,11 @@ class TestPerpetualMapping:
             'ETH/USDT:USDT': {'type': 'swap', 'symbol': 'ETH/USDT:USDT', 'settle': 'USDT'},
         }
 
-        # Mock cache get/set (synchronous methods called via asyncio.to_thread)
+        # Mock cache get/set (async methods)
         mock_cache_instance = MagicMock()
         mock_cache.return_value = mock_cache_instance
-        mock_cache_instance.get.return_value = None  # Not cached yet
+        mock_cache_instance.get = AsyncMock(return_value=None)  # Not cached yet
+        mock_cache_instance.set = AsyncMock()
 
         service = MarketDataService()
 
@@ -93,10 +94,10 @@ class TestPerpetualMapping:
 
         mock_cache_instance = MagicMock()
         mock_cache.return_value = mock_cache_instance
-        mock_cache_instance.get.return_value = {
+        mock_cache_instance.get = AsyncMock(return_value={
             'BTC/USDT': 'BTC/USDT:USDT',
             'ETH/USDT': 'ETH/USDT:USDT'
-        }
+        })
 
         service = MarketDataService()
 
@@ -115,9 +116,9 @@ class TestPerpetualMapping:
 
         mock_cache_instance = MagicMock()
         mock_cache.return_value = mock_cache_instance
-        mock_cache_instance.get.return_value = {
+        mock_cache_instance.get = AsyncMock(return_value={
             'BTC/USDT': 'BTC/USDT:USDT'
-        }
+        })
 
         service = MarketDataService()
 

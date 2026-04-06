@@ -252,7 +252,7 @@ class MarketDataService:
         cache_key = "perpetual_markets_mapping"
 
         # Try cache first
-        cached = await asyncio.to_thread(self.cache.get, cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -271,8 +271,7 @@ class MarketDataService:
                     mapping[base_symbol] = symbol
 
         # Cache for 24 hours
-        await asyncio.to_thread(
-            self.cache.set,
+        await self.cache.set(
             cache_key,
             mapping,
             expire=86400
