@@ -215,6 +215,11 @@ def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
     # Determine trend by majority vote
     trend = max(votes, key=votes.get)
 
+    # Calculate confidence: percentage agreement of the 4 indicators
+    # (highest_vote_count / 4) * 100 as a fraction (0.0-1.0)
+    highest_vote_count = max(votes.values())
+    confidence = highest_vote_count / 4.0
+
     # 6. Generate Text Summary
     trend_label = trend.capitalize()
     cloud_text = f"{cloud_position} cloud"
@@ -240,6 +245,7 @@ def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
         "donchian_position": donchian_position,
         "rsi_zone": rsi_zone,
         "rsi_value": rsi,
+        "confidence": confidence,
         "text": text,
     }
 

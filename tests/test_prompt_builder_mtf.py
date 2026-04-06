@@ -224,3 +224,18 @@ class TestSummarizeTimeframe:
         assert result["timeframe"] == "1h"
         assert "trend" in result
         assert "text" in result
+
+    def test_confidence_calculation(self):
+        """Confidence should reflect % agreement among 4 indicators."""
+        from data.prompt_builder import summarize_timeframe
+
+        # Create scenario where all 4 indicators agree (bullish)
+        df_strong = create_test_df_bullish(bars=100)
+        result = summarize_timeframe(df_strong, "4h")
+
+        # Confidence should be present and a fraction (0.0-1.0)
+        assert "confidence" in result, "Result must include 'confidence' field"
+        assert 0.0 <= result["confidence"] <= 1.0, f"Confidence must be between 0.0-1.0, got {result['confidence']}"
+
+        # With strong bullish trend, expect high confidence (>= 0.75 means 3+ indicators agree)
+        assert result["confidence"] >= 0.75, f"Expected high confidence (>=0.75) for bullish setup, got {result['confidence']}"
