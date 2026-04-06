@@ -22,6 +22,9 @@ _task_rng = random.Random()
 # Timeframe hierarchy for multi-timeframe analysis
 TIMEFRAME_HIERARCHY = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
+# Small number threshold for numerical comparisons
+EPSILON = 1e-8
+
 
 def get_higher_timeframes(current_tf: str, available_tfs: list[str]) -> list[str]:
     """
@@ -56,6 +59,189 @@ def get_higher_timeframes(current_tf: str, available_tfs: list[str]) -> list[str
 
     # Return up to 2 nearest
     return higher_tfs[:2]
+
+
+def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
+    """
+    Generate trend summary for a timeframe from OHLCV data.
+
+    Extracts indicators and classifies trend direction based on:
+    - Ichimoku cloud position (above/below/inside)
+    - KAMA slope (rising/falling/flat)
+    - Donchian channel position (upper/lower/middle)
+    - RSI zone (overbought/oversold/neutral)
+
+    Args:
+        df: OHLCV DataFrame with sufficient history (50+ bars recommended)
+        timeframe: Timeframe label (e.g., "4h", "1d")
+
+    Returns:
+        Dict with structure:
+        {
+            "timeframe": str,
+            "trend": "bullish" | "bearish" | "neutral",
+            "cloud_position": "above" | "below" | "inside",
+            "kama_slope": "rising" | "falling" | "flat",
+            "donchian_position": "upper" | "lower" | "middle",
+            "rsi_zone": "overbought" | "oversold" | "neutral",
+            "rsi_value": float,
+            "text": str (human-readable summary)
+        }
+
+    Examples:
+        >>> df = create_test_df_bullish()
+        >>> summarize_timeframe(df, "4h")
+        {"timeframe": "4h", "trend": "bullish", ...}
+    """
+    # Compute all indicators
+    indicators = compute_all_indicators(df, include_volume=False, include_structure=False)
+
+    current_price = float(df["close"].iloc[-1])
+
+    # 1. Ichimoku Cloud Position (using Ichimoku components)
+    # Compute Ichimoku components if not already in indicators
+    from .indicators import compute_ichimoku_cloud
+    ichimoku = compute_ichimoku_cloud(df["high"], df["low"], df["close"])
+
+    senkou_span_a = ichimoku.get("senkou_span_a")
+    senkou_span_b = ichimoku.get("senkou_span_b")
+
+    if senkou_span_a is None or senkou_span_b is None:
+        cloud_position = "inside"
+    else:
+        cloud_top = float(max(senkou_span_a.iloc[-1], senkou_span_b.iloc[-1]))
+        cloud_bottom = float(min(senkou_span_a.iloc[-1], senkou_span_b.iloc[-1]))
+
+        if pd.isna(cloud_top) or pd.isna(cloud_bottom):
+            cloud_position = "inside"
+        elif current_price > cloud_top:
+            cloud_position = "above"
+        elif current_price < cloud_bottom:
+            cloud_position = "below"
+        else:
+            cloud_position = "inside"
+
+    # 2. KAMA Slope
+    kama_series = indicators["series"].get("kama")
+    if kama_series is None or len(kama_series) < 6:
+        kama_slope = "flat"
+    else:
+        kama_current = kama_series.iloc[-1]
+        kama_prev = kama_series.iloc[-6]  # 5-bar lookback
+
+        if pd.isna(kama_current) or pd.isna(kama_prev):
+            kama_slope = "flat"
+        else:
+            slope_pct = ((kama_current - kama_prev) / kama_prev) * 100
+            threshold = 0.1  # 0.1% threshold
+
+            if slope_pct > threshold:
+                kama_slope = "rising"
+            elif slope_pct < -threshold:
+                kama_slope = "falling"
+            else:
+                kama_slope = "flat"
+
+    # 3. Donchian Channel Position
+    donchian_upper = indicators.get("donchian_upper")
+    donchian_lower = indicators.get("donchian_lower")
+
+    if (donchian_upper is None or donchian_lower is None or
+        pd.isna(donchian_upper) or pd.isna(donchian_lower)):
+        donchian_position = "middle"
+    else:
+        channel_range = donchian_upper - donchian_lower
+        if channel_range < EPSILON:
+            donchian_position = "middle"
+        else:
+            position_pct = (current_price - donchian_lower) / channel_range
+
+            if position_pct > 0.65:
+                donchian_position = "upper"
+            elif position_pct < 0.35:
+                donchian_position = "lower"
+            else:
+                donchian_position = "middle"
+
+    # 4. RSI Zone
+    rsi = indicators.get("rsi")
+    if rsi is None or pd.isna(rsi):
+        rsi = 50.0
+        rsi_zone = "neutral"
+    else:
+        rsi = float(rsi)
+        if rsi > 70:
+            rsi_zone = "overbought"
+        elif rsi < 30:
+            rsi_zone = "oversold"
+        else:
+            rsi_zone = "neutral"
+
+    # 5. Overall Trend Classification (4-indicator majority vote)
+    votes = {"bullish": 0, "bearish": 0, "neutral": 0}
+
+    # Ichimoku cloud vote
+    if cloud_position == "above":
+        votes["bullish"] += 1
+    elif cloud_position == "below":
+        votes["bearish"] += 1
+    else:
+        votes["neutral"] += 1
+
+    # KAMA slope vote
+    if kama_slope == "rising":
+        votes["bullish"] += 1
+    elif kama_slope == "falling":
+        votes["bearish"] += 1
+    else:
+        votes["neutral"] += 1
+
+    # Donchian position vote
+    if donchian_position == "upper":
+        votes["bullish"] += 1
+    elif donchian_position == "lower":
+        votes["bearish"] += 1
+    else:
+        votes["neutral"] += 1
+
+    # RSI zone vote
+    if rsi_zone == "overbought":
+        votes["bullish"] += 1
+    elif rsi_zone == "oversold":
+        votes["bearish"] += 1
+    else:
+        votes["neutral"] += 1
+
+    # Determine trend by majority vote
+    trend = max(votes, key=votes.get)
+
+    # 6. Generate Text Summary
+    trend_label = trend.capitalize()
+    cloud_text = f"{cloud_position} cloud"
+    kama_text = f"KAMA {kama_slope}"
+    donchian_text = f"near Donchian {donchian_position}" if donchian_position != "middle" else "middle of Donchian"
+    rsi_text = f"RSI {rsi:.0f} ({rsi_zone})"
+
+    text = f"{timeframe}: {trend_label} ({cloud_text}, {kama_text}), {donchian_text}, {rsi_text}"
+
+    logger.debug(
+        "Timeframe summary",
+        timeframe=timeframe,
+        trend=trend,
+        cloud_position=cloud_position,
+        kama_slope=kama_slope,
+    )
+
+    return {
+        "timeframe": timeframe,
+        "trend": trend,
+        "cloud_position": cloud_position,
+        "kama_slope": kama_slope,
+        "donchian_position": donchian_position,
+        "rsi_zone": rsi_zone,
+        "rsi_value": rsi,
+        "text": text,
+    }
 
 
 class TaskType(Enum):
