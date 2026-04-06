@@ -23,6 +23,7 @@ from execution.exceptions import (
     PositionLimitError,
     SignalRejectedError,
 )
+from execution.state_manager import StateManager
 
 __all__ = [
     "ExecutionError",
@@ -35,4 +36,5 @@ __all__ = [
     "LiveTradingNotAllowedError",
     "OrderRejectedError",
     "SignalRejectedError",
+    "StateManager",
 ]
