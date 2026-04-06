@@ -12,7 +12,7 @@ from typing import Protocol
 import pandas as pd
 from loguru import logger
 
-from .indicators import compute_rsi, compute_macd, compute_bb_position
+from .indicators import compute_all_indicators, compute_bb_position
 from .regime_filter import MarketRegime
 import numpy as np
 
@@ -534,14 +534,15 @@ class PromptBuilder:
         if template is None:
             raise ValueError(f"No template for task type: {task.task_type}")
 
-        # Calculate common indicators
-        rsi_series = compute_rsi(df["close"])
-        rsi = rsi_series.iloc[-1] if not pd.isna(rsi_series.iloc[-1]) else 50.0
+        # Calculate all indicators once
+        indicators = compute_all_indicators(df, include_volume=True, include_structure=True)
 
-        macd_line, macd_signal_series, _ = compute_macd(df["close"])
-        macd = macd_line.iloc[-1] if not pd.isna(macd_line.iloc[-1]) else 0.0
-        macd_signal = macd_signal_series.iloc[-1] if not pd.isna(macd_signal_series.iloc[-1]) else 0.0
+        # Access scalars directly
+        rsi = indicators['rsi'] if indicators['rsi'] is not None else 50.0
+        macd = indicators['macd_line'] if indicators['macd_line'] is not None else 0.0
+        macd_signal = indicators['macd_signal'] if indicators['macd_signal'] is not None else 0.0
 
+        # BB position not yet in compute_all_indicators, compute separately
         bb_pos = compute_bb_position(df["close"]).iloc[-1]
         bb_pos = bb_pos if not pd.isna(bb_pos) else 0.5
 
@@ -564,7 +565,10 @@ class PromptBuilder:
             )
 
         elif task.task_type == TaskType.ASSESS_MOMENTUM:
-            # Calculate momentum-specific indicators
+            # Calculate momentum-specific indicators using series from indicators
+            rsi_series = indicators['series']['rsi']
+            macd_line = indicators['series']['macd_line']
+
             rsi_prev = rsi_series.iloc[-2] if len(rsi_series) > 1 and not pd.isna(rsi_series.iloc[-2]) else rsi
             rsi_delta = rsi - rsi_prev
 
