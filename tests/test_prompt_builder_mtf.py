@@ -4,6 +4,11 @@ import pandas as pd
 import pytest
 
 from data.prompt_builder import get_higher_timeframes, TIMEFRAME_HIERARCHY
+from tests.fixtures.timeframe_fixtures import (
+    create_test_df_bullish,
+    create_test_df_bearish,
+    create_test_df_neutral,
+)
 
 
 class TestGetHigherTimeframes:
@@ -38,3 +43,62 @@ class TestGetHigherTimeframes:
         """Should return timeframes in hierarchy order."""
         result = get_higher_timeframes("5m", ["1d", "4h", "1h", "15m"])
         assert result == ["15m", "1h"]  # Nearest 2 in order
+
+
+class TestTimeframeFixtures:
+    """Verify test fixtures produce expected indicator patterns."""
+
+    def test_bullish_fixture_has_bullish_indicators(self):
+        """Bullish fixture should produce bullish indicator values."""
+        from data.indicators import compute_all_indicators
+
+        df = create_test_df_bullish()
+        indicators = compute_all_indicators(df, include_volume=False, include_structure=False)
+
+        # Price should be above Donchian middle (uptrend characteristic)
+        close_price = df["close"].iloc[-1]
+        donchian_middle = indicators["donchian_middle"]
+        assert close_price > donchian_middle
+
+        # KAMA should be rising
+        kama = indicators["series"]["kama"]
+        assert kama.iloc[-1] > kama.iloc[-5]
+
+        # RSI should be in neutral-to-bullish range
+        assert 50 <= indicators["rsi"] <= 80
+
+    def test_bearish_fixture_has_bearish_indicators(self):
+        """Bearish fixture should produce bearish indicator values."""
+        from data.indicators import compute_all_indicators
+
+        df = create_test_df_bearish()
+        indicators = compute_all_indicators(df, include_volume=False, include_structure=False)
+
+        # Price should be below Donchian middle (downtrend characteristic)
+        close_price = df["close"].iloc[-1]
+        donchian_middle = indicators["donchian_middle"]
+        assert close_price < donchian_middle
+
+        # KAMA should be falling
+        kama = indicators["series"]["kama"]
+        assert kama.iloc[-1] < kama.iloc[-5]
+
+        # RSI should be in neutral-to-bearish range
+        assert 20 <= indicators["rsi"] <= 50
+
+    def test_neutral_fixture_has_neutral_indicators(self):
+        """Neutral fixture should produce neutral indicator values."""
+        from data.indicators import compute_all_indicators
+
+        df = create_test_df_neutral()
+        indicators = compute_all_indicators(df, include_volume=False, include_structure=False)
+
+        # Price should be near Donchian middle (sideways characteristic)
+        price = df["close"].iloc[-1]
+        donchian_middle = indicators["donchian_middle"]
+        # Allow +/- 2% deviation from middle for neutral
+        tolerance = donchian_middle * 0.02
+        assert abs(price - donchian_middle) < tolerance
+
+        # RSI should be near 50
+        assert 45 <= indicators["rsi"] <= 55
