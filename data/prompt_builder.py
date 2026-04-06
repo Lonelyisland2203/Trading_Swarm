@@ -423,7 +423,7 @@ Symbol: {symbol}
 Timeframe: {timeframe}
 Current Price: ${current_price:.4f}
 Market Regime: {market_regime}
-
+{higher_tf_section}
 ## Technical Indicators
 RSI(14): {rsi:.2f}
 MACD: {macd:.4f} (Signal: {macd_signal:.4f})
@@ -452,8 +452,14 @@ Respond in JSON format:
         price_summary: str,
         horizon: int = 5,
         num_bars: int = 10,
+        higher_tf_context: str | None = None,
     ) -> str:
         """Render direction prediction prompt."""
+        # Build higher timeframe section
+        higher_tf_section = ""
+        if higher_tf_context:
+            higher_tf_section = f"\n## Higher Timeframe Context\n{higher_tf_context}\n"
+
         return self.TEMPLATE.format(
             symbol=symbol,
             timeframe=timeframe,
@@ -466,6 +472,7 @@ Respond in JSON format:
             price_summary=price_summary,
             horizon=horizon,
             num_bars=num_bars,
+            higher_tf_section=higher_tf_section,
         )
 
 
@@ -482,7 +489,7 @@ Symbol: {symbol}
 Timeframe: {timeframe}
 Current Price: ${current_price:.4f}
 Market Regime: {market_regime}
-
+{higher_tf_section}
 ## Technical Indicators
 RSI(14): {rsi:.2f} (previous: {rsi_prev:.2f}, change: {rsi_delta:+.2f})
 MACD: {macd:.4f} (Signal: {macd_signal:.4f})
@@ -520,8 +527,14 @@ Respond in JSON format:
         bb_trend: str,
         price_summary: str,
         num_bars: int = 10,
+        higher_tf_context: str | None = None,
     ) -> str:
         """Render momentum assessment prompt."""
+        # Build higher timeframe section
+        higher_tf_section = ""
+        if higher_tf_context:
+            higher_tf_section = f"\n## Higher Timeframe Context\n{higher_tf_context}\n"
+
         return self.TEMPLATE.format(
             symbol=symbol,
             timeframe=timeframe,
@@ -538,6 +551,7 @@ Respond in JSON format:
             bb_trend=bb_trend,
             price_summary=price_summary,
             num_bars=num_bars,
+            higher_tf_section=higher_tf_section,
         )
 
 
@@ -554,7 +568,7 @@ Symbol: {symbol}
 Timeframe: {timeframe}
 Current Price: ${current_price:.4f}
 Market Regime: {market_regime}
-
+{higher_tf_section}
 ## Price History (last 50 bars)
 High: ${price_high:.4f}
 Low: ${price_low:.4f}
@@ -597,8 +611,14 @@ Respond in JSON format:
         swing_lows: str,
         price_summary: str,
         num_bars: int = 10,
+        higher_tf_context: str | None = None,
     ) -> str:
         """Render support/resistance prompt."""
+        # Build higher timeframe section
+        higher_tf_section = ""
+        if higher_tf_context:
+            higher_tf_section = f"\n## Higher Timeframe Context\n{higher_tf_context}\n"
+
         return self.TEMPLATE.format(
             symbol=symbol,
             timeframe=timeframe,
@@ -611,6 +631,7 @@ Respond in JSON format:
             swing_lows=swing_lows,
             price_summary=price_summary,
             num_bars=num_bars,
+            higher_tf_section=higher_tf_section,
         )
 
 

@@ -335,3 +335,104 @@ class TestComputeConfluence:
         assert "status" in result
         # Empty case should indicate no data
         assert result["status"] in ["aligned", "neutral"] or "no" in result["description"].lower()
+
+
+class TestTemplateIntegration:
+    """Test higher timeframe context in prompt templates."""
+
+    def test_direction_template_includes_higher_tf_section(self):
+        """DirectionPredictionPrompt should include higher TF section when provided."""
+        from data.prompt_builder import DirectionPredictionPrompt
+
+        template = DirectionPredictionPrompt()
+        higher_tf_context = "4h: Bullish\n1d: Bullish\nConfluence: Aligned"
+
+        prompt = template.render(
+            symbol="BTC/USDT",
+            timeframe="1h",
+            current_price=50000.0,
+            market_regime="neutral",
+            rsi=55.0,
+            macd=100.0,
+            macd_signal=95.0,
+            bb_position=0.6,
+            price_summary="...",
+            higher_tf_context=higher_tf_context,
+        )
+
+        assert "## Higher Timeframe Context" in prompt
+        assert "4h: Bullish" in prompt
+        assert "Confluence: Aligned" in prompt
+
+    def test_direction_template_omits_section_when_none(self):
+        """DirectionPredictionPrompt should omit section when higher_tf_context=None."""
+        from data.prompt_builder import DirectionPredictionPrompt
+
+        template = DirectionPredictionPrompt()
+
+        prompt = template.render(
+            symbol="BTC/USDT",
+            timeframe="1h",
+            current_price=50000.0,
+            market_regime="neutral",
+            rsi=55.0,
+            macd=100.0,
+            macd_signal=95.0,
+            bb_position=0.6,
+            price_summary="...",
+            higher_tf_context=None,
+        )
+
+        assert "## Higher Timeframe Context" not in prompt
+
+    def test_momentum_template_includes_higher_tf_section(self):
+        """MomentumAssessmentPrompt should include higher TF section."""
+        from data.prompt_builder import MomentumAssessmentPrompt
+
+        template = MomentumAssessmentPrompt()
+        higher_tf_context = "4h: Bearish\nConfluence: Conflicting"
+
+        prompt = template.render(
+            symbol="BTC/USDT",
+            timeframe="1h",
+            current_price=50000.0,
+            market_regime="neutral",
+            rsi=45.0,
+            rsi_prev=50.0,
+            rsi_delta=-5.0,
+            macd=100.0,
+            macd_signal=105.0,
+            macd_prev=110.0,
+            macd_delta=-10.0,
+            bb_width=0.05,
+            bb_trend="contracting",
+            price_summary="...",
+            higher_tf_context=higher_tf_context,
+        )
+
+        assert "## Higher Timeframe Context" in prompt
+        assert "Bearish" in prompt
+
+    def test_support_resistance_template_includes_higher_tf_section(self):
+        """SupportResistancePrompt should include higher TF section."""
+        from data.prompt_builder import SupportResistancePrompt
+
+        template = SupportResistancePrompt()
+        higher_tf_context = "1d: Neutral\nConfluence: Mixed"
+
+        prompt = template.render(
+            symbol="BTC/USDT",
+            timeframe="4h",
+            current_price=50000.0,
+            market_regime="neutral",
+            price_high=51000.0,
+            price_low=49000.0,
+            price_range=2000.0,
+            swing_highs="$50500, $50800",
+            swing_lows="$49200, $49500",
+            price_summary="...",
+            higher_tf_context=higher_tf_context,
+        )
+
+        assert "## Higher Timeframe Context" in prompt
+        assert "Neutral" in prompt
