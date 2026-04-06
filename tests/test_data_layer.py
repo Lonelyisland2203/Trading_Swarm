@@ -354,3 +354,135 @@ class TestRegimeClassifierPctChange:
                 and "pct_change" in str(x.message)
             ]
             assert len(pct_warnings) == 0, f"Got pct_change FutureWarning: {pct_warnings}"
+
+
+@pytest.mark.asyncio
+class TestMarketContextIntegration:
+    """Integration tests for derivatives data with market context."""
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_with_derivatives(
+        self, mock_cache, mock_exchange_class
+    ):
+        """get_market_context returns unified data for perpetual-enabled symbols."""
+        # Setup comprehensive mocks for full workflow
+        mock_exchange = MagicMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        # Exchange supports all features
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': True
+        }
+        mock_exchange.exchange_id = 'binance'
+
+        # Mock all data fetches (fetch methods return AsyncMock for async operations)
+        mock_exchange.fetch_ohlcv = AsyncMock(return_value=[
+            [1609459200000, 29000, 29500, 28800, 29200, 1000],
+            [1609462800000, 29200, 29600, 29100, 29400, 1100],
+        ])
+
+        # load_markets is synchronous, use regular return_value
+        mock_exchange.load_markets.return_value = {
+            'BTC/USDT': {'type': 'spot', 'symbol': 'BTC/USDT'},
+            'BTC/USDT:USDT': {'type': 'swap', 'symbol': 'BTC/USDT:USDT', 'settle': 'USDT'},
+        }
+
+        mock_exchange.fetch_funding_rate_history = AsyncMock(return_value=[
+            {'timestamp': 1609459200000, 'fundingRate': 0.0001},
+            {'timestamp': 1609488000000, 'fundingRate': 0.00015},
+        ])
+
+        mock_exchange.fetch_open_interest_history = AsyncMock(return_value=[
+            {'timestamp': 1609459200000, 'openInterestValue': 1000000000},
+            {'timestamp': 1609462800000, 'openInterestValue': 1050000000},
+        ])
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        # All cache misses to force fetches
+        mock_cache_instance.get.return_value = None
+
+        from data.market_data import MarketDataService
+        service = MarketDataService()
+
+        # Call the unified API
+        result = await service.get_market_context(
+            symbol='BTC/USDT',
+            timeframe='1h',
+            limit=100
+        )
+
+        # Verify all components present
+        assert 'ohlcv_df' in result
+        assert 'funding_rate' in result
+        assert 'funding_rate_history' in result
+        assert 'open_interest' in result
+        assert 'open_interest_change_pct' in result
+
+        # Verify OHLCV data
+        assert len(result['ohlcv_df']) == 2
+        assert result['ohlcv_df']['close'].iloc[-1] == 29400
+
+        # Verify funding rate data
+        assert result['funding_rate'] == 0.00015
+        assert len(result['funding_rate_history']) == 2
+
+        # Verify open interest data
+        assert result['open_interest'] == 1050000000
+        # OI change should be calculated (but not enough data for 24h)
+        assert result['open_interest_change_pct'] is None
+
+    @patch('data.market_data.ExchangeClient')
+    @patch('data.market_data.AsyncDiskCache')
+    async def test_get_market_context_spot_only_fallback(
+        self, mock_cache, mock_exchange_class
+    ):
+        """get_market_context gracefully handles spot-only symbols."""
+        mock_exchange = MagicMock()
+        mock_exchange_class.return_value = mock_exchange
+
+        # Exchange supports derivatives but this symbol doesn't have perp
+        mock_exchange.exchange.has = {
+            'fetchOHLCV': True,
+            'fetchFundingRateHistory': True,
+            'fetchOpenInterestHistory': True
+        }
+        mock_exchange.exchange_id = 'binance'
+
+        # OHLCV available (async method)
+        mock_exchange.fetch_ohlcv = AsyncMock(return_value=[
+            [1609459200000, 100, 105, 95, 102, 5000],
+        ])
+
+        # No perpetual for this symbol (sync method)
+        mock_exchange.load_markets.return_value = {
+            'DOGE/USDT': {'type': 'spot', 'symbol': 'DOGE/USDT'},
+            # No DOGE/USDT:USDT perpetual
+        }
+
+        mock_cache_instance = AsyncMock()
+        mock_cache.return_value = mock_cache_instance
+        mock_cache_instance.get.return_value = None
+
+        from data.market_data import MarketDataService
+        service = MarketDataService()
+
+        result = await service.get_market_context(
+            symbol='DOGE/USDT',
+            timeframe='1h',
+            limit=100
+        )
+
+        # OHLCV should be present
+        assert 'ohlcv_df' in result
+        assert len(result['ohlcv_df']) == 1
+        assert result['ohlcv_df']['close'].iloc[0] == 102
+
+        # Derivatives data should be None (graceful degradation)
+        assert result['funding_rate'] is None
+        assert result['funding_rate_history'] is None
+        assert result['open_interest'] is None
+        assert result['open_interest_change_pct'] is None
