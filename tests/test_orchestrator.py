@@ -352,3 +352,54 @@ class TestTrainingCapture:
         assert len(complete) == 2
         assert all(ex.actual_direction is not None for ex in complete)
         assert all(ex.realized_return is not None for ex in complete)
+
+
+@pytest.mark.asyncio
+async def test_run_swarm_workflow_accepts_higher_tf_data():
+    """Should accept and pass through higher_tf_data to PromptBuilder."""
+    from tests.fixtures.timeframe_fixtures import create_test_df_bullish
+    from swarm.orchestrator import run_swarm_workflow
+    from data.prompt_builder import TaskType
+
+    # Create test data
+    df = create_test_df_bullish(bars=100)
+    higher_tf_data = {
+        "4h": create_test_df_bullish(bars=100),
+        "1d": create_test_df_bullish(bars=100),
+    }
+
+    state, example = await run_swarm_workflow(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        ohlcv_df=df,
+        market_regime=MarketRegime.NEUTRAL,
+        task_prompt="Test prompt",
+        task_type=TaskType.PREDICT_DIRECTION,
+        higher_tf_data=higher_tf_data,
+    )
+
+    # Verify higher TF context appears in task_prompt
+    assert "Higher Timeframe Context" in state["task_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_run_swarm_workflow_backward_compatible():
+    """Should work without higher_tf_data parameter (backward compatibility)."""
+    from tests.fixtures.timeframe_fixtures import create_test_df_bullish
+    from swarm.orchestrator import run_swarm_workflow
+    from data.prompt_builder import TaskType
+
+    df = create_test_df_bullish(bars=100)
+
+    # Call without higher_tf_data
+    state, example = await run_swarm_workflow(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        ohlcv_df=df,
+        market_regime=MarketRegime.NEUTRAL,
+        task_prompt="Test prompt",
+        task_type=TaskType.PREDICT_DIRECTION,
+    )
+
+    # Should not have higher TF context
+    assert "Higher Timeframe Context" not in state["task_prompt"]

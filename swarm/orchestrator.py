@@ -13,7 +13,7 @@ from loguru import logger
 
 from config.settings import settings
 from data.indicators import compute_bb_position, compute_macd, compute_rsi
-from data.prompt_builder import TaskType
+from data.prompt_builder import TaskType, PromptBuilder, sample_task
 from data.regime_filter import MarketRegime
 from .critic import evaluate_signal
 from .generator import generate_signal, TradingPersona
@@ -141,6 +141,7 @@ async def run_swarm_workflow(
     market_regime: MarketRegime,
     task_prompt: str,
     task_type: TaskType = TaskType.PREDICT_DIRECTION,
+    higher_tf_data: dict[str, pd.DataFrame] | None = None,
 ) -> tuple[SwarmState, TrainingExample]:
     """
     Execute generator -> critic workflow with guaranteed VRAM cleanup.
@@ -156,6 +157,10 @@ async def run_swarm_workflow(
         ohlcv_df: OHLCV DataFrame with sufficient history
         market_regime: Current market regime
         task_prompt: Rendered prompt from PromptBuilder
+        task_type: Task type for signal generation
+        higher_tf_data: Optional dict of higher timeframe OHLCV DataFrames
+                       Keys are timeframe strings (e.g., "4h", "1d")
+                       Values are OHLCV DataFrames
 
     Returns:
         Tuple of (final_state, training_example)
@@ -170,6 +175,33 @@ async def run_swarm_workflow(
     # Build market context
     market_context = _build_market_context(ohlcv_df, market_regime)
     market_context["symbol"] = symbol
+
+    # If higher_tf_data provided, rebuild prompt with multi-timeframe context
+    if higher_tf_data is not None:
+        logger.info(
+            "Rebuilding prompt with higher timeframe context",
+            timeframe=timeframe,
+            higher_tfs=list(higher_tf_data.keys()),
+        )
+
+        # Sample task based on available data
+        task = sample_task(available_bars=len(ohlcv_df))
+
+        # Build prompt with higher TF context
+        builder = PromptBuilder()
+        task_prompt = builder.build_prompt(
+            task=task,
+            df=ohlcv_df,
+            symbol=symbol,
+            timeframe=timeframe,
+            market_regime=market_regime,
+            higher_tf_data=higher_tf_data,
+        )
+
+        logger.debug(
+            "Prompt rebuilt with higher TF context",
+            prompt_length=len(task_prompt),
+        )
 
     # Initialize state
     state: SwarmState = {
