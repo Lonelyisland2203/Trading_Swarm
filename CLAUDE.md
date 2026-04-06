@@ -18,14 +18,23 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Sessions 1-10: Environment, Data, Swarm, Verifier, Reward, Evaluation, DPO Infrastructure, Dataset Generation, End-to-End DPO Workflow
 - Session 11a: Realistic Fee Model
 - Session 11b: Technical Indicator Expansion (17 indicators, 5 groups, compute_all_indicators aggregation)
+- Session 12: Multi-Timeframe Context (4-indicator voting, confluence detection, optional higher_tf_data parameter)
 
-**Next:** Session 12 - TBD (likely evaluation integration or production deployment)
+**Next:** TBD (likely evaluation integration or production deployment)
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
 - 4 tests in `test_process_lock.py` - Windows/fcntl platform incompatibility
 
 ## Architecture Decisions
+
+### Multi-Timeframe Context (Session 12)
+- **Hierarchy:** TIMEFRAME_HIERARCHY = ["1m", "5m", "15m", "1h", "4h", "1d"] - adaptive selection of up to 2 nearest higher TFs
+- **4-Indicator Voting:** Ichimoku cloud position, KAMA slope, Donchian channel position, RSI zone -> trend classification (bullish/bearish/neutral)
+- **Confluence Detection:** Multi-TF alignment categorized as aligned, mixed, or conflicting
+- **Integration:** Optional `higher_tf_data` parameter throughout stack (backward compatible) - orchestrator -> PromptBuilder -> prompt templates
+- **Functions:** `get_higher_timeframes()`, `summarize_timeframe()`, `compute_confluence()`
+- **Test coverage:** 37 tests in `test_prompt_builder_mtf.py` + fixtures in `tests/fixtures/timeframe_fixtures.py`
 
 ### Indicator System (Session 11b)
 - **17 indicators across 5 groups:** Momentum (Donchian, Ichimoku, KAMA), Volume (OBV, CMF, MFI, VWAP), Volatility (ATR, BB bandwidth, Keltner, historical vol), Structure (TTM Squeeze, FVG, Swing Points), Crypto (funding_rate, open_interest stubs)
@@ -50,12 +59,14 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Regime classification: Realized volatility percentiles (no VIX for crypto)
 - Task sampling: Weighted by difficulty with isolated RNG
 - Historical windows: Configurable stride, >95% completeness threshold
+- Multi-timeframe context: Optional higher_tf_data parameter in PromptBuilder.build_prompt()
 
 ### Swarm Layer
 - VRAM Management: Semaphore + explicit unload between model switches
 - Caching Strategy: Temperature gate - only cache temp=0 generations
 - Persona Selection: Regime-informed weighted sampling (5 personas)
 - Response Validation: 4-stage JSON extraction with single clarification retry
+- Orchestrator: Accepts optional higher_tf_data via _get_task_config_by_type() helper
 
 ### Training Layer - DPO
 - **Stack:** Direct transformers + PEFT (not Unsloth - better debuggability)
@@ -100,7 +111,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `data/cache_wrapper.py` - AsyncDiskCache with asyncio.to_thread()
 - `data/market_data.py` - CCXT client with context manager
 - `data/regime_filter.py` - RegimeClassifier with volatility percentiles
-- `data/prompt_builder.py` - Task sampling with isolated RNG, integrated with compute_all_indicators()
+- `data/prompt_builder.py` - Task sampling, compute_all_indicators integration, multi-TF context (get_higher_timeframes, summarize_timeframe, compute_confluence)
 - `data/historical_windows.py` - Window walking with completeness validation
 - `data/inference_queue.py` - Sequential job processor with JSONL streaming
 
@@ -112,7 +123,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `swarm/ollama_client.py` - VRAM-aware Ollama client with semaphore
 - `swarm/generator.py` - Signal generator with 5 personas
 - `swarm/critic.py` - Critique generation with deepseek-r1:14b
-- `swarm/orchestrator.py` - LangGraph workflow + multi-persona
+- `swarm/orchestrator.py` - LangGraph workflow + multi-persona + higher_tf_data support
 - `swarm/training_capture.py` - TrainingExample with context_id + `load_examples_from_jsonl()`
 - `swarm/adapter_loader.py` - Adapter discovery, validation, Ollama tags
 
@@ -140,10 +151,12 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `eval/` - config, metrics, engine
 
 ### Tests
+- `tests/fixtures/timeframe_fixtures.py` - OHLCV patterns for multi-TF testing
 - `tests/test_config.py` - 40 tests
 - `tests/test_indicators.py` - 19 tests (original indicators)
 - `tests/test_indicators_extended.py` - 63 tests (extended indicators)
 - `tests/test_data_layer.py` - 21 tests
+- `tests/test_prompt_builder_mtf.py` - 37 tests (multi-timeframe context)
 - `tests/test_ollama_client.py` - 17 tests
 - `tests/test_generator.py` - 20 tests
 - `tests/test_critic.py` - 22 tests
@@ -171,6 +184,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Context managers for AsyncDiskCache, MarketDataService, OllamaClient
 - Custom EnumJSONEncoder for JSON serialization of task types and personas
 - **Indicator pattern:** `compute_` prefix, pd.Series params, return pd.Series or dict of Series
+- **Multi-TF pattern:** Optional `higher_tf_data` parameter cascaded through orchestrator -> PromptBuilder
 
 ## Working Decisions
 
@@ -183,5 +197,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 489 passing (5 pre-existing orchestrator failures excluded)
+**Total Tests:** 676 passing (5 pre-existing orchestrator failures excluded)
 **Python Version:** 3.13.7
