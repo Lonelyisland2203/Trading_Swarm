@@ -211,7 +211,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `tests/test_swarm/test_adapter_loader.py` - 16 tests
 - `tests/test_integration/test_fee_model_integration.py` - 6 tests
 - `tests/test_fee_aware_integration.py` - 11 tests (end-to-end fee-aware workflow)
-- `tests/test_execution/` - 176 tests (exceptions, models, settings, state, sizing, client, safety controls)
+- `tests/test_execution/` - 166 tests (exceptions, models, settings, state, sizing, client, safety controls)
 
 ## Known Issues & Gotchas
 
@@ -242,5 +242,5 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 
 ---
 
-**Total Tests:** 738 passing (5 pre-existing orchestrator failures excluded)
+**Total Tests:** 904 passing (5 pre-existing orchestrator failures excluded)
 **Python Version:** 3.13.7
