@@ -7,7 +7,7 @@ Samples tasks with weighted probabilities and builds prompts from market data.
 import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
 from loguru import logger
@@ -15,6 +15,9 @@ from loguru import logger
 from .indicators import compute_all_indicators, compute_bb_position
 from .regime_filter import MarketRegime
 import numpy as np
+
+if TYPE_CHECKING:
+    from config.fee_model import FeeModelSettings
 
 # Thread-local random generator to avoid global state pollution
 _task_rng = random.Random()
@@ -423,7 +426,7 @@ Symbol: {symbol}
 Timeframe: {timeframe}
 Current Price: ${current_price:.4f}
 Market Regime: {market_regime}
-{higher_tf_section}
+{higher_tf_section}{execution_context}
 ## Technical Indicators
 RSI(14): {rsi:.2f}
 MACD: {macd:.4f} (Signal: {macd_signal:.4f})
@@ -453,6 +456,7 @@ Respond in JSON format:
         horizon: int = 5,
         num_bars: int = 10,
         higher_tf_context: str | None = None,
+        execution_context: str = "",
     ) -> str:
         """Render direction prediction prompt."""
         # Build higher timeframe section
@@ -473,6 +477,7 @@ Respond in JSON format:
             horizon=horizon,
             num_bars=num_bars,
             higher_tf_section=higher_tf_section,
+            execution_context=execution_context,
         )
 
 
@@ -824,6 +829,43 @@ class PromptBuilder:
 
         return "\n".join(lines)
 
+    def _build_execution_context(
+        self,
+        timeframe: str,
+        horizon_bars: int,
+        fee_model: "FeeModelSettings",
+    ) -> str:
+        """
+        Build execution context section for prompts.
+
+        Args:
+            timeframe: Trading timeframe (e.g., "1h", "1d")
+            horizon_bars: Prediction horizon in bars
+            fee_model: Fee model settings
+
+        Returns:
+            Formatted execution context section
+        """
+        from verifier.constants import compute_holding_periods_8h
+
+        holding_periods = compute_holding_periods_8h(timeframe, horizon_bars)
+        round_trip_cost = fee_model.round_trip_cost_pct(holding_periods)
+        min_profitable = fee_model.minimum_profitable_return_pct(holding_periods)
+
+        # Determine mode from fee model settings
+        if fee_model.include_funding:
+            mode = "Futures USDT-M"
+        else:
+            mode = "Spot"
+
+        return f"""## Execution Context
+Exchange: Binance
+Mode: {mode}
+Estimated round-trip cost: {round_trip_cost:.3f}%
+Minimum profitable move: {min_profitable:.3f}%
+
+Your prediction must account for these costs. Signals with expected moves smaller than the minimum profitable threshold should be rated LOW CONFIDENCE regardless of directional conviction."""
+
     def build_prompt(
         self,
         task: TaskConfig,
@@ -832,6 +874,7 @@ class PromptBuilder:
         timeframe: str,
         market_regime: MarketRegime,
         higher_tf_data: dict[str, pd.DataFrame] | None = None,
+        fee_model: "FeeModelSettings | None" = None,
     ) -> str:
         """
         Build prompt for given task and market data.
@@ -927,6 +970,26 @@ class PromptBuilder:
         price_summary = self._format_price_summary(df)
         current_price = float(df["close"].iloc[-1])
 
+        # Build execution context section
+        execution_context = ""
+        if fee_model is not None:
+            from verifier.constants import get_horizon_bars
+            try:
+                horizon_bars = get_horizon_bars(timeframe)
+            except (ValueError, KeyError):
+                logger.warning("Unknown timeframe for horizon", timeframe=timeframe)
+                horizon_bars = 5  # Default fallback
+
+            execution_context = "\n" + self._build_execution_context(
+                timeframe, horizon_bars, fee_model
+            ) + "\n"
+
+        logger.debug(
+            "Execution context built",
+            timeframe=timeframe,
+            has_execution_context=bool(execution_context),
+        )
+
         # Task-specific rendering
         if task.task_type == TaskType.PREDICT_DIRECTION:
             prompt = template.render(
@@ -940,6 +1003,7 @@ class PromptBuilder:
                 bb_position=bb_pos,
                 price_summary=price_summary,
                 higher_tf_context=higher_tf_context,
+                execution_context=execution_context,
             )
 
         elif task.task_type == TaskType.ASSESS_MOMENTUM:
