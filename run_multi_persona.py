@@ -75,7 +75,7 @@ async def process_symbol(
 
 async def main():
     print("=" * 70)
-    print("⚠️  DEPRECATION WARNING")
+    print("[WARNING]  DEPRECATION WARNING")
     print("=" * 70)
     print("This script processes only a single context with limited examples.")
     print()
@@ -110,9 +110,13 @@ async def main():
 
     for ex in all_examples[:3]:
         signal = ex.generator_signal
+        signal_data = signal.get("signal_data", {})
         print(f"\n{ex.symbol} [{ex.persona}]:")
-        print(f"  Direction: {signal['direction']} ({signal['confidence']:.1%})")
-        print(f"  Reasoning: {signal['reasoning'][:100]}...")
+        if "direction" in signal_data:
+            print(f"  Direction: {signal_data['direction']} ({signal_data['confidence']:.1%})")
+        else:
+            print(f"  Signal: {signal_data}")
+        print(f"  Reasoning: {signal.get('reasoning', 'N/A')[:100]}...")
 
 
 if __name__ == "__main__":
