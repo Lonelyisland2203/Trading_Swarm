@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, TextIO
+from typing import Any, List, Optional, TextIO
 
 import torch
 from loguru import logger
@@ -465,3 +465,56 @@ class GRPOTrainer:
             trainable_params=sum(p.numel() for p in self._model.parameters() if p.requires_grad),
             ref_params=len(self._ref_state_dict),
         )
+
+    def _generate_completions(
+        self,
+        prompt: str,
+    ) -> List[str]:
+        """
+        Generate G completions for a prompt sequentially.
+
+        Sequential generation (not batched) to fit in 16GB VRAM.
+        Clears KV cache between generations.
+
+        Args:
+            prompt: Input prompt (market snapshot)
+
+        Returns:
+            List of G completion strings
+        """
+        completions = []
+
+        for i in range(self.config.group_size):
+            # Tokenize prompt
+            inputs = self._tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=1024,
+            ).to(self._model.device)
+
+            # Generate
+            with torch.no_grad():
+                outputs = self._model.generate(
+                    **inputs,
+                    max_new_tokens=self.config.max_new_tokens,
+                    temperature=self.config.temperature,
+                    top_p=self.config.top_p,
+                    do_sample=True,
+                    pad_token_id=self._tokenizer.pad_token_id,
+                )
+
+            # Decode completion (skip prompt tokens)
+            prompt_len = inputs["input_ids"].shape[1]
+            completion_tokens = outputs[0, prompt_len:]
+            completion = self._tokenizer.decode(
+                completion_tokens,
+                skip_special_tokens=True,
+            )
+            completions.append(completion)
+
+            # Clear KV cache between generations (VRAM management)
+            if i < self.config.group_size - 1:
+                torch.cuda.empty_cache()
+
+        return completions

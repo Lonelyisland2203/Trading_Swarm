@@ -9,6 +9,7 @@ import torch
 from training.grpo_trainer import (
     parse_direction,
     GRPOStepResult,
+    GRPOTrainer,
     GRPOTrainingResult,
     run_grpo_preflight,
     log_vram_usage,
@@ -611,3 +612,50 @@ class TestGRPOTrainerModelLoading:
 
         config = GRPOTrainingConfig()
         assert config.sft_adapter_path == Path("adapters/sft_base")
+
+
+class TestGRPOTrainerGeneration:
+    """Tests for GRPOTrainer completion generation."""
+
+    @pytest.fixture
+    def mock_trainer(self) -> GRPOTrainer:
+        """Create trainer with mocked model."""
+        trainer = GRPOTrainer()
+
+        # Mock tokenizer
+        trainer._tokenizer = MagicMock()
+        trainer._tokenizer.return_tensors = "pt"
+        trainer._tokenizer.pad_token_id = 0
+        trainer._tokenizer.eos_token_id = 1
+        trainer._tokenizer.encode.return_value = [100, 101, 102]
+        trainer._tokenizer.decode.return_value = (
+            "## THESIS\nBullish\n## EVIDENCE\nRSI\n## RISK\nVol\n## DECISION\nLONG"
+        )
+        trainer._tokenizer.__call__ = MagicMock(
+            return_value={"input_ids": torch.tensor([[100, 101, 102]])}
+        )
+
+        # Mock model
+        trainer._model = MagicMock()
+        trainer._model.generate.return_value = torch.tensor([[100, 101, 102, 200, 201]])
+        trainer._model.device = torch.device("cpu")
+
+        return trainer
+
+    def test_generate_completions_returns_g_completions(self, mock_trainer: GRPOTrainer) -> None:
+        """Test that _generate_completions returns G completions."""
+        completions = mock_trainer._generate_completions("market snapshot")
+        assert len(completions) == mock_trainer.config.group_size  # G=4
+
+    def test_generate_completions_sequential(self, mock_trainer: GRPOTrainer) -> None:
+        """Test that completions are generated sequentially (G calls)."""
+        mock_trainer._generate_completions("market snapshot")
+        # Should call generate G times (sequential, not batched)
+        assert mock_trainer._model.generate.call_count == mock_trainer.config.group_size
+
+    def test_generate_completions_clears_cache(self, mock_trainer: GRPOTrainer) -> None:
+        """Test that KV cache is cleared between generations."""
+        with patch("training.grpo_trainer.torch.cuda.empty_cache") as mock_cache:
+            mock_trainer._generate_completions("market snapshot")
+            # Should clear cache G-1 times (between generations)
+            assert mock_cache.call_count >= mock_trainer.config.group_size - 1
