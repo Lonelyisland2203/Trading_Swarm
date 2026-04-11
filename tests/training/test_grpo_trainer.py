@@ -753,3 +753,152 @@ class TestGRPOTrainerStep:
 
         # Should compute reward for each completion (G=4)
         assert mock_reward.call_count == 4
+
+
+class TestGRPOTrainerLoss:
+    """Tests for GRPO loss computation."""
+
+    def test_kl_penalty_applied(self) -> None:
+        """Test that loss includes KL penalty term."""
+        from training.grpo_trainer import GRPOTrainer
+
+        trainer = GRPOTrainer()
+        trainer._tokenizer = MagicMock()
+        trainer._tokenizer.__call__ = MagicMock(
+            return_value={
+                "input_ids": torch.tensor([[100, 101]]),
+                "attention_mask": torch.tensor([[1, 1]]),
+            }
+        )
+
+        # Mock model outputs
+        mock_logits = torch.randn(1, 5, 1000)
+        mock_output = MagicMock()
+        mock_output.logits = mock_logits
+        trainer._model = MagicMock(return_value=mock_output)
+        trainer._model.device = torch.device("cpu")
+
+        # Mock reference state dict
+        trainer._ref_state_dict = {}
+
+        with patch.object(trainer, "_get_log_probs") as mock_logprobs:
+            # _get_log_probs is called twice per completion: once for policy, once for ref
+            # Return different values for policy and reference
+            mock_logprobs.side_effect = [
+                torch.tensor([-1.0, -2.0]),  # policy
+                torch.tensor([-1.5, -2.5]),  # reference
+            ]
+
+            loss, kl = trainer._compute_step_loss(
+                completions=["test completion"],
+                advantages=[0.5],
+                prompt="test prompt",
+            )
+
+        # KL should be computed as mean(policy - ref) = mean(0.5, 0.5) = 0.5
+        assert kl > 0
+        # Loss should be returned (policy_loss + β * KL)
+        assert loss is not None
+
+    def test_loss_uses_clipped_ratio(self) -> None:
+        """Test that loss uses PPO-style clipped ratio."""
+        from training.grpo_trainer import compute_clipped_policy_loss
+
+        # This is implicitly tested through compute_clipped_policy_loss
+        # which is called in _compute_step_loss
+        ratio = torch.tensor([1.5])  # Above 1+ε
+        advantage = torch.tensor([1.0])
+        loss = compute_clipped_policy_loss(ratio, advantage, epsilon=0.2)
+        # Should be clipped to 1.2
+        assert abs(loss - (-1.2)) < 1e-6
+
+    def test_compute_step_loss_averages_over_completions(self) -> None:
+        """Test that _compute_step_loss averages over all completions."""
+        from training.grpo_trainer import GRPOTrainer
+
+        trainer = GRPOTrainer()
+        trainer._tokenizer = MagicMock()
+        trainer._tokenizer.__call__ = MagicMock(
+            return_value={
+                "input_ids": torch.tensor([[100, 101]]),
+                "attention_mask": torch.tensor([[1, 1]]),
+            }
+        )
+        trainer._model = MagicMock()
+        trainer._model.device = torch.device("cpu")
+        trainer._ref_state_dict = {}
+
+        with patch.object(trainer, "_get_log_probs") as mock_logprobs:
+            # 4 completions = 8 calls (policy + ref for each)
+            mock_logprobs.side_effect = [
+                torch.tensor([-1.0]),  # policy 1
+                torch.tensor([-1.0]),  # ref 1 (KL=0)
+                torch.tensor([-2.0]),  # policy 2
+                torch.tensor([-2.0]),  # ref 2 (KL=0)
+                torch.tensor([-1.5]),  # policy 3
+                torch.tensor([-1.5]),  # ref 3 (KL=0)
+                torch.tensor([-1.2]),  # policy 4
+                torch.tensor([-1.2]),  # ref 4 (KL=0)
+            ]
+
+            loss, kl = trainer._compute_step_loss(
+                completions=["c1", "c2", "c3", "c4"],
+                advantages=[0.5, -0.5, 0.3, -0.3],
+                prompt="test prompt",
+            )
+
+        # KL should be 0 (identical distributions)
+        assert abs(kl) < 1e-6
+        # Loss should be computed and returned
+        assert loss is not None
+
+    def test_get_log_probs_returns_completion_tokens_only(self) -> None:
+        """Test that _get_log_probs returns log probs for completion tokens only."""
+        from training.grpo_trainer import GRPOTrainer
+
+        trainer = GRPOTrainer()
+
+        # Prompt tokens: [100, 101, 102] (length 3)
+        # Full tokens: [100, 101, 102, 200, 201] (length 5)
+        # Completion tokens: [200, 201] (length 2)
+        prompt_input_ids = torch.tensor([[100, 101, 102]])
+        prompt_attention_mask = torch.ones_like(prompt_input_ids)
+        full_input_ids = torch.tensor([[100, 101, 102, 200, 201]])
+        full_attention_mask = torch.ones_like(full_input_ids)
+
+        # Create tensor dict that supports .to() method
+        class TensorDict(dict):
+            def to(self, device):
+                return self
+
+        prompt_dict = TensorDict(input_ids=prompt_input_ids, attention_mask=prompt_attention_mask)
+        full_dict = TensorDict(input_ids=full_input_ids, attention_mask=full_attention_mask)
+
+        def tokenizer_call(text, **kwargs):
+            if text == "prompt":
+                return prompt_dict
+            else:
+                return full_dict
+
+        # Mock tokenizer
+        trainer._tokenizer = MagicMock(side_effect=tokenizer_call)
+        trainer._tokenizer.pad_token_id = 0
+
+        # Mock model with known logits
+        trainer._model = MagicMock()
+        trainer._model.device = torch.device("cpu")
+        # Logits shape: (batch=1, seq_len=5, vocab_size=1000)
+        mock_logits = torch.zeros(1, 5, 1000)
+        # Set known values for completion token positions
+        mock_logits[0, 3, 200] = 10.0  # High prob for token 200 at position 3
+        mock_logits[0, 4, 201] = 10.0  # High prob for token 201 at position 4
+        mock_output = MagicMock()
+        mock_output.logits = mock_logits
+        trainer._model.return_value = mock_output
+
+        trainer._ref_state_dict = {}
+
+        log_probs = trainer._get_log_probs("prompt", "completion")
+
+        # Should return log probs for completion tokens only (2 tokens)
+        assert len(log_probs) == 2

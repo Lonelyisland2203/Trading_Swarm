@@ -520,6 +520,154 @@ class GRPOTrainer:
 
         return completions
 
+    def _get_log_probs(
+        self,
+        prompt: str,
+        completion: str,
+        use_reference: bool = False,
+    ) -> torch.Tensor:
+        """
+        Get log probabilities for completion tokens.
+
+        Tokenizes prompt + completion, runs forward pass to get logits,
+        computes log probabilities and gathers those for actual tokens.
+
+        When use_reference=True, temporarily swaps in reference weights
+        for KL computation.
+
+        Args:
+            prompt: Input prompt text
+            completion: Completion text to score
+            use_reference: Whether to use reference policy weights
+
+        Returns:
+            Log probabilities for each completion token
+        """
+        # Tokenize prompt only to get prompt length
+        prompt_tokens = self._tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=1024,
+        ).to(self._model.device)
+        prompt_len = prompt_tokens["input_ids"].shape[1]
+
+        # Tokenize full sequence (prompt + completion)
+        full_text = prompt + completion
+        full_tokens = self._tokenizer(
+            full_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=1024 + 512,
+        ).to(self._model.device)
+
+        # Optionally swap to reference weights
+        if use_reference and self._ref_state_dict:
+            current_state = {
+                k: v.clone() for k, v in self._model.state_dict().items() if "lora" in k.lower()
+            }
+            for k, v in self._ref_state_dict.items():
+                self._model.state_dict()[k].copy_(v.to(self._model.device))
+
+        # Forward pass to get logits
+        with torch.no_grad():
+            outputs = self._model(
+                input_ids=full_tokens["input_ids"],
+                attention_mask=full_tokens["attention_mask"],
+            )
+            logits = outputs.logits
+
+        # Restore current weights if we swapped
+        if use_reference and self._ref_state_dict:
+            for k, v in current_state.items():
+                self._model.state_dict()[k].copy_(v)
+
+        # Get completion tokens (those after prompt)
+        completion_len = full_tokens["input_ids"].shape[1] - prompt_len
+
+        if completion_len <= 0:
+            return torch.tensor([0.0], device=self._model.device)
+
+        # Shift logits and tokens for next-token prediction
+        # logits[t] predicts token[t+1]
+        # We want log probs for tokens [prompt_len : end]
+        # So we use logits [prompt_len-1 : end-1]
+        shift_logits = logits[0, prompt_len - 1 : -1, :]  # (completion_len, vocab)
+        shift_labels = full_tokens["input_ids"][0, prompt_len:]  # (completion_len,)
+
+        # Compute log softmax
+        log_probs = torch.nn.functional.log_softmax(shift_logits, dim=-1)
+
+        # Gather log probs for actual tokens
+        token_log_probs = log_probs.gather(
+            dim=-1,
+            index=shift_labels.unsqueeze(-1),
+        ).squeeze(-1)
+
+        return token_log_probs
+
+    def _compute_step_loss(
+        self,
+        completions: List[str],
+        advantages: List[float],
+        prompt: str,
+    ) -> tuple[float, float]:
+        """
+        Compute GRPO loss with KL penalty for a batch of completions.
+
+        For each completion:
+        1. Get policy log probs
+        2. Get reference log probs
+        3. Compute probability ratio
+        4. Compute clipped policy loss
+        5. Compute KL divergence
+
+        Returns average loss and KL across all completions.
+
+        Args:
+            completions: List of G completion strings
+            advantages: List of G group-relative advantages
+            prompt: The prompt used for generation
+
+        Returns:
+            Tuple of (total_loss, avg_kl)
+            where total_loss = policy_loss + β * KL
+        """
+        total_policy_loss = 0.0
+        total_kl = 0.0
+
+        for completion, advantage in zip(completions, advantages):
+            # Get policy and reference log probs
+            policy_logprobs = self._get_log_probs(prompt, completion, use_reference=False)
+            ref_logprobs = self._get_log_probs(prompt, completion, use_reference=True)
+
+            # Compute probability ratio: exp(log π - log π_ref)
+            log_ratio = policy_logprobs - ref_logprobs
+            ratio = torch.exp(log_ratio.mean())  # Average over tokens
+
+            # Compute clipped policy loss
+            advantage_tensor = torch.tensor([advantage], device=ratio.device)
+            policy_loss = compute_clipped_policy_loss(
+                ratio.unsqueeze(0),
+                advantage_tensor,
+                epsilon=self.config.clip_epsilon,
+            )
+            total_policy_loss += policy_loss
+
+            # Compute KL divergence
+            kl = compute_kl_divergence(policy_logprobs, ref_logprobs)
+            total_kl += kl
+
+        # Average over completions
+        n_completions = len(completions)
+        avg_policy_loss = total_policy_loss / n_completions
+        avg_kl = total_kl / n_completions
+
+        # Total loss with KL penalty
+        total_loss = avg_policy_loss + self.config.kl_penalty_beta * avg_kl
+
+        return total_loss, avg_kl
+
     def _training_step(
         self,
         example: GRPOTrainingExample,
