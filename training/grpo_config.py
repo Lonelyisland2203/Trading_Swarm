@@ -94,7 +94,7 @@ class GRPOTrainingConfig:
     clip_epsilon: float = 0.2  # ε: PPO-style ratio clipping
 
     # Learning rate
-    learning_rate: float = 5e-6
+    learning_rate: float = 2e-05
 
     # Batch configuration
     batch_size: int = 1  # Per-device batch size
