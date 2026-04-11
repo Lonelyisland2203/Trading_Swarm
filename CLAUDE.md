@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17H.
+Completed through Session 17I.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -53,7 +53,8 @@ Completed through Session 17H.
 - training/evaluate_candidate.py — unified adapter evaluation for DPO/GRPO, metrics (IC, Brier, MACE, regime-stratified IC, structure_compliance_rate), promotion criteria (IC≥0.05, Brier≤0.25, p<0.05, structure≥0.9 for GRPO), --compare mode for side-by-side evaluation
 - run_grpo_training.py — end-to-end GRPO pipeline CLI: 5 phases (SFT data gen, SFT train, GRPO train, eval, promotion), skip logic for existing artifacts, --dry-run/--regenerate/--retrain-sft/--limit/--max-steps flags
 - run_autoresearch.py — autonomous hyperparameter search loop (karpathy/autoresearch-inspired): round-robin parameter selection, direction tracking, git commit/revert on IC improvement/regression, results.tsv logging, --max-experiments/--time-budget-hours/--dry-run flags
-- Tests: 279 GRPO/eval/pipeline/autoresearch tests (config: 18, data: 9, reward: 47, trainer: 56, evaluate_candidate: 42, run_grpo_training: 29, run_autoresearch: 40, grpo_data_generator: 38)
+- evaluation/xgboost_baseline.py — XGBoost/LightGBM baseline for LLM comparison: extracts same 17 indicators from market snapshots, walk-forward CV with temporal ordering, metrics (IC, Brier, Sharpe, directional accuracy), SHAP feature importance, comparison table vs GRPO/DPO adapters, CLI with --data/--compare/--n-folds flags
+- Tests: 325 tests (GRPO/eval/pipeline/autoresearch: 279, xgboost_baseline: 46)
 
 ## Next Session
-Session 17I — End-to-end GRPO training dry run (generate data, train SFT, train GRPO, evaluate)
+Session 17J — End-to-end GRPO training dry run (generate data, train SFT, train GRPO, evaluate)
