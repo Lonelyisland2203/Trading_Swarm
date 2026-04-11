@@ -42,10 +42,12 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17B.
+Completed through Session 17C.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
-- Tests: tests/training/test_sft_data_generator.py, tests/training/test_sft_trainer.py
+- training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
+- training/grpo_reward.py — asymmetric reward matrix (false bullish -1.5×, false bearish -0.8×), structure reward (regex THESIS→EVIDENCE→RISK→DECISION), combined reward with clipping
+- Tests: 65 new tests in tests/training/test_grpo_config.py and tests/training/test_grpo_reward.py
 
 ## Next Session
-Session 17C — GRPO Reward Engine (grpo_reward.py + grpo_config.py)
+Session 17D — GRPO Training Loop (grpo_trainer.py)
