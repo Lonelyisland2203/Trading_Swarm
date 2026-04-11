@@ -19,7 +19,12 @@
       "Bash(cd /Users/javierlee/Trading Swarm:*)",
       "Bash(git checkout execution/binance_client.py tests/test_execution/test_binance_client.py)",
       "Bash(find:*)",
-      "Bash(for f in tests/test_execution/test_*.py)"
+      "Bash(for f in tests/test_execution/test_*.py)",
+      "Bash(tasklist:*)",
+      "Bash(kill 255)",
+      "Bash(kill -9 255)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(wc -l outputs/dataset_v1/*.jsonl outputs/combined_examples.jsonl)"
     ],
     "defaultMode": "bypassPermissions"
   }

@@ -62,9 +62,13 @@ def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
         sys.exit(1)
 
     # Filter: must have a direction in generator_signal (required for verification)
+    # Direction may be at top level or nested under signal_data (task-specific field)
+    def _extract_direction(sig: dict) -> str | None:
+        return sig.get("direction") or sig.get("signal_data", {}).get("direction")
+
     verifiable = [
         ex for ex in all_examples
-        if ex.generator_signal.get("direction") in ("HIGHER", "LOWER", "FLAT")
+        if _extract_direction(ex.generator_signal) in ("HIGHER", "LOWER", "FLAT")
     ]
     dropped = len(all_examples) - len(verifiable)
 
@@ -326,6 +330,106 @@ def phase4_pairs(
 # Phase 5 – Train
 # --------------------------------------------------------------------------- #
 
+def save_test_eval_data(
+    pairs: list[PreferencePair],
+    examples_with_rewards: list[tuple[TrainingExample, VerifiedOutcome, ComputedReward]],
+    output_dir: Path,
+    min_delta: float = 0.2,
+) -> Path | None:
+    """
+    Save test set evaluation data alongside the training run output.
+
+    Reconstructs the walk-forward split from the preference pairs, extracts the
+    held-out test examples with their verified outcomes and rewards, and writes
+    them to a compact JSONL file. This allows evaluate_candidate.py to skip
+    Phase 2 re-verification (which re-fetches all market data) on future runs.
+
+    Args:
+        pairs: Preference pairs (same as passed to training)
+        examples_with_rewards: Full (example, outcome, reward) data from phases 1-3
+        output_dir: Run output directory (e.g. outputs/dpo_run_20260409_123456)
+        min_delta: Reward delta used for pair construction (must match)
+
+    Returns:
+        Path to saved file, or None if split failed
+    """
+    from training.walk_forward import create_walk_forward_splits, TemporalSplitError
+    from dataclasses import asdict
+
+    try:
+        split = create_walk_forward_splits(
+            pairs,
+            train_window=settings.dpo.train_window,
+            test_window=settings.dpo.test_window,
+            replay_ratio=settings.dpo.replay_ratio,
+            replay_buffer_size=settings.dpo.replay_buffer_size,
+            min_training_pairs=settings.dpo.min_training_pairs,
+        )
+    except TemporalSplitError as e:
+        logger.warning("Could not save test eval data: split failed", error=str(e))
+        return None
+
+    # Build lookup maps from phases 1-3
+    example_map = {ex.example_id: ex for ex, _, _ in examples_with_rewards}
+    outcome_map = {ex.example_id: outcome for ex, outcome, _ in examples_with_rewards}
+    reward_map = {ex.example_id: reward for ex, _, reward in examples_with_rewards}
+
+    # Extract test set examples (chosen + rejected from each test pair)
+    records = []
+    seen_ids: set[str] = set()
+
+    for pair in split.test_pairs:
+        for example_id in (pair.chosen_example_id, pair.rejected_example_id):
+            if example_id in seen_ids or example_id not in example_map:
+                continue
+            seen_ids.add(example_id)
+
+            ex = example_map[example_id]
+            outcome = outcome_map[example_id]
+            reward = reward_map[example_id]
+
+            records.append({
+                "example_id": ex.example_id,
+                "context_id": ex.context_id,
+                "symbol": ex.symbol,
+                "timeframe": ex.timeframe,
+                "timestamp_ms": ex.timestamp_ms,
+                "market_regime": ex.market_regime,
+                "persona": ex.persona,
+                "task_prompt": ex.task_prompt,
+                "generator_signal": ex.generator_signal,
+                # Verified outcome fields
+                "realized_return": outcome.realized_return,
+                "net_return": outcome.net_return,
+                "actual_direction": outcome.actual_direction,
+                "max_adverse_excursion": outcome.max_adverse_excursion,
+                "entry_price": outcome.entry_price,
+                "exit_price": outcome.exit_price,
+                # Reward fields
+                "final_reward": reward.final_reward,
+                "return_reward": reward.return_reward,
+                "directional_reward": reward.directional_reward,
+                "mae_reward": reward.mae_reward,
+            })
+
+    if not records:
+        logger.warning("No test eval records to save")
+        return None
+
+    output_path = output_dir / "test_eval_data.jsonl"
+    with open(output_path, "w") as f:
+        for record in records:
+            f.write(json.dumps(record) + "\n")
+
+    logger.info(
+        "Test eval data saved",
+        path=str(output_path),
+        test_pairs=len(split.test_pairs),
+        test_examples=len(records),
+    )
+    return output_path
+
+
 def phase5_train(pairs: list[PreferencePair], force: bool) -> None:
     """Run DPO training and exit non-zero on failure."""
     logger.info("Phase 5: Starting DPO training", pairs=len(pairs))
@@ -519,6 +623,14 @@ def main() -> None:
     if not pairs:
         logger.error("No preference pairs — cannot train")
         sys.exit(1)
+
+    # Save test evaluation data before training (so evaluate_candidate.py can skip re-verification)
+    test_data_path = save_test_eval_data(pairs, examples_with_rewards, output_dir, args.min_delta)
+    if test_data_path:
+        logger.info(
+            "Test eval data saved — pass to evaluate_candidate.py with --test-data",
+            path=str(test_data_path),
+        )
 
     # Phase 5: Train
     phase5_train(pairs, force=args.force)

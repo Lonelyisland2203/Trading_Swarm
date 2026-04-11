@@ -470,8 +470,18 @@ async def run_multi_persona_workflow(
 
     training_examples: list[TrainingExample] = []
 
+    # Per-persona state collected across phases. We process model-by-model
+    # (all 5 generations, then all 5 critiques) so the generator and critic
+    # are each loaded once per context instead of 5 times each. This cuts
+    # model swaps per job from ~10 to 2 while preserving identical outputs,
+    # since each generate/evaluate call is stateless and independent.
+    gen_signals: dict[TradingPersona, object | None] = {}
+    gen_errors: dict[TradingPersona, str | None] = {}
+    critiques: dict[TradingPersona, object | None] = {}
+    critic_errors: dict[TradingPersona, str | None] = {}
+
     async with OllamaClient() as client:
-        # Loop through all personas
+        # ===== PHASE A: Generate all persona signals (generator loaded once) =====
         for persona in TradingPersona:
             summary["personas_attempted"] += 1
 
@@ -483,7 +493,6 @@ async def run_multi_persona_workflow(
             )
 
             try:
-                # ===== GENERATOR PHASE =====
                 signal = await generate_signal(
                     client,
                     settings.ollama.generator_model,
@@ -493,41 +502,36 @@ async def run_multi_persona_workflow(
                     temperature=0.7,
                     persona_override=persona,  # Force this persona
                 )
-
-                # Unload generator before critic
-                await client.unload_current()
-
-                if signal is None:
-                    error_msg = f"{persona.value}: Signal generation failed"
-                    summary["errors"].append(error_msg)
-                    logger.warning(error_msg)
-                    continue
-
-                summary["signals_generated"] += 1
-
-                # Initialize training example for this persona
-                training_example = TrainingExample(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    timestamp_ms=timestamp_ms,
-                    market_regime=market_regime.value,
-                    indicators=market_context,
-                    task_prompt=task_prompt,
-                    persona=persona.value,  # Set persona field
-                    context_id=context_id,  # Shared across all personas from this context
-                    generator_signal=asdict(signal),
-                    generator_raw_response=signal.raw_response,
-                    full_generator_prompt=task_prompt,  # Base prompt (persona already in signal)
-                )
-
-                # ===== CRITIC PHASE =====
-                logger.info(
-                    "Starting critic",
-                    symbol=symbol,
+                gen_signals[persona] = signal
+                gen_errors[persona] = None
+            except Exception as e:
+                gen_signals[persona] = None
+                gen_errors[persona] = f"{persona.value}: Unexpected error - {str(e)}"
+                logger.error(
+                    "Generator failed",
                     persona=persona.value,
-                    signal_direction=signal.direction,
+                    error=str(e),
                 )
 
+        # Unload generator once before switching to critic
+        await client.unload_current()
+
+        # ===== PHASE B: Critique all successful signals (critic loaded once) =====
+        for persona in TradingPersona:
+            signal = gen_signals.get(persona)
+            if signal is None:
+                critiques[persona] = None
+                critic_errors[persona] = None
+                continue
+
+            logger.info(
+                "Starting critic",
+                symbol=symbol,
+                persona=persona.value,
+                signal_direction=signal.direction,
+            )
+
+            try:
                 critique = await evaluate_signal(
                     client,
                     settings.ollama.critic_model,
@@ -536,63 +540,98 @@ async def run_multi_persona_workflow(
                     task_prompt,
                     temperature=0.0,
                 )
-
-                # Unload critic before next persona
-                await client.unload_current()
-
-                if critique is None:
-                    # Critic failed - accept by default with flag
-                    training_example.was_accepted = True
-                    training_example.acceptance_reason = f"Critic failed for {persona.value} - accepted by default"
-                    training_example.critic_error = "Critique extraction failed"
-                    logger.warning(
-                        "Critic failed, accepting by default",
-                        persona=persona.value,
-                    )
-                else:
-                    # Capture critique
-                    training_example.critique = asdict(critique)
-                    training_example.critic_raw_response = critique.raw_response
-                    training_example.critique_prompt = task_prompt
-
-                    # ===== ACCEPTANCE DECISION =====
-                    accepted, reason = should_accept_signal(
-                        asdict(critique),
-                        market_regime,
-                    )
-
-                    training_example.was_accepted = accepted
-                    if accepted:
-                        training_example.acceptance_reason = reason
-                        summary["signals_accepted"] += 1
-                        logger.info(
-                            "Signal accepted",
-                            persona=persona.value,
-                            reason=reason,
-                        )
-                    else:
-                        training_example.rejection_reason = reason
-                        logger.info(
-                            "Signal rejected",
-                            persona=persona.value,
-                            reason=reason,
-                        )
-
-                # Add to training examples regardless of acceptance
-                # (DPO needs both accepted and rejected for preference pairs)
-                training_examples.append(training_example)
-
+                critiques[persona] = critique
+                critic_errors[persona] = None
             except Exception as e:
-                error_msg = f"{persona.value}: Unexpected error - {str(e)}"
-                summary["errors"].append(error_msg)
+                critiques[persona] = None
+                critic_errors[persona] = f"{persona.value}: Unexpected error - {str(e)}"
                 logger.error(
-                    "Persona workflow failed",
+                    "Critic failed",
                     persona=persona.value,
                     error=str(e),
                 )
-                # Unload defensively
-                await client.unload_current()
-                continue
+
+        # Unload critic once
+        await client.unload_current()
+
+    # ===== PHASE C: Assemble training examples (no model calls) =====
+    for persona in TradingPersona:
+        signal = gen_signals.get(persona)
+        gen_err = gen_errors.get(persona)
+
+        # Generator failure (returned None or raised) → skip persona
+        if signal is None:
+            error_msg = gen_err or f"{persona.value}: Signal generation failed"
+            summary["errors"].append(error_msg)
+            logger.warning(error_msg)
+            continue
+
+        summary["signals_generated"] += 1
+
+        # Critic raised an exception → preserve prior behavior: log error and
+        # skip appending a training example for this persona.
+        crit_err = critic_errors.get(persona)
+        if crit_err is not None:
+            summary["errors"].append(crit_err)
+            continue
+
+        # Initialize training example for this persona
+        training_example = TrainingExample(
+            symbol=symbol,
+            timeframe=timeframe,
+            timestamp_ms=timestamp_ms,
+            market_regime=market_regime.value,
+            indicators=market_context,
+            task_prompt=task_prompt,
+            persona=persona.value,  # Set persona field
+            context_id=context_id,  # Shared across all personas from this context
+            generator_signal=asdict(signal),
+            generator_raw_response=signal.raw_response,
+            full_generator_prompt=task_prompt,  # Base prompt (persona already in signal)
+        )
+
+        critique = critiques.get(persona)
+        if critique is None:
+            # Critic returned None (extraction failed) - accept by default with flag
+            training_example.was_accepted = True
+            training_example.acceptance_reason = f"Critic failed for {persona.value} - accepted by default"
+            training_example.critic_error = "Critique extraction failed"
+            logger.warning(
+                "Critic failed, accepting by default",
+                persona=persona.value,
+            )
+        else:
+            # Capture critique
+            training_example.critique = asdict(critique)
+            training_example.critic_raw_response = critique.raw_response
+            training_example.critique_prompt = task_prompt
+
+            # ===== ACCEPTANCE DECISION =====
+            accepted, reason = should_accept_signal(
+                asdict(critique),
+                market_regime,
+            )
+
+            training_example.was_accepted = accepted
+            if accepted:
+                training_example.acceptance_reason = reason
+                summary["signals_accepted"] += 1
+                logger.info(
+                    "Signal accepted",
+                    persona=persona.value,
+                    reason=reason,
+                )
+            else:
+                training_example.rejection_reason = reason
+                logger.info(
+                    "Signal rejected",
+                    persona=persona.value,
+                    reason=reason,
+                )
+
+        # Add to training examples regardless of acceptance
+        # (DPO needs both accepted and rejected for preference pairs)
+        training_examples.append(training_example)
 
     # Determine final status
     if summary["signals_generated"] == 0:

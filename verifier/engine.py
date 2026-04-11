@@ -169,7 +169,9 @@ async def verify_example(
         log_return = compute_log_return(entry_price, exit_price)
 
         # Compute MAE
-        predicted_direction = example.generator_signal.get("direction", "UNKNOWN")
+        # Direction may be at top level or nested under signal_data
+        _sig = example.generator_signal
+        predicted_direction = _sig.get("direction") or _sig.get("signal_data", {}).get("direction", "UNKNOWN")
         if predicted_direction in ("HIGHER", "LOWER"):
             mae = compute_mae(holding_period, predicted_direction, entry_price)
         else:

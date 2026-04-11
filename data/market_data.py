@@ -413,10 +413,16 @@ class MarketDataService:
         Returns:
             DataFrame with columns: timestamp, open, high, low, close, volume
         """
-        # Calculate time range - use provided end_ts or default to now
+        # Calculate time range - use provided end_ts or default to now.
+        # Round default end_ts to the nearest bar close boundary so that all
+        # calls within the same bar period share the same cache key.
+        # Without this, each call uses a unique millisecond timestamp as end_ts,
+        # causing cache misses for every example even when the data hasn't changed.
         bar_duration_ms = self._timeframe_to_ms(timeframe)
         if end_ts is None:
-            end_ts = int(time.time() * 1000)
+            now_ms = int(time.time() * 1000)
+            # Snap to the most recent completed bar close
+            end_ts = (now_ms // bar_duration_ms) * bar_duration_ms
         start_ts = end_ts - (lookback_bars * bar_duration_ms)
 
         # Check cache first

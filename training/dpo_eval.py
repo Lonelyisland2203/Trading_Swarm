@@ -94,9 +94,17 @@ def evaluate_adapter(
         raise EvaluationError(f"Test set too small: {len(examples)} examples (need >= 30)")
 
     # Extract arrays
-    predicted_confidences = np.array([ex.generator_signal["confidence"] for ex in examples])
+    # Direction/confidence may be at top level or nested under signal_data (task-specific)
+    def _get_signal_field(sig: dict, key: str, default):
+        return sig.get(key) or sig.get("signal_data", {}).get(key, default)
+
+    predicted_confidences = np.array(
+        [_get_signal_field(ex.generator_signal, "confidence", 0.5) for ex in examples]
+    )
     actual_returns = np.array([outcome.realized_return for outcome in outcomes])
-    predicted_directions = np.array([ex.generator_signal["direction"] for ex in examples])
+    predicted_directions = np.array(
+        [_get_signal_field(ex.generator_signal, "direction", "UNKNOWN") for ex in examples]
+    )
     actual_directions = np.array([outcome.actual_direction for outcome in outcomes])
     final_rewards = np.array([r.final_reward for r in rewards])
     regimes = np.array([ex.market_regime for ex in examples])

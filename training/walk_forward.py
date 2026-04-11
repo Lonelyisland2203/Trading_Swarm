@@ -98,13 +98,19 @@ def create_walk_forward_splits(
     test_pairs = sorted_pairs[-test_window:]
     train_pairs = sorted_pairs[-(test_window + train_window) : -test_window]
 
+    # Ensure no timestamp straddles the train/test boundary.
+    # If train[-1] and test[0] share the same timestamp, absorb all pairs at that
+    # timestamp into train so the boundary is strictly clean.
+    if train_pairs and test_pairs and train_pairs[-1].timestamp_ms == test_pairs[0].timestamp_ms:
+        boundary_ts = train_pairs[-1].timestamp_ms
+        # Move pairs with boundary_ts from test → train
+        extra = [p for p in test_pairs if p.timestamp_ms == boundary_ts]
+        test_pairs = [p for p in test_pairs if p.timestamp_ms != boundary_ts]
+        train_pairs = list(train_pairs) + extra
+
     # Historical pairs (everything before training window)
-    history_cutoff = -(test_window + train_window)
-    if history_cutoff < -total_pairs:
-        # Not enough history for replay
-        history_pairs = []
-    else:
-        history_pairs = sorted_pairs[:history_cutoff]
+    train_ids = {id(p) for p in train_pairs} | {id(p) for p in test_pairs}
+    history_pairs = [p for p in sorted_pairs if id(p) not in train_ids]
 
     # Sample replay buffer from history
     if history_pairs:
@@ -136,13 +142,17 @@ def create_walk_forward_splits(
             f"train ends at {train_end_ms}, test starts at {test_start_ms}"
         )
 
-    # Validate replay pairs are all before training
+    # Validate replay pairs are all before training.
+    # If replay[-1] shares a timestamp with train[0], drop those replay pairs
+    # to ensure a clean boundary (same fix as the train/test boundary above).
     if replay_pairs:
-        replay_latest_ms = replay_pairs[-1].timestamp_ms
-        if replay_latest_ms >= train_start_ms:
+        train_start_ms = train_pairs[0].timestamp_ms
+        if replay_pairs[-1].timestamp_ms >= train_start_ms:
+            replay_pairs = [p for p in replay_pairs if p.timestamp_ms < train_start_ms]
+        if replay_pairs and replay_pairs[-1].timestamp_ms >= train_start_ms:
             raise TemporalSplitError(
                 f"Replay data overlaps with training data: "
-                f"replay ends at {replay_latest_ms}, train starts at {train_start_ms}"
+                f"replay ends at {replay_pairs[-1].timestamp_ms}, train starts at {train_start_ms}"
             )
 
     # Check minimum training set size (train + replay)

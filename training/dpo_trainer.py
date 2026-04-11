@@ -28,6 +28,10 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+    TrainingArguments,
 )
 from trl import DPOConfig, DPOTrainer
 
@@ -53,6 +57,29 @@ from training.walk_forward import (
 PROMOTION_COOLDOWN_HOURS = 24
 MAX_PROMOTIONS_PER_WEEK = 3
 PROMOTIONS_LOG_FILE = Path("models/adapters/promotions.jsonl")
+
+
+class CudaCacheFlushCallback(TrainerCallback):
+    """
+    Flush the CUDA memory allocator cache after every optimizer step.
+
+    Without this, near-maxed VRAM (16 GB on RTX 5070 Ti) causes progressive
+    slowdown: fragmented free blocks force increasingly expensive coalescing
+    on each gradient accumulation sub-step. Calling empty_cache() after each
+    optimizer step returns fragmented free blocks to the pool, keeping step
+    time constant across the training run.
+    """
+
+    def on_step_end(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs,
+    ) -> TrainerControl:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return control
 
 
 @dataclass(frozen=True)
@@ -254,8 +281,13 @@ def _create_dpo_config(config: TrainingConfig, output_dir: Path) -> DPOConfig:
 
     Key settings:
     - precompute_ref_log_probs=True: Computes reference logprobs upfront, saves VRAM
-    - gradient_checkpointing=True: Trades compute for memory
-    - bf16=True: Better numerical stability than fp16
+    - gradient_checkpointing + use_reentrant=False: Non-reentrant checkpointing avoids
+      stale graph reference accumulation that causes progressive slowdown
+    - max_length=1200: Our prompts are ~968 tokens + ~150 token responses.
+      Padding to 2048 wastes 4x attention compute and fills VRAM with padding ops.
+    - optim=adamw_bnb_8bit: bitsandbytes 8-bit Adam reduces optimizer state memory
+      by ~4x vs full-precision AdamW, freeing VRAM headroom.
+    - bf16=True: Better numerical stability than fp16 on Blackwell
     """
     return DPOConfig(
         output_dir=str(output_dir),
@@ -265,11 +297,15 @@ def _create_dpo_config(config: TrainingConfig, output_dir: Path) -> DPOConfig:
         beta=config.dpo_beta,
         loss_type="sigmoid",  # Standard DPO loss
         max_length=config.max_length,
-        max_prompt_length=config.max_length // 2,  # Reserve half for response
+        truncation_mode="keep_start",  # Keep prompt start when truncating
         num_train_epochs=config.num_epochs,
         # Memory optimization
-        precompute_ref_log_probs=True,  # Critical: avoids loading ref model during training
+        precompute_ref_log_probs=True,  # Avoids loading ref model during training
         gradient_checkpointing=True,
+        # Non-reentrant checkpointing: prevents stale graph reference accumulation
+        # that causes progressive slowdown across steps on near-maxed VRAM.
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        optim="adamw_bnb_8bit",  # 8-bit Adam: ~4x smaller optimizer state vs fp32 AdamW
         bf16=True,
         # Logging
         logging_steps=1,
@@ -283,7 +319,7 @@ def _create_dpo_config(config: TrainingConfig, output_dir: Path) -> DPOConfig:
         weight_decay=0.01,
         max_grad_norm=1.0,
         # Disable integrations we don't need
-        report_to="none",  # Disable wandb for now, can enable later
+        report_to="none",
         # Seed for reproducibility
         seed=42,
     )
@@ -584,13 +620,15 @@ def train_dpo(
 
             # Initialize DPOTrainer
             # Note: With precompute_ref_log_probs=True, reference model logprobs
-            # are computed once before training, avoiding VRAM overhead
+            # are computed once before training, avoiding VRAM overhead.
+            # CudaCacheFlushCallback prevents progressive slowdown on near-maxed VRAM.
             trainer = DPOTrainer(
                 model=model,
                 args=dpo_config,
                 train_dataset=train_dataset,
                 processing_class=tokenizer,
                 peft_config=lora_config,
+                callbacks=[CudaCacheFlushCallback()],
             )
 
             logger.info(

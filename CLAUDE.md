@@ -22,8 +22,9 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - Session 13: Derivatives Data Integration (funding rates, open interest, adaptive TTL caching, perpetual mapping)
 - Session 14: Fee-Aware DPO Training (execution context in prompts, net returns in rewards, fee model integration)
 - Session 15: Binance Execution Client (execution module, safety controls, fee-aware sizing)
+- Session 16: DPO Evaluation Pipeline (evaluate_candidate.py, test_eval_data saving, cache key fix, nested signal_data in dpo_eval.py)
 
-**Next:** Session 16 - TBD
+**Next:** Session 17 - TBD (generate more training data to meet promotion thresholds; current candidate has IC=+6.4% but needs larger test set for p<0.05)
 
 **Active Issues:**
 - `test_critic.py::TestCritiquePrompt::test_prompt_has_adversarial_framing` - stale expectation after critic.py modification
@@ -38,6 +39,15 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **Net Return Impact:** Signals with positive gross but negative net returns now receive negative rewards, teaching model to account for trading costs
 - **Optional Integration:** PromptBuilder.build_prompt() accepts optional fee_model parameter - backward compatible when omitted
 - **Fee Model Calculation:** Uses compute_holding_periods_8h() for timeframe-adaptive fee estimation
+
+### Evaluation Pipeline (Session 16)
+- **Fast Evaluation (recommended):** `python evaluate_candidate.py --test-data outputs/dpo_run_TIMESTAMP/test_eval_data.jsonl --candidate models/adapters/qwen3-8b-dpo/adapter-DPO-TIMESTAMP.candidate` — loads pre-saved test data, completes in seconds
+- **Slow Fallback:** `--dataset outputs/combined_examples.jsonl` — re-runs full verification (~1-2h, re-fetches all market data)
+- **Promotion criteria (no baseline):** IC >= 0.05, Brier <= 0.25, p < 0.05
+- **test_eval_data.jsonl:** Saved automatically by `run_dpo_training.py` after Phase 4 (before training). Contains flattened (example, outcome, reward) for the test split only.
+- **evaluation.json:** Saved inside adapter directory after evaluation runs.
+- **Cache key stability:** `fetch_ohlcv()` without explicit `end_ts` now snaps to the nearest bar close boundary (`end_ts = (now_ms // bar_duration_ms) * bar_duration_ms`), so all verification calls within the same bar period share a cache entry.
+- **Candidate adapter:** `models/adapters/qwen3-8b-dpo/adapter-DPO-1775725178964.candidate` — IC=+6.4% (not significant, N=198 too small), Brier=0.30 (overconfident). Retained for future comparison.
 
 ### Execution Layer (Session 15)
 - **Purpose:** Production execution layer for deploying signals to Binance
@@ -182,6 +192,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - `generate_training_dataset.py` - Main CLI for dataset generation
 - `run_dpo_training.py` - End-to-end DPO pipeline CLI
 - `run_multi_persona.py` - Lightweight multi-persona test script (deprecated; use generate_training_dataset.py)
+- `evaluate_candidate.py` - Candidate adapter evaluation and promotion (fast path via --test-data, slow fallback via --dataset)
 
 ### Verifier Layer
 - `verifier/constants.py` - Timeframe constants + `compute_holding_periods_8h()`
@@ -235,6 +246,8 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **InferenceQueue init:** Deletes existing output file when `resume=False`; preserves it when `resume=True`
 - **GeneratorSignal structure:** Task-specific fields (direction, confidence, etc.) live inside nested `signal_data` dict, NOT at top level
 - **Windows console:** Avoid Unicode emoji in print() — cp1252 codec crashes on characters like `⚠️`; use ASCII alternatives
+- **fetch_ohlcv cache key:** When `end_ts` is None (default in `verify_example`), snaps to `(now_ms // bar_duration_ms) * bar_duration_ms` so calls within the same bar period share a cache entry. Callers passing explicit `end_ts` (e.g. `get_ohlcv_as_of`) are unaffected.
+- **Evaluation data pattern:** `run_dpo_training.py` saves `test_eval_data.jsonl` in the run output dir after Phase 4. Pass to `evaluate_candidate.py --test-data` for fast evaluation without re-verification. Without this file, evaluation re-fetches all market data (~1-2h).
 
 ## Working Decisions
 

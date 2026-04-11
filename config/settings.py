@@ -239,10 +239,14 @@ class DPOTrainingSettings(BaseModel):
         description="Gradient accumulation steps. Effective batch = batch_size * this."
     )
     max_length: int = Field(
-        default=2048,
+        default=1200,
         ge=512,
         le=4096,
-        description="Maximum sequence length. Longer = more VRAM."
+        description=(
+            "Maximum sequence length (prompt + chosen/rejected response). "
+            "Dataset prompts are ~968 tokens + ~150 token responses = ~1120 total. "
+            "1200 gives headroom without padding to 2048 which quadruples attention cost."
+        ),
     )
     num_epochs: int = Field(
         default=1,

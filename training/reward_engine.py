@@ -133,9 +133,11 @@ def compute_reward(
         Final reward: 0.542
     """
     # Extract signal details
+    # Direction/confidence may be at top level or nested under signal_data
     signal = training_example.generator_signal
-    predicted_direction = signal.get("direction", "UNKNOWN")
-    confidence = signal.get("confidence", 0.5)
+    _signal_data = signal.get("signal_data", {})
+    predicted_direction = signal.get("direction") or _signal_data.get("direction", "UNKNOWN")
+    confidence = signal.get("confidence") or _signal_data.get("confidence", 0.5)
     
     # Get reward weights from config
     weights = settings.reward
