@@ -27,6 +27,14 @@ from signals.signal_loop import (
     run_loop,
     should_override_signal,
 )
+from signals.verification import (
+    VerifiedResult,
+    VerificationStats,
+    verify_signal,
+    compute_verification_stats,
+    check_training_trigger,
+    export_for_training,
+)
 
 __all__ = [
     # Models
@@ -48,4 +56,11 @@ __all__ = [
     "run_cycle",
     "run_loop",
     "should_override_signal",
+    # Verification
+    "VerifiedResult",
+    "VerificationStats",
+    "verify_signal",
+    "compute_verification_stats",
+    "check_training_trigger",
+    "export_for_training",
 ]

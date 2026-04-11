@@ -10,7 +10,7 @@
 
 ## Commands
 - Install: `pip install -r requirements.txt`
-- Test: `pytest` (1370+ tests, run before every commit)
+- Test: `pytest` (1400+ tests, run before every commit)
 - Lint: `ruff check --fix . && ruff format .`
 - Type check: `mypy --strict <module>`
 
@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17J.
+Completed through Session 17K.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -54,14 +54,16 @@ Completed through Session 17J.
 - run_grpo_training.py — end-to-end GRPO pipeline CLI: 5 phases (SFT data gen, SFT train, GRPO train, eval, promotion), skip logic for existing artifacts, --dry-run/--regenerate/--retrain-sft/--limit/--max-steps flags
 - run_autoresearch.py — autonomous hyperparameter search loop (karpathy/autoresearch-inspired): round-robin parameter selection, direction tracking, git commit/revert on IC improvement/regression, results.tsv logging, --max-experiments/--time-budget-hours/--dry-run flags
 - evaluation/xgboost_baseline.py — XGBoost/LightGBM baseline for LLM comparison: extracts same 17 indicators from market snapshots, walk-forward CV with temporal ordering, metrics (IC, Brier, Sharpe, directional accuracy), SHAP feature importance, comparison table vs GRPO/DPO adapters, CLI with --data/--compare/--n-folds flags
-- signals/ — production signal loop package (71 tests):
+- signals/ — production signal loop package (101 tests):
   - signal_models.py — Signal dataclass, SignalDirection, map_generator_to_signal (HIGHER/LOWER→LONG/SHORT)
   - preflight.py — STOP file check, VRAM check (6GB min), process lock via check_can_infer()
   - signal_logger.py — thread-safe JSONL logging to signals/signal_log.jsonl
   - accuracy_tracker.py — deferred accuracy verification (queue signals, verify after next bar closes)
   - signal_loop.py — async loop: generate_signal_for_symbol(), evaluate_with_critic(), critic override logic (REJECT + reasoning_quality<0.5 OR technical_alignment<0.5 → FLAT)
+  - verification.py — closes feedback loop: load unverified signals, fetch outcomes, compute fee-adjusted returns, aggregate stats (IC, Sharpe, regime-stratified accuracy, false bullish/bearish rates), training trigger (≥200 signals), export for GRPO retraining
 - run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence
-- Tests: 396 tests (previous: 325, signal loop: 71)
+- run_verification.py — CLI: --once, --interval, --stats, --export, --check-trigger; runs on schedule (default 4h) or once mode
+- Tests: 426 tests (previous: 396, verification: 30)
 
 ## Next Session
-Session 17K — End-to-end GRPO training dry run (generate data, train SFT, train GRPO, evaluate)
+Session 17L — End-to-end GRPO training dry run (generate data, train SFT, train GRPO, evaluate)
