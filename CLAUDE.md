@@ -181,6 +181,7 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 ### Scripts
 - `generate_training_dataset.py` - Main CLI for dataset generation
 - `run_dpo_training.py` - End-to-end DPO pipeline CLI
+- `run_multi_persona.py` - Lightweight multi-persona test script (deprecated; use generate_training_dataset.py)
 
 ### Verifier Layer
 - `verifier/constants.py` - Timeframe constants + `compute_holding_periods_8h()`
@@ -232,6 +233,8 @@ Autonomous AI trading signal system with self-improvement via DPO fine-tuning.
 - **Indicator pattern:** `compute_` prefix, pd.Series params, return pd.Series or dict of Series
 - **Multi-TF pattern:** Optional `higher_tf_data` parameter cascaded through orchestrator -> PromptBuilder
 - **InferenceQueue init:** Deletes existing output file when `resume=False`; preserves it when `resume=True`
+- **GeneratorSignal structure:** Task-specific fields (direction, confidence, etc.) live inside nested `signal_data` dict, NOT at top level
+- **Windows console:** Avoid Unicode emoji in print() — cp1252 codec crashes on characters like `⚠️`; use ASCII alternatives
 
 ## Working Decisions
 
