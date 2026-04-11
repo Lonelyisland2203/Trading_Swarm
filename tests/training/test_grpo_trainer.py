@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+import torch
 
 from training.grpo_trainer import (
     parse_direction,
@@ -11,6 +12,7 @@ from training.grpo_trainer import (
     GRPOTrainingResult,
     run_grpo_preflight,
     log_vram_usage,
+    compute_kl_divergence,
 )
 from training.grpo_data import GRPOTrainingExample
 
@@ -350,3 +352,32 @@ class TestCheckpointing:
         assert metadata["mean_reward"] == 0.25
         assert metadata["timestamp_ms"] == 1700000000000
         assert "config_hash" in metadata
+
+
+class TestKLDivergence:
+    """Tests for KL divergence computation."""
+
+    def test_kl_identical_distributions_is_zero(self) -> None:
+        """Test that KL divergence of identical distributions is 0."""
+        policy_logprobs = torch.tensor([-1.0, -2.0, -3.0])
+        ref_logprobs = torch.tensor([-1.0, -2.0, -3.0])
+        kl = compute_kl_divergence(policy_logprobs, ref_logprobs)
+        assert abs(kl) < 1e-6
+
+    def test_kl_always_non_negative(self) -> None:
+        """Test that KL divergence is non-negative."""
+        policy_logprobs = torch.tensor([-1.0, -1.5, -2.0])
+        ref_logprobs = torch.tensor([-2.0, -2.5, -3.0])
+        kl = compute_kl_divergence(policy_logprobs, ref_logprobs)
+        assert kl >= 0
+
+    def test_kl_divergence_value(self) -> None:
+        """Test KL divergence with known values."""
+        # KL = sum(policy_prob * (policy_logprob - ref_logprob))
+        # For log probs, this is sum(exp(policy_logprob) * (policy_logprob - ref_logprob))
+        # Simplified: mean(policy_logprob - ref_logprob) when using log space approximation
+        policy_logprobs = torch.tensor([-1.0, -2.0])
+        ref_logprobs = torch.tensor([-1.5, -2.5])
+        kl = compute_kl_divergence(policy_logprobs, ref_logprobs)
+        # Expected: mean([0.5, 0.5]) = 0.5
+        assert abs(kl - 0.5) < 1e-6

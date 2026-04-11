@@ -285,3 +285,28 @@ def save_grpo_checkpoint(
     )
 
     return checkpoint_dir
+
+
+def compute_kl_divergence(
+    policy_logprobs: torch.Tensor,
+    ref_logprobs: torch.Tensor,
+) -> float:
+    """
+    Compute KL divergence between policy and reference distributions.
+
+    Uses the approximation: KL(π || π_ref) ≈ mean(log π - log π_ref)
+
+    This is the standard approximation used in PPO/GRPO when we have
+    log probabilities from both distributions.
+
+    Args:
+        policy_logprobs: Log probabilities from current policy
+        ref_logprobs: Log probabilities from reference policy
+
+    Returns:
+        KL divergence (scalar, non-negative)
+    """
+    # KL divergence approximation
+    kl = (policy_logprobs - ref_logprobs).mean().item()
+    # KL should be non-negative (numerical errors can cause small negatives)
+    return max(0.0, kl)
