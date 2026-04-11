@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17E.
+Completed through Session 17F.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -50,7 +50,8 @@ Completed through Session 17E.
 - training/grpo_data.py — GRPOTrainingExample dataclass, GRPOWalkForwardSplit, temporal split functions
 - training/grpo_trainer.py — full GRPO training loop: sequential G=4 generation, KL penalty (β=0.04), PPO clipping (ε=0.2), checkpointing every 500 steps, STOP file handling, CLI entry point
 - training/evaluate_candidate.py — unified adapter evaluation for DPO/GRPO, metrics (IC, Brier, MACE, regime-stratified IC, structure_compliance_rate), promotion criteria (IC≥0.05, Brier≤0.25, p<0.05, structure≥0.9 for GRPO), --compare mode for side-by-side evaluation
-- Tests: 172 GRPO/eval tests (config: 18, data: 9, reward: 47, trainer: 56, evaluate_candidate: 42)
+- run_grpo_training.py — end-to-end GRPO pipeline CLI: 5 phases (SFT data gen, SFT train, GRPO train, eval, promotion), skip logic for existing artifacts, --dry-run/--regenerate/--retrain-sft/--limit/--max-steps flags
+- Tests: 201 GRPO/eval/pipeline tests (config: 18, data: 9, reward: 47, trainer: 56, evaluate_candidate: 42, run_grpo_training: 29)
 
 ## Next Session
-Session 17F — GRPO training data generation pipeline (create grpo_training_data.jsonl from historical market data)
+Session 17G — GRPO training data generation pipeline (create grpo_training_data.jsonl from historical market data)
