@@ -26,6 +26,7 @@ from loguru import logger
 
 from training.grpo_config import GRPOTrainingConfig
 from training.grpo_data import GRPOTrainingExample
+from training.grpo_reward import compute_grpo_reward, compute_group_advantages
 from training.process_lock import check_can_train
 from training.vram_check import check_vram_availability
 
@@ -518,3 +519,64 @@ class GRPOTrainer:
                 torch.cuda.empty_cache()
 
         return completions
+
+    def _training_step(
+        self,
+        example: GRPOTrainingExample,
+        step: int,
+    ) -> GRPOStepResult:
+        """
+        Execute single GRPO training step.
+
+        1. Generate G completions
+        2. Score each with reward function
+        3. Compute group-relative advantages
+        4. Compute loss with KL penalty
+        5. Backward pass (gradients accumulated)
+
+        Args:
+            example: Training example
+            step: Current step number
+
+        Returns:
+            GRPOStepResult with metrics
+        """
+        # 1. Generate G completions
+        completions = self._generate_completions(example.market_snapshot)
+
+        # 2. Score each completion
+        rewards = []
+        for completion in completions:
+            direction = parse_direction(completion)
+            result = compute_grpo_reward(
+                completion=completion,
+                predicted_direction=direction,
+                actual_direction=example.actual_direction,
+                gross_return_pct=example.gross_return_pct,
+                config=self.config.reward,
+            )
+            rewards.append(result.final_reward)
+
+        # 3. Compute group-relative advantages
+        advantages = compute_group_advantages(rewards)
+
+        # 4. Compute loss with KL penalty
+        loss, kl = self._compute_step_loss(
+            completions=completions,
+            advantages=advantages,
+            prompt=example.market_snapshot,
+        )
+
+        # 5. Log VRAM periodically
+        vram_mb = 0
+        if step % self.config.vram_log_interval_steps == 0:
+            vram_mb = log_vram_usage(step)
+
+        return GRPOStepResult(
+            step=step,
+            mean_reward=sum(rewards) / len(rewards),
+            mean_advantage=sum(advantages) / len(advantages),
+            kl_divergence=kl,
+            loss=loss,
+            vram_mb=vram_mb,
+        )

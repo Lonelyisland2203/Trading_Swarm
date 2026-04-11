@@ -659,3 +659,97 @@ class TestGRPOTrainerGeneration:
             mock_trainer._generate_completions("market snapshot")
             # Should clear cache G-1 times (between generations)
             assert mock_cache.call_count >= mock_trainer.config.group_size - 1
+
+
+class TestGRPOTrainerStep:
+    """Tests for GRPOTrainer training step."""
+
+    @pytest.fixture
+    def mock_trainer_for_step(self) -> GRPOTrainer:
+        """Create trainer with all mocks for step testing."""
+        trainer = GRPOTrainer()
+
+        # Mock tokenizer
+        trainer._tokenizer = MagicMock()
+        trainer._tokenizer.pad_token_id = 0
+        trainer._tokenizer.eos_token_id = 1
+        trainer._tokenizer.decode.return_value = (
+            "## THESIS\nBullish\n## EVIDENCE\nRSI\n## RISK\nVol\n## DECISION\nLONG"
+        )
+        trainer._tokenizer.__call__ = MagicMock(
+            return_value={
+                "input_ids": torch.tensor([[100, 101, 102]]),
+                "attention_mask": torch.tensor([[1, 1, 1]]),
+            }
+        )
+
+        # Mock model
+        trainer._model = MagicMock()
+        trainer._model.generate.return_value = torch.tensor([[100, 101, 102, 200, 201]])
+        trainer._model.device = torch.device("cpu")
+        # Mock forward pass for log probs
+        mock_output = MagicMock()
+        mock_output.logits = torch.randn(1, 5, 1000)
+        trainer._model.return_value = mock_output
+
+        # Mock reference state dict
+        trainer._ref_state_dict = {}
+
+        # Mock optimizer
+        trainer._optimizer = MagicMock()
+
+        return trainer
+
+    def test_training_step_returns_step_result(self, mock_trainer_for_step: GRPOTrainer) -> None:
+        """Test that _training_step returns GRPOStepResult."""
+        example = GRPOTrainingExample(
+            market_snapshot="BTC/USDT snapshot",
+            actual_direction="LONG",
+            gross_return_pct=0.5,
+            timestamp_ms=1700000000000,
+        )
+
+        with patch.object(mock_trainer_for_step, "_generate_completions") as mock_gen:
+            mock_gen.return_value = [
+                "## DECISION\nLONG",
+                "## DECISION\nLONG",
+                "## DECISION\nSHORT",
+                "## DECISION\nLONG",
+            ]
+            with patch.object(
+                mock_trainer_for_step, "_compute_step_loss", create=True
+            ) as mock_loss:
+                mock_loss.return_value = (0.5, 0.01)  # loss, kl
+
+                result = mock_trainer_for_step._training_step(example, step=1)
+
+        assert isinstance(result, GRPOStepResult)
+        assert result.step == 1
+
+    def test_training_step_computes_rewards(self, mock_trainer_for_step: GRPOTrainer) -> None:
+        """Test that training step computes rewards for all completions."""
+        example = GRPOTrainingExample(
+            market_snapshot="BTC/USDT snapshot",
+            actual_direction="LONG",
+            gross_return_pct=0.5,
+            timestamp_ms=1700000000000,
+        )
+
+        with patch.object(mock_trainer_for_step, "_generate_completions") as mock_gen:
+            mock_gen.return_value = [
+                "## DECISION\nLONG",
+                "## DECISION\nLONG",
+                "## DECISION\nSHORT",
+                "## DECISION\nFLAT",
+            ]
+            with patch("training.grpo_trainer.compute_grpo_reward") as mock_reward:
+                mock_reward.return_value = MagicMock(final_reward=0.5)
+                with patch.object(
+                    mock_trainer_for_step, "_compute_step_loss", create=True
+                ) as mock_loss:
+                    mock_loss.return_value = (0.5, 0.01)
+
+                    mock_trainer_for_step._training_step(example, step=1)
+
+        # Should compute reward for each completion (G=4)
+        assert mock_reward.call_count == 4
