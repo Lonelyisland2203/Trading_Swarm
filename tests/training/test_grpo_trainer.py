@@ -381,3 +381,51 @@ class TestKLDivergence:
         kl = compute_kl_divergence(policy_logprobs, ref_logprobs)
         # Expected: mean([0.5, 0.5]) = 0.5
         assert abs(kl - 0.5) < 1e-6
+
+
+class TestPolicyClipping:
+    """Tests for PPO-style policy ratio clipping."""
+
+    def test_ratio_within_bounds_not_clipped(self) -> None:
+        """Test that ratio within [0.8, 1.2] is not clipped."""
+        from training.grpo_trainer import compute_clipped_policy_loss
+
+        ratio = torch.tensor([1.0, 1.1, 0.9])
+        advantage = torch.tensor([0.5, 0.5, 0.5])
+        loss = compute_clipped_policy_loss(ratio, advantage, epsilon=0.2)
+        # Expected: -mean(ratio * advantage) = -mean([0.5, 0.55, 0.45]) = -0.5
+        expected = -ratio.mean().item() * 0.5
+        assert abs(loss - expected) < 0.01
+
+    def test_ratio_above_upper_bound_clipped(self) -> None:
+        """Test that ratio > 1+ε is clipped."""
+        from training.grpo_trainer import compute_clipped_policy_loss
+
+        ratio = torch.tensor([1.5])  # Above 1.2
+        advantage = torch.tensor([1.0])
+        loss = compute_clipped_policy_loss(ratio, advantage, epsilon=0.2)
+        # Clipped ratio = 1.2, so loss = -min(1.5 * 1.0, 1.2 * 1.0) = -1.2
+        assert abs(loss - (-1.2)) < 1e-6
+
+    def test_ratio_below_lower_bound_clipped(self) -> None:
+        """Test that ratio < 1-ε is clipped."""
+        from training.grpo_trainer import compute_clipped_policy_loss
+
+        ratio = torch.tensor([0.5])  # Below 0.8
+        advantage = torch.tensor([1.0])
+        loss = compute_clipped_policy_loss(ratio, advantage, epsilon=0.2)
+        # Clipped ratio = 0.8, so loss = -min(0.5 * 1.0, 0.8 * 1.0) = -0.5
+        assert abs(loss - (-0.5)) < 1e-6
+
+    def test_negative_advantage_uses_min(self) -> None:
+        """Test that negative advantage correctly uses min for conservative update."""
+        from training.grpo_trainer import compute_clipped_policy_loss
+
+        ratio = torch.tensor([1.5])  # Above 1.2
+        advantage = torch.tensor([-1.0])  # Negative advantage
+        loss = compute_clipped_policy_loss(ratio, advantage, epsilon=0.2)
+        # For negative advantage: loss = -min(ratio * adv, clipped_ratio * adv)
+        # = -min(1.5 * -1, 1.2 * -1) = -min(-1.5, -1.2) = -(-1.5) = 1.5
+        # min() takes the more negative value, encouraging larger policy updates
+        # when the action led to negative reward
+        assert abs(loss - 1.5) < 1e-6

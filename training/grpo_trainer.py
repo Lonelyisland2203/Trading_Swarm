@@ -310,3 +310,31 @@ def compute_kl_divergence(
     kl = (policy_logprobs - ref_logprobs).mean().item()
     # KL should be non-negative (numerical errors can cause small negatives)
     return max(0.0, kl)
+
+
+def compute_clipped_policy_loss(
+    ratio: torch.Tensor,
+    advantage: torch.Tensor,
+    epsilon: float = 0.2,
+) -> float:
+    """
+    Compute PPO-style clipped policy loss.
+
+    loss = -min(ratio * advantage, clip(ratio, 1-ε, 1+ε) * advantage)
+
+    The clipping prevents too large policy updates, stabilizing training.
+
+    Args:
+        ratio: π(a|s) / π_ref(a|s) probability ratios
+        advantage: Group-relative advantages
+        epsilon: Clipping parameter (default: 0.2)
+
+    Returns:
+        Clipped policy loss (scalar)
+    """
+    clipped_ratio = torch.clamp(ratio, 1 - epsilon, 1 + epsilon)
+    unclipped_loss = ratio * advantage
+    clipped_loss = clipped_ratio * advantage
+    # Take the minimum (most conservative update)
+    loss = -torch.min(unclipped_loss, clipped_loss).mean()
+    return loss.item()
