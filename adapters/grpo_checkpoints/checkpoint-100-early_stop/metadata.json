@@ -1,0 +1,8 @@
+{
+  "step": 100,
+  "timestamp_ms": 1775923569795,
+  "config_hash": "09ed4f12bb2a4877",
+  "mean_reward": 0.1,
+  "kl": 0.01,
+  "loss": 0.5
+}
