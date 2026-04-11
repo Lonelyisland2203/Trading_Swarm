@@ -11,6 +11,7 @@ CRITICAL: This module runs in Process B (training), which is mutually exclusive
 with Process A (inference). Never run both simultaneously.
 """
 
+import gc
 import hashlib
 import json
 import os
@@ -19,7 +20,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional, TextIO
+from typing import Any, Dict, List, Optional, TextIO
 
 import torch
 from loguru import logger
@@ -27,7 +28,7 @@ from loguru import logger
 from training.grpo_config import GRPOTrainingConfig
 from training.grpo_data import GRPOTrainingExample
 from training.grpo_reward import compute_grpo_reward, compute_group_advantages
-from training.process_lock import check_can_train
+from training.process_lock import acquire_training_lock, check_can_train
 from training.vram_check import check_vram_availability
 
 # Constants
@@ -728,3 +729,147 @@ class GRPOTrainer:
             loss=loss,
             vram_mb=vram_mb,
         )
+
+    def _cleanup(self) -> None:
+        """Release GPU memory."""
+        if self._model is not None:
+            del self._model
+            self._model = None
+        if self._optimizer is not None:
+            del self._optimizer
+            self._optimizer = None
+        if self._ref_state_dict is not None:
+            del self._ref_state_dict
+            self._ref_state_dict = None
+        if self._logger is not None:
+            self._logger.close()
+            self._logger = None
+
+        torch.cuda.empty_cache()
+        gc.collect()
+        logger.info("GPU memory cleaned up")
+
+    def train(
+        self,
+        examples: List[GRPOTrainingExample],
+    ) -> GRPOTrainingResult:
+        """
+        Execute full GRPO training loop.
+
+        Args:
+            examples: List of training examples
+
+        Returns:
+            GRPOTrainingResult with success status and metrics
+        """
+        # 1. Preflight checks
+        ok, reason = run_grpo_preflight(examples)
+        if not ok:
+            return GRPOTrainingResult(
+                success=False,
+                adapter_path=None,
+                steps_completed=0,
+                final_metrics={},
+                error=reason,
+            )
+
+        steps_completed = 0
+        final_metrics: Dict[str, Any] = {}
+
+        try:
+            # 2. Acquire training lock
+            with acquire_training_lock():
+                logger.info("Training lock acquired")
+
+                # 3. Load model
+                self._load_model()
+
+                # 4. Initialize logger
+                self._logger = GRPOLogger(log_dir=self.config.log_dir)
+
+                # 5. Training loop
+                example_idx = 0
+                for step in range(1, self.config.max_steps + 1):
+                    # Check STOP file every 100 steps
+                    if step % 100 == 0 and STOP_FILE_PATH.exists():
+                        logger.warning("STOP file detected, saving checkpoint")
+                        if self._model is not None:
+                            save_grpo_checkpoint(
+                                model=self._model,
+                                checkpoint_dir=self.config.checkpoint_dir
+                                / f"checkpoint-{step}-early_stop",
+                                step=step,
+                                config=self.config,
+                                metrics=final_metrics,
+                            )
+                        return GRPOTrainingResult(
+                            success=False,
+                            adapter_path=None,
+                            steps_completed=step,
+                            final_metrics=final_metrics,
+                            error="STOP file detected",
+                        )
+
+                    # Get example (cycle through examples)
+                    example = examples[example_idx % len(examples)]
+                    example_idx += 1
+
+                    # Execute training step
+                    step_result = self._training_step(example, step)
+                    steps_completed = step
+
+                    # Log step
+                    self._logger.log_step(step_result)
+
+                    # Update final metrics
+                    final_metrics = {
+                        "mean_reward": step_result.mean_reward,
+                        "kl": step_result.kl_divergence,
+                        "loss": step_result.loss,
+                    }
+
+                    # Checkpoint every N steps
+                    if step % self.config.checkpoint_interval_steps == 0:
+                        save_grpo_checkpoint(
+                            model=self._model,
+                            checkpoint_dir=self.config.checkpoint_dir / f"checkpoint-{step}",
+                            step=step,
+                            config=self.config,
+                            metrics=final_metrics,
+                        )
+
+                # 6. Save final adapter
+                final_adapter_path = save_grpo_checkpoint(
+                    model=self._model,
+                    checkpoint_dir=self.config.output_dir,
+                    step=steps_completed,
+                    config=self.config,
+                    metrics=final_metrics,
+                )
+
+                logger.info(
+                    "Training complete",
+                    steps=steps_completed,
+                    adapter_path=str(final_adapter_path),
+                )
+
+                return GRPOTrainingResult(
+                    success=True,
+                    adapter_path=final_adapter_path,
+                    steps_completed=steps_completed,
+                    final_metrics=final_metrics,
+                    error=None,
+                )
+
+        except Exception as e:
+            logger.exception(f"Training failed: {e}")
+            return GRPOTrainingResult(
+                success=False,
+                adapter_path=None,
+                steps_completed=steps_completed,
+                final_metrics=final_metrics,
+                error=str(e),
+            )
+
+        finally:
+            self._cleanup()

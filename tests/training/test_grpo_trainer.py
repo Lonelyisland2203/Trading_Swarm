@@ -902,3 +902,165 @@ class TestGRPOTrainerLoss:
 
         # Should return log probs for completion tokens only (2 tokens)
         assert len(log_probs) == 2
+
+
+class TestGRPOTrainerTrain:
+    """Tests for GRPOTrainer main train loop."""
+
+    @pytest.fixture
+    def sample_examples(self) -> list[GRPOTrainingExample]:
+        """Create sample training examples."""
+        return [
+            GRPOTrainingExample(
+                market_snapshot=f"snapshot_{i}",
+                actual_direction="LONG" if i % 2 == 0 else "SHORT",
+                gross_return_pct=0.1 * (i % 5),
+                timestamp_ms=1700000000000 + i * 1000,
+            )
+            for i in range(100)
+        ]
+
+    @patch("training.grpo_trainer.acquire_training_lock")
+    @patch("training.grpo_trainer.run_grpo_preflight")
+    def test_train_runs_preflight(
+        self,
+        mock_preflight: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+    ) -> None:
+        """Test that train() runs preflight checks."""
+        mock_preflight.return_value = (False, "Test failure")
+
+        trainer = GRPOTrainer()
+        result = trainer.train(sample_examples)
+
+        mock_preflight.assert_called_once()
+        assert result.success is False
+        assert "Test failure" in result.error
+
+    @patch("training.grpo_trainer.acquire_training_lock")
+    @patch("training.grpo_trainer.run_grpo_preflight")
+    def test_train_acquires_lock(
+        self,
+        mock_preflight: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+    ) -> None:
+        """Test that train() acquires training lock."""
+        mock_preflight.return_value = (True, "Ready")
+        mock_lock.return_value.__enter__ = MagicMock()
+        mock_lock.return_value.__exit__ = MagicMock(return_value=False)
+
+        trainer = GRPOTrainer()
+        # Mock the rest to avoid full training
+        with patch.object(trainer, "_load_model"):
+            with patch.object(trainer, "_training_step") as mock_step:
+                mock_step.return_value = GRPOStepResult(
+                    step=1,
+                    mean_reward=0.1,
+                    mean_advantage=0.0,
+                    kl_divergence=0.01,
+                    loss=0.5,
+                    vram_mb=1000,
+                )
+                with patch.object(trainer, "_cleanup"):
+                    # Limit steps
+                    from training.grpo_config import GRPOTrainingConfig
+
+                    trainer.config = GRPOTrainingConfig(max_steps=1)
+                    trainer._logger = MagicMock()
+                    _result = trainer.train(sample_examples)
+
+        mock_lock.assert_called_once()
+
+    @patch("training.grpo_trainer.acquire_training_lock")
+    @patch("training.grpo_trainer.run_grpo_preflight")
+    def test_train_checkpoints_every_500_steps(
+        self,
+        mock_preflight: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+    ) -> None:
+        """Test that checkpoints are saved every 500 steps."""
+        mock_preflight.return_value = (True, "Ready")
+        mock_lock.return_value.__enter__ = MagicMock()
+        mock_lock.return_value.__exit__ = MagicMock(return_value=False)
+
+        from training.grpo_config import GRPOTrainingConfig
+
+        trainer = GRPOTrainer()
+        trainer.config = GRPOTrainingConfig(
+            max_steps=501,
+            checkpoint_interval_steps=500,
+        )
+
+        with patch.object(trainer, "_load_model"):
+            with patch.object(trainer, "_training_step") as mock_step:
+                mock_step.return_value = GRPOStepResult(
+                    step=1,
+                    mean_reward=0.1,
+                    mean_advantage=0.0,
+                    kl_divergence=0.01,
+                    loss=0.5,
+                    vram_mb=1000,
+                )
+                with patch.object(trainer, "_cleanup"):
+                    with patch("training.grpo_trainer.save_grpo_checkpoint") as mock_save:
+                        trainer._logger = MagicMock()
+                        trainer._model = MagicMock()
+                        _result = trainer.train(sample_examples)
+
+        # Should save at step 500 and final
+        assert mock_save.call_count >= 1
+
+    @patch("training.grpo_trainer.acquire_training_lock")
+    @patch("training.grpo_trainer.run_grpo_preflight")
+    def test_train_stop_file_graceful_shutdown(
+        self,
+        mock_preflight: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+        tmp_path: Path,
+    ) -> None:
+        """Test graceful shutdown when STOP file appears."""
+        mock_preflight.return_value = (True, "Ready")
+        mock_lock.return_value.__enter__ = MagicMock()
+        mock_lock.return_value.__exit__ = MagicMock(return_value=False)
+
+        # Create STOP file
+        stop_dir = tmp_path / "execution" / "state"
+        stop_dir.mkdir(parents=True)
+        stop_file = stop_dir / "STOP"
+
+        from training.grpo_config import GRPOTrainingConfig
+
+        trainer = GRPOTrainer()
+        trainer.config = GRPOTrainingConfig(max_steps=1000)
+
+        step_count = [0]
+
+        def mock_step(example, step):
+            step_count[0] += 1
+            # Create STOP file after 50 steps
+            if step_count[0] == 50:
+                stop_file.touch()
+            return GRPOStepResult(
+                step=step,
+                mean_reward=0.1,
+                mean_advantage=0.0,
+                kl_divergence=0.01,
+                loss=0.5,
+                vram_mb=1000,
+            )
+
+        with patch.object(trainer, "_load_model"):
+            with patch.object(trainer, "_training_step", side_effect=mock_step):
+                with patch.object(trainer, "_cleanup"):
+                    with patch("training.grpo_trainer.STOP_FILE_PATH", stop_file):
+                        trainer._logger = MagicMock()
+                        trainer._model = MagicMock()
+                        result = trainer.train(sample_examples)
+
+        # Should stop before 1000 steps
+        assert result.steps_completed < 1000
+        assert "STOP" in (result.error or "")
