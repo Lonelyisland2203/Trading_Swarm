@@ -1,6 +1,12 @@
 """Tests for GRPO trainer."""
 
-from training.grpo_trainer import parse_direction
+from pathlib import Path
+
+from training.grpo_trainer import (
+    parse_direction,
+    GRPOStepResult,
+    GRPOTrainingResult,
+)
 
 
 class TestParseDirection:
@@ -55,3 +61,66 @@ class TestParseDirection:
         """Test parsing direction when surrounded by other text."""
         completion = "## DECISION\nBased on analysis, I recommend going LONG with caution."
         assert parse_direction(completion) == "LONG"
+
+
+class TestGRPOStepResult:
+    """Tests for GRPOStepResult dataclass."""
+
+    def test_create_step_result(self) -> None:
+        """Test creating a step result."""
+        result = GRPOStepResult(
+            step=100,
+            mean_reward=0.23,
+            mean_advantage=0.0,
+            kl_divergence=0.012,
+            loss=0.45,
+            vram_mb=10240,
+        )
+        assert result.step == 100
+        assert result.mean_reward == 0.23
+        assert result.kl_divergence == 0.012
+
+    def test_step_result_to_dict(self) -> None:
+        """Test converting step result to dictionary."""
+        result = GRPOStepResult(
+            step=100,
+            mean_reward=0.23,
+            mean_advantage=0.0,
+            kl_divergence=0.012,
+            loss=0.45,
+            vram_mb=10240,
+        )
+        d = result.to_dict()
+        assert d["step"] == 100
+        assert d["mean_reward"] == 0.23
+        assert "timestamp" in d
+
+
+class TestGRPOTrainingResult:
+    """Tests for GRPOTrainingResult dataclass."""
+
+    def test_create_success_result(self) -> None:
+        """Test creating a successful training result."""
+        result = GRPOTrainingResult(
+            success=True,
+            adapter_path=Path("adapters/grpo_latest"),
+            steps_completed=5000,
+            final_metrics={"mean_reward": 0.25, "kl": 0.01},
+            error=None,
+        )
+        assert result.success is True
+        assert result.adapter_path == Path("adapters/grpo_latest")
+        assert result.steps_completed == 5000
+
+    def test_create_failure_result(self) -> None:
+        """Test creating a failed training result."""
+        result = GRPOTrainingResult(
+            success=False,
+            adapter_path=None,
+            steps_completed=0,
+            final_metrics={},
+            error="Preflight failed: lock unavailable",
+        )
+        assert result.success is False
+        assert result.adapter_path is None
+        assert "lock" in result.error

@@ -12,6 +12,10 @@ with Process A (inference). Never run both simultaneously.
 """
 
 import re
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -66,3 +70,38 @@ def parse_direction(completion: str) -> str:
     # DECISION section found but no direction keyword - default to FLAT
     logger.warning("Could not parse direction from DECISION section, defaulting to FLAT")
     return "FLAT"
+
+
+@dataclass
+class GRPOStepResult:
+    """Result of a single GRPO training step."""
+
+    step: int
+    mean_reward: float
+    mean_advantage: float
+    kl_divergence: float
+    loss: float
+    vram_mb: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON logging."""
+        return {
+            "step": self.step,
+            "mean_reward": self.mean_reward,
+            "mean_advantage": self.mean_advantage,
+            "kl": self.kl_divergence,
+            "loss": self.loss,
+            "vram_mb": self.vram_mb,
+            "timestamp": int(time.time()),
+        }
+
+
+@dataclass
+class GRPOTrainingResult:
+    """Result of full GRPO training run."""
+
+    success: bool
+    adapter_path: Optional[Path]
+    steps_completed: int
+    final_metrics: dict[str, Any]
+    error: Optional[str]
