@@ -404,3 +404,64 @@ class GRPOTrainer:
 
         # Logging
         self._logger: Optional[GRPOLogger] = None
+
+    def _load_model(self) -> None:
+        """
+        Load base model with SFT adapter.
+
+        Loads:
+        1. Base model (4-bit quantized)
+        2. SFT adapter (reference policy)
+        3. Stores reference state dict for KL computation
+        """
+        # Lazy imports to avoid loading transformers/peft at module level
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+        logger.info(f"Loading base model: {self.config.base_model_id}")
+
+        # 4-bit quantization config
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+
+        # Load tokenizer
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self.config.base_model_id,
+            trust_remote_code=True,
+            padding_side="left",
+        )
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+            self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
+
+        # Load base model
+        base_model = AutoModelForCausalLM.from_pretrained(
+            self.config.base_model_id,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            attn_implementation="sdpa",
+        )
+
+        # Load SFT adapter (reference policy)
+        logger.info(f"Loading SFT adapter: {self.config.sft_adapter_path}")
+        self._model = PeftModel.from_pretrained(
+            base_model,
+            str(self.config.sft_adapter_path),
+            is_trainable=True,
+        )
+
+        # Store reference state dict (deep copy for KL computation)
+        self._ref_state_dict = {
+            k: v.clone().cpu() for k, v in self._model.state_dict().items() if "lora" in k.lower()
+        }
+
+        logger.info(
+            "Model loaded",
+            trainable_params=sum(p.numel() for p in self._model.parameters() if p.requires_grad),
+            ref_params=len(self._ref_state_dict),
+        )

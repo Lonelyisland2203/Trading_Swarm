@@ -527,3 +527,87 @@ class TestGRPOTrainerInit:
         assert trainer._model is None
         assert trainer._tokenizer is None
         assert trainer._ref_state_dict is None
+
+
+class TestGRPOTrainerModelLoading:
+    """Tests for GRPOTrainer model loading."""
+
+    def test_load_model_loads_base_with_sft_adapter(self) -> None:
+        """Test that _load_model loads base model with SFT adapter."""
+        import sys
+        from training.grpo_trainer import GRPOTrainer
+
+        # Create mock modules
+        mock_peft = MagicMock()
+        mock_transformers = MagicMock()
+
+        mock_model = MagicMock()
+        mock_transformers.AutoModelForCausalLM.from_pretrained.return_value = mock_model
+
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.eos_token_id = 0
+        mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer
+
+        mock_peft_model = MagicMock()
+        mock_peft_model.state_dict.return_value = {}
+        mock_peft_model.parameters.return_value = []
+        mock_peft.PeftModel.from_pretrained.return_value = mock_peft_model
+
+        with patch.dict(
+            sys.modules,
+            {"peft": mock_peft, "transformers": mock_transformers},
+        ):
+            trainer = GRPOTrainer()
+            trainer._load_model()
+
+            # Verify base model loaded
+            mock_transformers.AutoModelForCausalLM.from_pretrained.assert_called_once()
+            # Verify SFT adapter loaded
+            mock_peft.PeftModel.from_pretrained.assert_called_once()
+            assert trainer._model is mock_peft_model
+            assert trainer._tokenizer is mock_tokenizer
+
+    def test_load_model_stores_reference_state_dict(self) -> None:
+        """Test that reference model state dict is stored for KL computation."""
+        import sys
+        from training.grpo_trainer import GRPOTrainer
+
+        # Create mock modules
+        mock_peft = MagicMock()
+        mock_transformers = MagicMock()
+
+        mock_model = MagicMock()
+        mock_transformers.AutoModelForCausalLM.from_pretrained.return_value = mock_model
+
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.eos_token_id = 0
+        mock_transformers.AutoTokenizer.from_pretrained.return_value = mock_tokenizer
+
+        # Mock PEFT model with state dict
+        mock_peft_model = MagicMock()
+        mock_state_dict = {"lora.weight": torch.tensor([1.0, 2.0])}
+        mock_peft_model.state_dict.return_value = mock_state_dict
+        mock_peft_model.parameters.return_value = []
+        mock_peft.PeftModel.from_pretrained.return_value = mock_peft_model
+
+        with patch.dict(
+            sys.modules,
+            {"peft": mock_peft, "transformers": mock_transformers},
+        ):
+            trainer = GRPOTrainer()
+            trainer._load_model()
+
+            # Reference state dict should be stored (deep copy)
+            assert trainer._ref_state_dict is not None
+            assert "lora.weight" in trainer._ref_state_dict
+
+    def test_reference_model_is_sft_adapter(self) -> None:
+        """Test that reference model path points to SFT adapter."""
+        from training.grpo_config import GRPOTrainingConfig
+
+        config = GRPOTrainingConfig()
+        assert config.sft_adapter_path == Path("adapters/sft_base")
