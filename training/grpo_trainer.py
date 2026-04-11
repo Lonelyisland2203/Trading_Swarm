@@ -873,3 +873,95 @@ class GRPOTrainer:
 
         finally:
             self._cleanup()
+
+
+def main() -> None:
+    """CLI entry point for GRPO training."""
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Train GRPO model on market snapshots",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=Path("data/grpo_training_data.jsonl"),
+        help="Path to GRPO training data JSONL",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=None,
+        help="Override max training steps",
+    )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=None,
+        help="Override checkpoint directory",
+    )
+
+    args = parser.parse_args()
+
+    # Configure logging
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level="INFO",
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
+    )
+
+    # Load training data
+    if not args.data.exists():
+        logger.error(f"Data file not found: {args.data}")
+        sys.exit(1)
+
+    examples = []
+    with open(args.data) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            data = json.loads(line)
+            examples.append(
+                GRPOTrainingExample(
+                    market_snapshot=data["market_snapshot"],
+                    actual_direction=data["actual_direction"],
+                    gross_return_pct=data["gross_return_pct"],
+                    timestamp_ms=data["timestamp_ms"],
+                )
+            )
+
+    logger.info(f"Loaded {len(examples)} training examples")
+
+    # Create config with overrides
+    overrides: Dict[str, Any] = {}
+    if args.max_steps:
+        overrides["max_steps"] = args.max_steps
+    if args.checkpoint_dir:
+        overrides["checkpoint_dir"] = args.checkpoint_dir
+
+    from training.grpo_config import load_grpo_config
+
+    config = load_grpo_config(overrides) if overrides else GRPOTrainingConfig()
+
+    # Run training
+    trainer = GRPOTrainer(config=config)
+    result = trainer.train(examples)
+
+    if result.success:
+        logger.info(
+            "Training completed successfully",
+            adapter_path=str(result.adapter_path),
+            steps=result.steps_completed,
+            final_metrics=result.final_metrics,
+        )
+    else:
+        logger.error(f"Training failed: {result.error}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
