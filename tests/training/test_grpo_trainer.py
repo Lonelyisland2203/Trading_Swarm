@@ -10,6 +10,7 @@ from training.grpo_trainer import (
     GRPOStepResult,
     GRPOTrainingResult,
     run_grpo_preflight,
+    log_vram_usage,
 )
 from training.grpo_data import GRPOTrainingExample
 
@@ -239,3 +240,48 @@ class TestPreflightChecks:
             ok, reason = run_grpo_preflight(sample_examples)
             assert ok is True
             assert "ready" in reason.lower()
+
+
+class TestVRAMMonitoring:
+    """Tests for VRAM monitoring."""
+
+    @patch("training.grpo_trainer.torch")
+    def test_log_vram_returns_usage(self, mock_torch: MagicMock) -> None:
+        """Test that log_vram returns VRAM usage in MB."""
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.memory_allocated.return_value = 10 * 1024 * 1024 * 1024  # 10GB
+
+        vram_mb = log_vram_usage(step=100)
+        assert vram_mb == 10 * 1024  # 10GB in MB
+
+    @patch("training.grpo_trainer.torch")
+    @patch("training.grpo_trainer.logger")
+    def test_vram_warning_above_14gb(self, mock_logger: MagicMock, mock_torch: MagicMock) -> None:
+        """Test warning logged when VRAM exceeds 14GB."""
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.memory_allocated.return_value = 15 * 1024 * 1024 * 1024  # 15GB
+
+        log_vram_usage(step=100)
+        mock_logger.warning.assert_called_once()
+        assert (
+            "14GB" in str(mock_logger.warning.call_args)
+            or "exceeded" in str(mock_logger.warning.call_args).lower()
+        )
+
+    @patch("training.grpo_trainer.torch")
+    @patch("training.grpo_trainer.logger")
+    def test_no_warning_under_14gb(self, mock_logger: MagicMock, mock_torch: MagicMock) -> None:
+        """Test no warning when VRAM is under 14GB."""
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.memory_allocated.return_value = 10 * 1024 * 1024 * 1024  # 10GB
+
+        log_vram_usage(step=100)
+        mock_logger.warning.assert_not_called()
+
+    @patch("training.grpo_trainer.torch")
+    def test_vram_no_cuda_returns_zero(self, mock_torch: MagicMock) -> None:
+        """Test that no CUDA returns 0."""
+        mock_torch.cuda.is_available.return_value = False
+
+        vram_mb = log_vram_usage(step=100)
+        assert vram_mb == 0

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+import torch
 from loguru import logger
 
 from training.grpo_data import GRPOTrainingExample
@@ -26,6 +27,7 @@ from training.vram_check import check_vram_availability
 
 # Constants
 MIN_VRAM_GB = 9.0
+MAX_VRAM_GB = 14.0
 STOP_FILE_PATH = Path("execution/state/STOP")
 
 
@@ -170,3 +172,37 @@ def run_grpo_preflight(
     )
 
     return True, "Ready to train"
+
+
+def log_vram_usage(step: int) -> int:
+    """
+    Log VRAM usage and warn if exceeding threshold.
+
+    Args:
+        step: Current training step (for logging context)
+
+    Returns:
+        Current VRAM usage in MB
+    """
+    if not torch.cuda.is_available():
+        return 0
+
+    vram_bytes = torch.cuda.memory_allocated()
+    vram_mb = vram_bytes // (1024 * 1024)
+    vram_gb = vram_mb / 1024
+
+    if vram_gb > MAX_VRAM_GB:
+        logger.warning(
+            f"VRAM exceeded {MAX_VRAM_GB}GB threshold",
+            step=step,
+            vram_gb=f"{vram_gb:.2f}",
+            vram_mb=vram_mb,
+        )
+    else:
+        logger.debug(
+            "VRAM usage",
+            step=step,
+            vram_gb=f"{vram_gb:.2f}",
+        )
+
+    return vram_mb
