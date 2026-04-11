@@ -1,12 +1,17 @@
 """Tests for GRPO trainer."""
 
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import pytest
 
 from training.grpo_trainer import (
     parse_direction,
     GRPOStepResult,
     GRPOTrainingResult,
+    run_grpo_preflight,
 )
+from training.grpo_data import GRPOTrainingExample
 
 
 class TestParseDirection:
@@ -124,3 +129,113 @@ class TestGRPOTrainingResult:
         assert result.success is False
         assert result.adapter_path is None
         assert "lock" in result.error
+
+
+class TestPreflightChecks:
+    """Tests for GRPO preflight checks."""
+
+    @pytest.fixture
+    def sample_examples(self) -> list[GRPOTrainingExample]:
+        """Create sample training examples."""
+        return [
+            GRPOTrainingExample(
+                market_snapshot=f"snapshot_{i}",
+                actual_direction="LONG",
+                gross_return_pct=0.1,
+                timestamp_ms=1700000000000 + i * 1000,
+            )
+            for i in range(10)
+        ]
+
+    def test_preflight_empty_examples_fails(self) -> None:
+        """Test that empty examples list fails preflight."""
+        ok, reason = run_grpo_preflight([])
+        assert ok is False
+        assert "empty" in reason.lower()
+
+    def test_preflight_unsorted_examples_fails(self) -> None:
+        """Test that unsorted examples fail preflight."""
+        examples = [
+            GRPOTrainingExample(
+                market_snapshot="second",
+                actual_direction="LONG",
+                gross_return_pct=0.1,
+                timestamp_ms=2000,
+            ),
+            GRPOTrainingExample(
+                market_snapshot="first",
+                actual_direction="SHORT",
+                gross_return_pct=-0.1,
+                timestamp_ms=1000,
+            ),
+        ]
+        ok, reason = run_grpo_preflight(examples)
+        assert ok is False
+        assert "sorted" in reason.lower() or "temporal" in reason.lower()
+
+    @patch("training.grpo_trainer.check_vram_availability")
+    def test_preflight_insufficient_vram_fails(
+        self,
+        mock_vram: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+    ) -> None:
+        """Test that insufficient VRAM fails preflight."""
+        mock_vram.return_value = MagicMock(can_train=False, reason="Only 4GB free")
+        ok, reason = run_grpo_preflight(sample_examples)
+        assert ok is False
+        assert "VRAM" in reason or "4GB" in reason
+
+    @patch("training.grpo_trainer.check_can_train")
+    @patch("training.grpo_trainer.check_vram_availability")
+    def test_preflight_lock_unavailable_fails(
+        self,
+        mock_vram: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+    ) -> None:
+        """Test that unavailable lock fails preflight."""
+        mock_vram.return_value = MagicMock(can_train=True, reason="OK")
+        mock_lock.return_value = (False, "Another training process is running")
+        ok, reason = run_grpo_preflight(sample_examples)
+        assert ok is False
+        assert "lock" in reason.lower() or "training" in reason.lower()
+
+    @patch("training.grpo_trainer.check_can_train")
+    @patch("training.grpo_trainer.check_vram_availability")
+    def test_preflight_stop_file_fails(
+        self,
+        mock_vram: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+        tmp_path: Path,
+    ) -> None:
+        """Test that STOP file fails preflight."""
+        mock_vram.return_value = MagicMock(can_train=True, reason="OK")
+        mock_lock.return_value = (True, "Ready")
+
+        # Create STOP file
+        stop_dir = tmp_path / "execution" / "state"
+        stop_dir.mkdir(parents=True)
+        (stop_dir / "STOP").touch()
+
+        with patch("training.grpo_trainer.STOP_FILE_PATH", stop_dir / "STOP"):
+            ok, reason = run_grpo_preflight(sample_examples)
+            assert ok is False
+            assert "STOP" in reason
+
+    @patch("training.grpo_trainer.check_can_train")
+    @patch("training.grpo_trainer.check_vram_availability")
+    def test_preflight_success(
+        self,
+        mock_vram: MagicMock,
+        mock_lock: MagicMock,
+        sample_examples: list[GRPOTrainingExample],
+    ) -> None:
+        """Test successful preflight."""
+        mock_vram.return_value = MagicMock(can_train=True, reason="OK", free_mb=12288)
+        mock_lock.return_value = (True, "Ready")
+
+        with patch("training.grpo_trainer.STOP_FILE_PATH", Path("/nonexistent/STOP")):
+            ok, reason = run_grpo_preflight(sample_examples)
+            assert ok is True
+            assert "ready" in reason.lower()

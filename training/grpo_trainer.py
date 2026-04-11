@@ -11,6 +11,7 @@ CRITICAL: This module runs in Process B (training), which is mutually exclusive
 with Process A (inference). Never run both simultaneously.
 """
 
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -18,6 +19,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
+
+from training.grpo_data import GRPOTrainingExample
+from training.process_lock import check_can_train
+from training.vram_check import check_vram_availability
+
+# Constants
+MIN_VRAM_GB = 9.0
+STOP_FILE_PATH = Path("execution/state/STOP")
 
 
 # Direction keywords to look for in completions
@@ -105,3 +114,59 @@ class GRPOTrainingResult:
     steps_completed: int
     final_metrics: dict[str, Any]
     error: Optional[str]
+
+
+def run_grpo_preflight(
+    examples: list[GRPOTrainingExample],
+) -> tuple[bool, str]:
+    """
+    Run all pre-flight checks before GRPO training.
+
+    Order (fail-fast, cheap to expensive):
+    1. Data check: examples list non-empty
+    2. Temporal check: examples sorted by timestamp_ms
+    3. VRAM check: check_vram_availability(min_free_gb=9.0)
+    4. Lock check: check_can_train() returns True
+    5. OLLAMA_KEEP_ALIVE=0 enforced
+    6. STOP file check: execution/state/STOP does not exist
+
+    Args:
+        examples: List of training examples
+
+    Returns:
+        Tuple of (can_train: bool, reason: str)
+    """
+    # 1. Data check
+    if not examples:
+        return False, "Examples list is empty"
+
+    # 2. Temporal check
+    timestamps = [e.timestamp_ms for e in examples]
+    if timestamps != sorted(timestamps):
+        return False, "Examples not sorted by timestamp_ms (temporal ordering required)"
+
+    # 3. VRAM check
+    vram_status = check_vram_availability(min_free_gb=MIN_VRAM_GB)
+    if not vram_status.can_train:
+        return False, f"VRAM insufficient: {vram_status.reason}"
+
+    # 4. Lock check
+    can_train, lock_reason = check_can_train()
+    if not can_train:
+        return False, f"Lock unavailable: {lock_reason}"
+
+    # 5. Enforce OLLAMA_KEEP_ALIVE=0
+    os.environ["OLLAMA_KEEP_ALIVE"] = "0"
+    logger.debug("OLLAMA_KEEP_ALIVE=0 enforced")
+
+    # 6. STOP file check
+    if STOP_FILE_PATH.exists():
+        return False, "STOP file exists - refusing to train"
+
+    logger.info(
+        "GRPO preflight checks passed",
+        num_examples=len(examples),
+        vram_free_gb=f"{vram_status.free_mb / 1024:.1f}",
+    )
+
+    return True, "Ready to train"
