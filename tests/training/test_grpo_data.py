@@ -66,9 +66,7 @@ class TestGRPOWalkForwardSplit:
         assert len(split.test_examples) == 100
         assert len(split.replay_examples) == 0
 
-    def test_temporal_ordering_enforced(
-        self, sample_examples: list[GRPOTrainingExample]
-    ) -> None:
+    def test_temporal_ordering_enforced(self, sample_examples: list[GRPOTrainingExample]) -> None:
         """Test that train examples all come before test examples."""
         split = create_grpo_walk_forward_split(
             sample_examples,
@@ -80,9 +78,7 @@ class TestGRPOWalkForwardSplit:
         test_min_ts = min(e.timestamp_ms for e in split.test_examples)
         assert train_max_ts < test_min_ts
 
-    def test_replay_buffer_sampling(
-        self, sample_examples: list[GRPOTrainingExample]
-    ) -> None:
+    def test_replay_buffer_sampling(self, sample_examples: list[GRPOTrainingExample]) -> None:
         """Test that replay samples 15% from history."""
         split = create_grpo_walk_forward_split(
             sample_examples,
@@ -119,3 +115,47 @@ class TestGRPOWalkForwardSplit:
         """Test that empty list raises TemporalSplitError."""
         with pytest.raises(TemporalSplitError, match="No examples"):
             create_grpo_walk_forward_split([])
+
+    def test_split_returns_correct_type(self, sample_examples: list[GRPOTrainingExample]) -> None:
+        """Test that split returns GRPOWalkForwardSplit with correct fields."""
+        split = create_grpo_walk_forward_split(
+            sample_examples,
+            train_window=500,
+            test_window=100,
+            replay_ratio=0.0,
+        )
+        assert isinstance(split, GRPOWalkForwardSplit)
+        assert hasattr(split, "train_examples")
+        assert hasattr(split, "test_examples")
+        assert hasattr(split, "replay_examples")
+        assert hasattr(split, "train_start_ms")
+        assert hasattr(split, "train_end_ms")
+        assert hasattr(split, "test_start_ms")
+        assert hasattr(split, "test_end_ms")
+
+    def test_boundary_collision_all_same_timestamp_raises(self) -> None:
+        """Test that all test examples with same timestamp as train boundary raises."""
+        # Create examples where last 100 all share the same timestamp as last train example
+        examples = [
+            GRPOTrainingExample(
+                market_snapshot=f"snapshot_{i}",
+                actual_direction="LONG",
+                gross_return_pct=0.1,
+                timestamp_ms=1700000000000 + i * 1000,
+            )
+            for i in range(500)  # First 500 with unique timestamps
+        ] + [
+            GRPOTrainingExample(
+                market_snapshot=f"snapshot_boundary_{i}",
+                actual_direction="SHORT",
+                gross_return_pct=-0.1,
+                timestamp_ms=1700000000000 + 499 * 1000,  # Same timestamp as last train
+            )
+            for i in range(100)  # Last 100 all same timestamp
+        ]
+        with pytest.raises(TemporalSplitError, match="same timestamp as training"):
+            create_grpo_walk_forward_split(
+                examples,
+                train_window=500,
+                test_window=100,
+            )

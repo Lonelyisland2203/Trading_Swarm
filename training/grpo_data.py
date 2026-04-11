@@ -5,9 +5,10 @@ Provides GRPOTrainingExample for representing training inputs and
 temporal split utilities for walk-forward validation.
 """
 
+from __future__ import annotations
+
 import random
 from dataclasses import dataclass
-from typing import List
 
 from loguru import logger
 
@@ -40,9 +41,9 @@ class GRPOTrainingExample:
 class GRPOWalkForwardSplit:
     """Walk-forward train/test split for GRPO training."""
 
-    train_examples: List[GRPOTrainingExample]
-    test_examples: List[GRPOTrainingExample]
-    replay_examples: List[GRPOTrainingExample]
+    train_examples: list[GRPOTrainingExample]
+    test_examples: list[GRPOTrainingExample]
+    replay_examples: list[GRPOTrainingExample]
     train_start_ms: int
     train_end_ms: int
     test_start_ms: int
@@ -50,7 +51,7 @@ class GRPOWalkForwardSplit:
 
 
 def create_grpo_walk_forward_split(
-    examples: List[GRPOTrainingExample],
+    examples: list[GRPOTrainingExample],
     train_window: int = 500,
     test_window: int = 100,
     replay_ratio: float = 0.15,
@@ -107,12 +108,17 @@ def create_grpo_walk_forward_split(
         test_examples = [e for e in test_examples if e.timestamp_ms != boundary_ts]
         train_examples = list(train_examples) + extra
 
+        if not test_examples:
+            raise TemporalSplitError(
+                "All test examples had the same timestamp as training boundary"
+            )
+
     # Historical examples (everything before training window)
     train_ids = {id(e) for e in train_examples} | {id(e) for e in test_examples}
     history_examples = [e for e in sorted_examples if id(e) not in train_ids]
 
     # Sample replay buffer from history
-    replay_examples: List[GRPOTrainingExample] = []
+    replay_examples: list[GRPOTrainingExample] = []
     if history_examples and replay_ratio > 0:
         recent_history = history_examples[-replay_buffer_size:]
         num_replay = int(train_window * replay_ratio)
