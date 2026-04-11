@@ -285,3 +285,68 @@ class TestVRAMMonitoring:
 
         vram_mb = log_vram_usage(step=100)
         assert vram_mb == 0
+
+
+class TestCheckpointing:
+    """Tests for GRPO checkpointing."""
+
+    def test_config_hash_deterministic(self) -> None:
+        """Test that config hash is deterministic."""
+        from training.grpo_trainer import compute_config_hash
+        from training.grpo_config import GRPOTrainingConfig
+
+        config = GRPOTrainingConfig()
+        hash1 = compute_config_hash(config)
+        hash2 = compute_config_hash(config)
+        assert hash1 == hash2
+        assert len(hash1) == 16  # Truncated hash
+
+    def test_config_hash_changes_with_params(self) -> None:
+        """Test that config hash changes when params change."""
+        from training.grpo_trainer import compute_config_hash
+        from training.grpo_config import load_grpo_config
+
+        config1 = load_grpo_config()
+        config2 = load_grpo_config({"learning_rate": 1e-4})
+        hash1 = compute_config_hash(config1)
+        hash2 = compute_config_hash(config2)
+        assert hash1 != hash2
+
+    @patch("training.grpo_trainer.time.time")
+    def test_save_checkpoint_creates_metadata(self, mock_time: MagicMock, tmp_path: Path) -> None:
+        """Test that checkpoint saves metadata file."""
+        import json
+        from training.grpo_trainer import save_grpo_checkpoint
+        from training.grpo_config import GRPOTrainingConfig
+
+        mock_time.return_value = 1700000000.0
+
+        # Mock model
+        mock_model = MagicMock()
+
+        checkpoint_dir = tmp_path / "checkpoint-500"
+        config = GRPOTrainingConfig()
+        metrics = {"mean_reward": 0.25, "kl": 0.01, "loss": 0.5}
+
+        save_grpo_checkpoint(
+            model=mock_model,
+            checkpoint_dir=checkpoint_dir,
+            step=500,
+            config=config,
+            metrics=metrics,
+        )
+
+        # Check model.save_pretrained was called
+        mock_model.save_pretrained.assert_called_once_with(str(checkpoint_dir))
+
+        # Check metadata file exists
+        metadata_path = checkpoint_dir / "metadata.json"
+        assert metadata_path.exists()
+
+        # Verify metadata contents
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        assert metadata["step"] == 500
+        assert metadata["mean_reward"] == 0.25
+        assert metadata["timestamp_ms"] == 1700000000000
+        assert "config_hash" in metadata

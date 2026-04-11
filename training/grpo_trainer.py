@@ -11,6 +11,8 @@ CRITICAL: This module runs in Process B (training), which is mutually exclusive
 with Process A (inference). Never run both simultaneously.
 """
 
+import hashlib
+import json
 import os
 import re
 import time
@@ -21,6 +23,7 @@ from typing import Any, Optional
 import torch
 from loguru import logger
 
+from training.grpo_config import GRPOTrainingConfig
 from training.grpo_data import GRPOTrainingExample
 from training.process_lock import check_can_train
 from training.vram_check import check_vram_availability
@@ -206,3 +209,79 @@ def log_vram_usage(step: int) -> int:
         )
 
     return vram_mb
+
+
+def compute_config_hash(config: GRPOTrainingConfig) -> str:
+    """
+    Compute deterministic hash of training config.
+
+    Used for reproducibility verification - checkpoints with
+    different config hashes are incompatible.
+
+    Args:
+        config: GRPO training configuration
+
+    Returns:
+        16-character hex hash string
+    """
+    # Extract key parameters that affect training
+    config_dict = {
+        "group_size": config.group_size,
+        "kl_penalty_beta": config.kl_penalty_beta,
+        "clip_epsilon": config.clip_epsilon,
+        "learning_rate": config.learning_rate,
+        "gradient_accumulation_steps": config.gradient_accumulation_steps,
+        "lora_rank": config.lora.rank,
+        "lora_alpha": config.lora.alpha,
+        "reward_decision_weight": config.reward.decision_weight,
+        "reward_false_bullish_penalty": config.reward.false_bullish_penalty,
+    }
+    config_str = json.dumps(config_dict, sort_keys=True)
+    full_hash = hashlib.sha256(config_str.encode()).hexdigest()
+    return full_hash[:16]
+
+
+def save_grpo_checkpoint(
+    model: Any,
+    checkpoint_dir: Path,
+    step: int,
+    config: GRPOTrainingConfig,
+    metrics: dict[str, float],
+) -> Path:
+    """
+    Save GRPO checkpoint with metadata.
+
+    Args:
+        model: PEFT model to save
+        checkpoint_dir: Directory for checkpoint
+        step: Current training step
+        config: Training configuration
+        metrics: Current training metrics
+
+    Returns:
+        Path to checkpoint directory
+    """
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save model weights
+    model.save_pretrained(str(checkpoint_dir))
+
+    # Save metadata
+    metadata = {
+        "step": step,
+        "timestamp_ms": int(time.time() * 1000),
+        "config_hash": compute_config_hash(config),
+        **metrics,
+    }
+
+    metadata_path = checkpoint_dir / "metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    logger.info(
+        "Checkpoint saved",
+        checkpoint_dir=str(checkpoint_dir),
+        step=step,
+    )
+
+    return checkpoint_dir
