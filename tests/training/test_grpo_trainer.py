@@ -495,3 +495,35 @@ class TestGRPOLogger:
         assert log_file.stat().st_size > 0
 
         grpo_logger.close()
+
+
+class TestGRPOTrainerInit:
+    """Tests for GRPOTrainer initialization."""
+
+    def test_trainer_init_with_default_config(self) -> None:
+        """Test trainer initializes with default config."""
+        from training.grpo_trainer import GRPOTrainer
+
+        trainer = GRPOTrainer()
+        assert trainer.config.group_size == 4
+        assert trainer.config.kl_penalty_beta == 0.04
+        assert trainer.config.clip_epsilon == 0.2
+
+    def test_trainer_init_with_custom_config(self) -> None:
+        """Test trainer initializes with custom config."""
+        from training.grpo_trainer import GRPOTrainer
+        from training.grpo_config import GRPOTrainingConfig
+
+        config = GRPOTrainingConfig(max_steps=1000, learning_rate=1e-5)
+        trainer = GRPOTrainer(config=config)
+        assert trainer.config.max_steps == 1000
+        assert trainer.config.learning_rate == 1e-5
+
+    def test_trainer_model_not_loaded_until_train(self) -> None:
+        """Test that model is not loaded during init."""
+        from training.grpo_trainer import GRPOTrainer
+
+        trainer = GRPOTrainer()
+        assert trainer._model is None
+        assert trainer._tokenizer is None
+        assert trainer._ref_state_dict is None

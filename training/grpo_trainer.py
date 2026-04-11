@@ -370,3 +370,37 @@ class GRPOLogger:
     def close(self) -> None:
         """Close the log file."""
         self._file.close()
+
+
+class GRPOTrainer:
+    """
+    GRPO (Group Relative Policy Optimization) trainer.
+
+    Implements the DeepSeek-R1 GRPO algorithm with:
+    - Sequential G=4 completion generation (VRAM constraint)
+    - Reference model weight swapping for KL penalty
+    - Asymmetric reward computation
+    - Checkpointing every 500 steps
+
+    Usage:
+        trainer = GRPOTrainer()
+        result = trainer.train(examples)
+    """
+
+    def __init__(self, config: Optional[GRPOTrainingConfig] = None) -> None:
+        """
+        Initialize GRPO trainer.
+
+        Args:
+            config: Training configuration (uses defaults if None)
+        """
+        self.config = config or GRPOTrainingConfig()
+
+        # Model components (lazy loaded in train())
+        self._model: Any = None  # PeftModel when loaded
+        self._tokenizer: Any = None  # AutoTokenizer when loaded
+        self._ref_state_dict: Optional[dict[str, torch.Tensor]] = None
+        self._optimizer: Optional[torch.optim.Optimizer] = None
+
+        # Logging
+        self._logger: Optional[GRPOLogger] = None
