@@ -193,7 +193,7 @@ def build_market_snapshot(
 
     # Classify regime
     classifier = RegimeClassifier()
-    regime = classifier.classify(df)
+    regime, _ = classifier.get_current_regime(df["close"])
 
     return f"""## Market Data
 Symbol: {symbol}

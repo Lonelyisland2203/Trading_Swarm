@@ -42,17 +42,18 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17G.
+Completed through Session 17H.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
 - training/grpo_reward.py — asymmetric reward matrix (false bullish -1.5×, false bearish -0.8×), structure reward (regex THESIS→EVIDENCE→RISK→DECISION), combined reward with clipping
 - training/grpo_data.py — GRPOTrainingExample dataclass, GRPOWalkForwardSplit, temporal split functions
 - training/grpo_trainer.py — full GRPO training loop: sequential G=4 generation, KL penalty (β=0.04), PPO clipping (ε=0.2), checkpointing every 500 steps, STOP file handling, CLI entry point
+- training/grpo_data_generator.py — generates grpo_training_data.jsonl from historical market data: fetches OHLCV with temporal safety (get_ohlcv_as_of), computes all 17 indicators, builds market snapshots, looks ahead by timeframe-adaptive horizon (1h→24 bars, 4h→12 bars), classifies direction using fee threshold (LONG/SHORT/FLAT), CLI with --symbols/--timeframes/--start-date/--end-date/--limit flags
 - training/evaluate_candidate.py — unified adapter evaluation for DPO/GRPO, metrics (IC, Brier, MACE, regime-stratified IC, structure_compliance_rate), promotion criteria (IC≥0.05, Brier≤0.25, p<0.05, structure≥0.9 for GRPO), --compare mode for side-by-side evaluation
 - run_grpo_training.py — end-to-end GRPO pipeline CLI: 5 phases (SFT data gen, SFT train, GRPO train, eval, promotion), skip logic for existing artifacts, --dry-run/--regenerate/--retrain-sft/--limit/--max-steps flags
 - run_autoresearch.py — autonomous hyperparameter search loop (karpathy/autoresearch-inspired): round-robin parameter selection, direction tracking, git commit/revert on IC improvement/regression, results.tsv logging, --max-experiments/--time-budget-hours/--dry-run flags
-- Tests: 241 GRPO/eval/pipeline/autoresearch tests (config: 18, data: 9, reward: 47, trainer: 56, evaluate_candidate: 42, run_grpo_training: 29, run_autoresearch: 40)
+- Tests: 279 GRPO/eval/pipeline/autoresearch tests (config: 18, data: 9, reward: 47, trainer: 56, evaluate_candidate: 42, run_grpo_training: 29, run_autoresearch: 40, grpo_data_generator: 38)
 
 ## Next Session
-Session 17H — GRPO training data generation pipeline (create grpo_training_data.jsonl from historical market data)
+Session 17I — End-to-end GRPO training dry run (generate data, train SFT, train GRPO, evaluate)
