@@ -17,8 +17,9 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TextIO
 
 import torch
 from loguru import logger
@@ -338,3 +339,34 @@ def compute_clipped_policy_loss(
     # Take the minimum (most conservative update)
     loss = -torch.min(unclipped_loss, clipped_loss).mean()
     return loss.item()
+
+
+class GRPOLogger:
+    """JSONL logger for GRPO training metrics."""
+
+    def __init__(self, log_dir: Path) -> None:
+        """
+        Initialize logger.
+
+        Args:
+            log_dir: Directory for log files
+        """
+        log_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_path = log_dir / f"grpo_{timestamp}.jsonl"
+        self._file: TextIO = open(self.log_path, "w")
+        logger.info(f"GRPO training log: {self.log_path}")
+
+    def log_step(self, result: GRPOStepResult) -> None:
+        """
+        Log a training step result.
+
+        Args:
+            result: Step result to log
+        """
+        self._file.write(json.dumps(result.to_dict()) + "\n")
+        self._file.flush()
+
+    def close(self) -> None:
+        """Close the log file."""
+        self._file.close()

@@ -429,3 +429,69 @@ class TestPolicyClipping:
         # min() takes the more negative value, encouraging larger policy updates
         # when the action led to negative reward
         assert abs(loss - 1.5) < 1e-6
+
+
+class TestGRPOLogger:
+    """Tests for GRPO training logger."""
+
+    def test_logger_creates_file(self, tmp_path: Path) -> None:
+        """Test that logger creates log file."""
+        from training.grpo_trainer import GRPOLogger
+
+        log_dir = tmp_path / "logs"
+        logger = GRPOLogger(log_dir=log_dir)
+        assert log_dir.exists()
+        assert len(list(log_dir.glob("grpo_*.jsonl"))) == 1
+        logger.close()
+
+    def test_logger_writes_step(self, tmp_path: Path) -> None:
+        """Test that logger writes step results."""
+        import json
+        from training.grpo_trainer import GRPOLogger
+
+        log_dir = tmp_path / "logs"
+        grpo_logger = GRPOLogger(log_dir=log_dir)
+
+        step_result = GRPOStepResult(
+            step=100,
+            mean_reward=0.25,
+            mean_advantage=0.0,
+            kl_divergence=0.01,
+            loss=0.5,
+            vram_mb=10240,
+        )
+        grpo_logger.log_step(step_result)
+        grpo_logger.close()
+
+        # Read log file
+        log_file = list(log_dir.glob("grpo_*.jsonl"))[0]
+        with open(log_file) as f:
+            line = f.readline()
+            data = json.loads(line)
+
+        assert data["step"] == 100
+        assert data["mean_reward"] == 0.25
+        assert data["loss"] == 0.5
+
+    def test_logger_flushes_periodically(self, tmp_path: Path) -> None:
+        """Test that logger flushes after writing."""
+        from training.grpo_trainer import GRPOLogger
+
+        log_dir = tmp_path / "logs"
+        grpo_logger = GRPOLogger(log_dir=log_dir)
+
+        step_result = GRPOStepResult(
+            step=1,
+            mean_reward=0.1,
+            mean_advantage=0.0,
+            kl_divergence=0.01,
+            loss=0.5,
+            vram_mb=1000,
+        )
+        grpo_logger.log_step(step_result)
+
+        # File should have content even before close
+        log_file = list(log_dir.glob("grpo_*.jsonl"))[0]
+        assert log_file.stat().st_size > 0
+
+        grpo_logger.close()
