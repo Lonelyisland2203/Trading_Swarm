@@ -16,7 +16,6 @@ from threading import Lock
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 from loguru import logger
 from scipy import stats
 
@@ -246,13 +245,21 @@ async def verify_signal(
         signal_ms = int(signal_ts.timestamp() * 1000)
         tf_ms = _timeframe_to_ms(timeframe)
 
-        # Fetch bars from signal time to horizon
-        df = await market_data_service.fetch_ohlcv(
+        # Calculate forward horizon end for point-in-time safe fetch
+        # We need bars AFTER signal_ms, up to horizon_bars forward
+        forward_end_ms = signal_ms + (horizon_bars * tf_ms)
+
+        # Use get_ohlcv_as_of for temporal safety (filters by bar close time)
+        df = await market_data_service.get_ohlcv_as_of(
             symbol=symbol,
             timeframe=timeframe,
-            since=signal_ms,
-            limit=horizon_bars + 5,
+            as_of=forward_end_ms,
+            lookback_bars=horizon_bars + 5,
         )
+
+        # Filter to only forward bars (after signal timestamp)
+        if df is not None and not df.empty:
+            df = df[df["timestamp"] > signal_ms].reset_index(drop=True)
 
         if df is None or len(df) < horizon_bars:
             logger.warning(
@@ -589,9 +596,7 @@ def export_for_training(
                 if last_ts:
                     last_dt = datetime.fromisoformat(last_ts)
                     results = [
-                        r
-                        for r in results
-                        if datetime.fromisoformat(r["verified_at"]) > last_dt
+                        r for r in results if datetime.fromisoformat(r["verified_at"]) > last_dt
                     ]
         except (json.JSONDecodeError, KeyError, ValueError):
             pass
@@ -659,14 +664,16 @@ def format_daily_summary(stats: VerificationStats) -> str:
             f"({regime_data['accuracy_pct']:.1f}%)"
         )
 
-    lines.extend([
-        "",
-        "--- Training Status ---",
-        f"Signals Since Last Training: {stats.signals_since_last_training}",
-        f"Training Threshold: {MIN_SIGNALS_FOR_TRAINING}",
-        f"Ready for Training: {'YES' if stats.ready_for_training else 'NO'}",
-        "",
-        "=" * 60,
-    ])
+    lines.extend(
+        [
+            "",
+            "--- Training Status ---",
+            f"Signals Since Last Training: {stats.signals_since_last_training}",
+            f"Training Threshold: {MIN_SIGNALS_FOR_TRAINING}",
+            f"Ready for Training: {'YES' if stats.ready_for_training else 'NO'}",
+            "",
+            "=" * 60,
+        ]
+    )
 
     return "\n".join(lines)

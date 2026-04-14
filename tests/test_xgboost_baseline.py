@@ -499,7 +499,7 @@ class TestEvaluateBaseline:
         features_df, targets, returns, timestamps = load_training_data(synthetic_data_file)
 
         evaluation = evaluate_baseline(
-            "xgboost", features_df, targets, returns, timestamps, n_folds=3
+            "xgboost", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         assert isinstance(evaluation, BaselineEvaluation)
@@ -514,7 +514,7 @@ class TestEvaluateBaseline:
         features_df, targets, returns, timestamps = load_training_data(synthetic_data_file)
 
         evaluation = evaluate_baseline(
-            "lightgbm", features_df, targets, returns, timestamps, n_folds=3
+            "lightgbm", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         assert isinstance(evaluation, BaselineEvaluation)
@@ -527,7 +527,7 @@ class TestEvaluateBaseline:
         features_df, targets, returns, timestamps = load_training_data(synthetic_data_file)
 
         evaluation = evaluate_baseline(
-            "xgboost", features_df, targets, returns, timestamps, n_folds=3
+            "xgboost", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         assert len(evaluation.feature_importance) > 0
@@ -538,7 +538,7 @@ class TestEvaluateBaseline:
         features_df, targets, returns, timestamps = load_training_data(synthetic_data_file)
 
         evaluation = evaluate_baseline(
-            "xgboost", features_df, targets, returns, timestamps, n_folds=3
+            "xgboost", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         # SHAP computed on last fold
@@ -549,7 +549,7 @@ class TestEvaluateBaseline:
         features_df, targets, returns, timestamps = load_training_data(synthetic_data_file)
 
         evaluation = evaluate_baseline(
-            "xgboost", features_df, targets, returns, timestamps, n_folds=3
+            "xgboost", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         result = evaluation.to_dict()
@@ -808,10 +808,10 @@ class TestIntegration:
 
         # Evaluate both models
         xgb_eval = evaluate_baseline(
-            "xgboost", features_df, targets, returns, timestamps, n_folds=3
+            "xgboost", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
         lgb_eval = evaluate_baseline(
-            "lightgbm", features_df, targets, returns, timestamps, n_folds=3
+            "lightgbm", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         # Both should complete successfully
@@ -827,7 +827,7 @@ class TestIntegration:
         features_df, targets, returns, timestamps = load_training_data(synthetic_data_file)
 
         xgb_eval = evaluate_baseline(
-            "xgboost", features_df, targets, returns, timestamps, n_folds=3
+            "xgboost", features_df, targets, returns, timestamps, n_folds=3, gap_bars=24
         )
 
         results = {

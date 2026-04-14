@@ -322,7 +322,7 @@ def create_walk_forward_folds(
     timestamps: np.ndarray,
     n_folds: int = 5,
     train_ratio: float = 0.7,
-    gap_bars: int = 24,
+    gap_bars: int = 168,  # 1 week for 1h data - prevents serial correlation leakage
 ) -> list[WalkForwardFold]:
     """
     Create walk-forward cross-validation folds.
@@ -574,6 +574,7 @@ def evaluate_baseline(
     returns: np.ndarray,
     timestamps: np.ndarray,
     n_folds: int = 5,
+    gap_bars: int | None = None,
 ) -> BaselineEvaluation:
     """
     Evaluate baseline model with walk-forward cross-validation.
@@ -585,11 +586,14 @@ def evaluate_baseline(
         returns: Fee-adjusted returns
         timestamps: Timestamps in milliseconds
         n_folds: Number of CV folds
+        gap_bars: Gap between train/test (default: 168 for 1h data = 1 week)
 
     Returns:
         BaselineEvaluation with aggregated metrics
     """
-    folds = create_walk_forward_folds(timestamps, n_folds=n_folds)
+    folds = create_walk_forward_folds(
+        timestamps, n_folds=n_folds, gap_bars=gap_bars if gap_bars is not None else 168
+    )
 
     if not folds:
         raise ValueError("No valid folds created")

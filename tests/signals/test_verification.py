@@ -2,8 +2,7 @@
 
 import json
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
@@ -21,9 +20,6 @@ from signals.verification import (
     mark_training_triggered,
     export_for_training,
     format_daily_summary,
-    VERIFIED_RESULTS_PATH,
-    TRAINING_TRIGGER_PATH,
-    MIN_SIGNALS_FOR_TRAINING,
 )
 from config.fee_model import FeeModelSettings
 
@@ -91,17 +87,26 @@ def synthetic_signals():
 
 @pytest.fixture
 def mock_ohlcv_df():
-    """Create mock OHLCV DataFrame with upward price movement."""
-    return pd.DataFrame({
-        "timestamp": [
-            1704000000000 + i * 3600000 for i in range(30)
-        ],
-        "open": [42000.0 + i * 50 for i in range(30)],
-        "high": [42100.0 + i * 50 for i in range(30)],
-        "low": [41900.0 + i * 50 for i in range(30)],
-        "close": [42050.0 + i * 50 for i in range(30)],  # +1.19% over 24 bars
-        "volume": [100 + i for i in range(30)],
-    })
+    """Create mock OHLCV DataFrame with upward price movement.
+
+    Timestamps are relative to now-48h (matching synthetic_signals)
+    to ensure bars fall within verification window.
+    """
+    # Start time: 48h ago (matches signal time)
+    base_ms = int((datetime.now(timezone.utc) - timedelta(hours=48)).timestamp() * 1000)
+    return pd.DataFrame(
+        {
+            "timestamp": [
+                base_ms + i * 3600000
+                for i in range(30)  # 30 hourly bars from signal time
+            ],
+            "open": [42000.0 + i * 50 for i in range(30)],
+            "high": [42100.0 + i * 50 for i in range(30)],
+            "low": [41900.0 + i * 50 for i in range(30)],
+            "close": [42050.0 + i * 50 for i in range(30)],  # +1.19% over 24 bars
+            "volume": [100 + i for i in range(30)],
+        }
+    )
 
 
 class TestGetVerificationHorizonBars:
@@ -192,6 +197,7 @@ class TestVerifySignal:
         """Create mock market data service."""
         mock = AsyncMock()
         mock.fetch_ohlcv = AsyncMock(return_value=mock_ohlcv_df)
+        mock.get_ohlcv_as_of = AsyncMock(return_value=mock_ohlcv_df)
         return mock
 
     @pytest.mark.asyncio
@@ -246,14 +252,16 @@ class TestVerifySignal:
         """Returns None when insufficient OHLCV data available."""
         mock_market = AsyncMock()
         mock_market.fetch_ohlcv = AsyncMock(
-            return_value=pd.DataFrame({
-                "timestamp": [1704000000000],
-                "open": [42000.0],
-                "high": [42100.0],
-                "low": [41900.0],
-                "close": [42050.0],
-                "volume": [100],
-            })
+            return_value=pd.DataFrame(
+                {
+                    "timestamp": [1704000000000],
+                    "open": [42000.0],
+                    "high": [42100.0],
+                    "low": [41900.0],
+                    "close": [42050.0],
+                    "volume": [100],
+                }
+            )
         )
 
         result = await verify_signal(
@@ -479,11 +487,16 @@ class TestTrainingTrigger:
         # Create 50 verified results (below 200 threshold)
         with open(verified_path, "w") as f:
             for i in range(50):
-                f.write(json.dumps({
-                    "signal_timestamp": datetime.now(timezone.utc).isoformat(),
-                    "symbol": "BTC/USDT",
-                    "verified_at": datetime.now(timezone.utc).isoformat(),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "signal_timestamp": datetime.now(timezone.utc).isoformat(),
+                            "symbol": "BTC/USDT",
+                            "verified_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                    + "\n"
+                )
 
         status = check_training_trigger()
 
@@ -497,11 +510,16 @@ class TestTrainingTrigger:
         # Create 250 verified results (above 200 threshold)
         with open(verified_path, "w") as f:
             for i in range(250):
-                f.write(json.dumps({
-                    "signal_timestamp": datetime.now(timezone.utc).isoformat(),
-                    "symbol": "BTC/USDT",
-                    "verified_at": datetime.now(timezone.utc).isoformat(),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "signal_timestamp": datetime.now(timezone.utc).isoformat(),
+                            "symbol": "BTC/USDT",
+                            "verified_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                    + "\n"
+                )
 
         status = check_training_trigger()
 
@@ -518,11 +536,16 @@ class TestTrainingTrigger:
             for i in range(250):
                 # All verified before "now"
                 ts = (now - timedelta(hours=1)).isoformat()
-                f.write(json.dumps({
-                    "signal_timestamp": ts,
-                    "symbol": "BTC/USDT",
-                    "verified_at": ts,
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "signal_timestamp": ts,
+                            "symbol": "BTC/USDT",
+                            "verified_at": ts,
+                        }
+                    )
+                    + "\n"
+                )
 
         # Mark training triggered
         mark_training_triggered()
@@ -541,17 +564,22 @@ class TestExportForTraining:
 
         # Create verified results
         with open(verified_path, "w") as f:
-            f.write(json.dumps({
-                "signal_timestamp": datetime.now(timezone.utc).isoformat(),
-                "symbol": "BTC/USDT",
-                "timeframe": "1h",
-                "actual_direction": "LONG",
-                "gross_return_pct": 1.5,
-                "net_return_pct": 1.4,
-                "market_regime": "neutral",
-                "signal_confidence": 0.85,
-                "verified_at": datetime.now(timezone.utc).isoformat(),
-            }) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "signal_timestamp": datetime.now(timezone.utc).isoformat(),
+                        "symbol": "BTC/USDT",
+                        "timeframe": "1h",
+                        "actual_direction": "LONG",
+                        "gross_return_pct": 1.5,
+                        "net_return_pct": 1.4,
+                        "market_regime": "neutral",
+                        "signal_confidence": 0.85,
+                        "verified_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                + "\n"
+            )
 
         output_path = tmp_path / "training_data.jsonl"
         count = export_for_training(output_path)
@@ -566,17 +594,22 @@ class TestExportForTraining:
         # Create results with different confidences
         with open(verified_path, "w") as f:
             for conf in [0.5, 0.6, 0.7, 0.8, 0.9]:
-                f.write(json.dumps({
-                    "signal_timestamp": datetime.now(timezone.utc).isoformat(),
-                    "symbol": "BTC/USDT",
-                    "timeframe": "1h",
-                    "actual_direction": "LONG",
-                    "gross_return_pct": 1.0,
-                    "net_return_pct": 0.9,
-                    "market_regime": "neutral",
-                    "signal_confidence": conf,
-                    "verified_at": datetime.now(timezone.utc).isoformat(),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "signal_timestamp": datetime.now(timezone.utc).isoformat(),
+                            "symbol": "BTC/USDT",
+                            "timeframe": "1h",
+                            "actual_direction": "LONG",
+                            "gross_return_pct": 1.0,
+                            "net_return_pct": 0.9,
+                            "market_regime": "neutral",
+                            "signal_confidence": conf,
+                            "verified_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                    + "\n"
+                )
 
         output_path = tmp_path / "training_data.jsonl"
         count = export_for_training(output_path, min_confidence=0.7)
@@ -593,17 +626,22 @@ class TestExportForTraining:
         # Create old results (before training trigger)
         with open(verified_path, "w") as f:
             for i in range(5):
-                f.write(json.dumps({
-                    "signal_timestamp": old_time.isoformat(),
-                    "symbol": "BTC/USDT",
-                    "timeframe": "1h",
-                    "actual_direction": "LONG",
-                    "gross_return_pct": 1.0,
-                    "net_return_pct": 0.9,
-                    "market_regime": "neutral",
-                    "signal_confidence": 0.8,
-                    "verified_at": old_time.isoformat(),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "signal_timestamp": old_time.isoformat(),
+                            "symbol": "BTC/USDT",
+                            "timeframe": "1h",
+                            "actual_direction": "LONG",
+                            "gross_return_pct": 1.0,
+                            "net_return_pct": 0.9,
+                            "market_regime": "neutral",
+                            "signal_confidence": 0.8,
+                            "verified_at": old_time.isoformat(),
+                        }
+                    )
+                    + "\n"
+                )
 
         # Mark training triggered (after the old results)
         trigger_data = {
@@ -615,17 +653,22 @@ class TestExportForTraining:
         # Add new results (after trigger)
         with open(verified_path, "a") as f:
             for i in range(3):
-                f.write(json.dumps({
-                    "signal_timestamp": now.isoformat(),
-                    "symbol": "ETH/USDT",
-                    "timeframe": "1h",
-                    "actual_direction": "SHORT",
-                    "gross_return_pct": -0.5,
-                    "net_return_pct": -0.6,
-                    "market_regime": "risk_off",
-                    "signal_confidence": 0.75,
-                    "verified_at": now.isoformat(),
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "signal_timestamp": now.isoformat(),
+                            "symbol": "ETH/USDT",
+                            "timeframe": "1h",
+                            "actual_direction": "SHORT",
+                            "gross_return_pct": -0.5,
+                            "net_return_pct": -0.6,
+                            "market_regime": "risk_off",
+                            "signal_confidence": 0.75,
+                            "verified_at": now.isoformat(),
+                        }
+                    )
+                    + "\n"
+                )
 
         output_path = tmp_path / "training_data.jsonl"
         count = export_for_training(output_path)
