@@ -25,7 +25,6 @@ class KillSwitchActiveError(ExecutionError):
         super().__init__("Kill switch active - STOP file detected. Trading halted.")
 
 
-
 class DailyLossLimitError(ExecutionError):
     """Daily loss limit exceeded."""
 
@@ -40,8 +39,7 @@ class DailyLossLimitError(ExecutionError):
         self.current_loss_pct = current_loss_pct
         self.limit_pct = limit_pct
         super().__init__(
-            f"Daily loss limit exceeded: {current_loss_pct:.2f}% "
-            f"(limit: {limit_pct:.2f}%)"
+            f"Daily loss limit exceeded: {current_loss_pct:.2f}% (limit: {limit_pct:.2f}%)"
         )
 
 
@@ -74,9 +72,7 @@ class CooldownActiveError(ExecutionError):
             seconds_remaining: Seconds until cooldown expires.
         """
         self.seconds_remaining = seconds_remaining
-        super().__init__(
-            f"Order cooldown active: {seconds_remaining:.1f}s remaining"
-        )
+        super().__init__(f"Order cooldown active: {seconds_remaining:.1f}s remaining")
 
 
 class DailyTradeCountError(ExecutionError):
@@ -92,9 +88,7 @@ class DailyTradeCountError(ExecutionError):
         """
         self.current_count = current_count
         self.max_count = max_count
-        super().__init__(
-            f"Daily trade limit reached: {current_count}/{max_count} trades"
-        )
+        super().__init__(f"Daily trade limit reached: {current_count}/{max_count} trades")
 
 
 class InsufficientBalanceError(ExecutionError):
@@ -113,8 +107,7 @@ class InsufficientBalanceError(ExecutionError):
         self.available = available
         self.asset = asset
         super().__init__(
-            f"Insufficient {asset} balance: required {required:.8f}, "
-            f"available {available:.8f}"
+            f"Insufficient {asset} balance: required {required:.8f}, available {available:.8f}"
         )
 
 

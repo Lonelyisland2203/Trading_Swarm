@@ -66,10 +66,7 @@ class StateManager:
         Args:
             reason: Explanation for why kill switch was activated
         """
-        data = {
-            "activated_at": datetime.now().isoformat(),
-            "reason": reason
-        }
+        data = {"activated_at": datetime.now().isoformat(), "reason": reason}
 
         with open(self.kill_switch_file, "w") as f:
             json.dump(data, f, indent=2)
@@ -114,18 +111,13 @@ class StateManager:
                     logger.debug(f"Loaded existing daily stats for {today}")
                     return stats
                 else:
-                    logger.info(
-                        f"Daily stats are from {stats.date}, resetting for {today}"
-                    )
+                    logger.info(f"Daily stats are from {stats.date}, resetting for {today}")
 
             except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to load daily stats: {e}, creating new stats")
 
         # Create new stats for today
-        stats = DailyStats(
-            date=today,
-            starting_balance=starting_balance
-        )
+        stats = DailyStats(date=today, starting_balance=starting_balance)
 
         # Persist immediately
         self.update_daily_stats(stats)
@@ -144,8 +136,7 @@ class StateManager:
             json.dump(stats.model_dump(mode="json"), f, indent=2)
 
         logger.debug(
-            f"Updated daily stats: {stats.trade_count} trades, "
-            f"P&L: {stats.realized_pnl:.2f}"
+            f"Updated daily stats: {stats.trade_count} trades, P&L: {stats.realized_pnl:.2f}"
         )
 
     def log_order(self, order_data: dict) -> None:
@@ -158,10 +149,7 @@ class StateManager:
             order_data: Dictionary containing order details
         """
         # Add timestamp
-        log_entry = {
-            **order_data,
-            "logged_at": datetime.now().isoformat()
-        }
+        log_entry = {**order_data, "logged_at": datetime.now().isoformat()}
 
         # Append to JSONL file
         with open(self.order_log_file, "a") as f:

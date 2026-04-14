@@ -18,73 +18,30 @@ from pydantic import BaseModel, Field, field_validator, computed_field
 class OrderResult(BaseModel):
     """Result of placing an order on the exchange."""
 
-    order_id: str = Field(
-        description="Unique order identifier from exchange"
-    )
-    symbol: str = Field(
-        description="Trading pair symbol (e.g., 'BTCUSDT')"
-    )
-    side: Literal["buy", "sell"] = Field(
-        description="Order side: 'buy' or 'sell'"
-    )
-    order_type: Literal["limit", "market"] = Field(
-        description="Order type: 'limit' or 'market'"
-    )
-    amount: float = Field(
-        ge=0,
-        description="Order amount/quantity"
-    )
-    price: Optional[float] = Field(
-        default=None,
-        description="Order price (None for market orders)"
-    )
-    status: str = Field(
-        description="Order status (e.g., 'open', 'closed', 'canceled')"
-    )
-    filled: float = Field(
-        ge=0,
-        description="Amount filled"
-    )
-    remaining: float = Field(
-        ge=0,
-        description="Amount remaining to fill"
-    )
-    cost: float = Field(
-        ge=0,
-        description="Total cost of filled amount"
-    )
-    fee: float = Field(
-        ge=0,
-        description="Trading fee paid"
-    )
-    timestamp: datetime = Field(
-        description="Order timestamp"
-    )
+    order_id: str = Field(description="Unique order identifier from exchange")
+    symbol: str = Field(description="Trading pair symbol (e.g., 'BTCUSDT')")
+    side: Literal["buy", "sell"] = Field(description="Order side: 'buy' or 'sell'")
+    order_type: Literal["limit", "market"] = Field(description="Order type: 'limit' or 'market'")
+    amount: float = Field(ge=0, description="Order amount/quantity")
+    price: Optional[float] = Field(default=None, description="Order price (None for market orders)")
+    status: str = Field(description="Order status (e.g., 'open', 'closed', 'canceled')")
+    filled: float = Field(ge=0, description="Amount filled")
+    remaining: float = Field(ge=0, description="Amount remaining to fill")
+    cost: float = Field(ge=0, description="Total cost of filled amount")
+    fee: float = Field(ge=0, description="Trading fee paid")
+    timestamp: datetime = Field(description="Order timestamp")
 
 
 class OrderStatus(BaseModel):
     """Current status of an order."""
 
-    order_id: str = Field(
-        description="Unique order identifier"
-    )
-    symbol: str = Field(
-        description="Trading pair symbol"
-    )
-    status: str = Field(
-        description="Current order status"
-    )
-    filled: float = Field(
-        ge=0,
-        description="Amount filled"
-    )
-    remaining: float = Field(
-        ge=0,
-        description="Amount remaining to fill"
-    )
+    order_id: str = Field(description="Unique order identifier")
+    symbol: str = Field(description="Trading pair symbol")
+    status: str = Field(description="Current order status")
+    filled: float = Field(ge=0, description="Amount filled")
+    remaining: float = Field(ge=0, description="Amount remaining to fill")
     average_price: Optional[float] = Field(
-        default=None,
-        description="Average price of filled amount"
+        default=None, description="Average price of filled amount"
     )
 
     @computed_field
@@ -102,100 +59,45 @@ class OrderStatus(BaseModel):
 class Position(BaseModel):
     """Open position information."""
 
-    symbol: str = Field(
-        description="Trading pair symbol"
-    )
-    side: Literal["long", "short"] = Field(
-        description="Position side: 'long' or 'short'"
-    )
-    amount: float = Field(
-        ge=0,
-        description="Position size"
-    )
-    entry_price: float = Field(
-        gt=0,
-        description="Entry price (must be positive)"
-    )
-    mark_price: float = Field(
-        gt=0,
-        description="Current mark price (must be positive)"
-    )
-    unrealized_pnl: float = Field(
-        description="Unrealized profit/loss"
-    )
-    leverage: int = Field(
-        ge=1,
-        le=125,
-        description="Position leverage (1-125 for Binance)"
-    )
+    symbol: str = Field(description="Trading pair symbol")
+    side: Literal["long", "short"] = Field(description="Position side: 'long' or 'short'")
+    amount: float = Field(ge=0, description="Position size")
+    entry_price: float = Field(gt=0, description="Entry price (must be positive)")
+    mark_price: float = Field(gt=0, description="Current mark price (must be positive)")
+    unrealized_pnl: float = Field(description="Unrealized profit/loss")
+    leverage: int = Field(ge=1, le=125, description="Position leverage (1-125 for Binance)")
     liquidation_price: Optional[float] = Field(
-        default=None,
-        description="Liquidation price if applicable"
+        default=None, description="Liquidation price if applicable"
     )
 
 
 class TradeDecision(BaseModel):
     """Decision returned by accept_signal() to execute or reject a signal."""
 
-    execute: bool = Field(
-        description="Whether to execute the trade"
-    )
-    reason: str = Field(
-        description="Explanation for the decision (accept or reject reason)"
-    )
-    symbol: Optional[str] = Field(
-        default=None,
-        description="Trading pair symbol"
-    )
+    execute: bool = Field(description="Whether to execute the trade")
+    reason: str = Field(description="Explanation for the decision (accept or reject reason)")
+    symbol: Optional[str] = Field(default=None, description="Trading pair symbol")
     side: Optional[Literal["buy", "sell"]] = Field(
-        default=None,
-        description="Trade side: 'buy' or 'sell' (None if rejected)"
+        default=None, description="Trade side: 'buy' or 'sell' (None if rejected)"
     )
-    amount: Optional[float] = Field(
-        default=None,
-        ge=0,
-        description="Amount to trade"
-    )
-    price: Optional[float] = Field(
-        default=None,
-        description="Entry price (None for market orders)"
-    )
+    amount: Optional[float] = Field(default=None, ge=0, description="Amount to trade")
+    price: Optional[float] = Field(default=None, description="Entry price (None for market orders)")
     order_type: Optional[Literal["limit", "market"]] = Field(
-        default=None,
-        description="Order type: 'limit' or 'market'"
+        default=None, description="Order type: 'limit' or 'market'"
     )
-    stop_loss_price: Optional[float] = Field(
-        default=None,
-        description="Stop loss price"
-    )
-    take_profit_price: Optional[float] = Field(
-        default=None,
-        description="Take profit price"
-    )
+    stop_loss_price: Optional[float] = Field(default=None, description="Stop loss price")
+    take_profit_price: Optional[float] = Field(default=None, description="Take profit price")
 
 
 class DailyStats(BaseModel):
     """Daily trading statistics for circuit breaker tracking."""
 
-    date: str = Field(
-        description="Trading date in YYYY-MM-DD format"
-    )
-    trade_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of trades executed today"
-    )
-    realized_pnl: float = Field(
-        default=0.0,
-        description="Realized profit/loss for the day"
-    )
-    starting_balance: float = Field(
-        ge=0,
-        description="Starting account balance at market open"
-    )
+    date: str = Field(description="Trading date in YYYY-MM-DD format")
+    trade_count: int = Field(default=0, ge=0, description="Number of trades executed today")
+    realized_pnl: float = Field(default=0.0, description="Realized profit/loss for the day")
+    starting_balance: float = Field(ge=0, description="Starting account balance at market open")
     last_order_timestamp: Optional[datetime] = Field(
-        default=None,
-        description="Timestamp of last order executed"
+        default=None, description="Timestamp of last order executed"
     )
 
     @computed_field
@@ -219,40 +121,21 @@ class DailyStats(BaseModel):
 class SignalInput(BaseModel):
     """Input signal from the signal generation pipeline."""
 
-    symbol: str = Field(
-        description="Trading pair symbol (e.g., 'BTCUSDT')"
-    )
-    direction: Literal["long", "short"] = Field(
-        description="Trade direction: 'long' or 'short'"
-    )
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Signal confidence as decimal [0.0, 1.0]"
-    )
+    symbol: str = Field(description="Trading pair symbol (e.g., 'BTCUSDT')")
+    direction: Literal["long", "short"] = Field(description="Trade direction: 'long' or 'short'")
+    confidence: float = Field(ge=0.0, le=1.0, description="Signal confidence as decimal [0.0, 1.0]")
     expected_return_pct: float = Field(
         description="Expected return as percentage (can be negative)"
     )
     stop_loss_pct: float = Field(
-        gt=0,
-        description="Stop loss distance as percentage (must be positive)"
+        gt=0, description="Stop loss distance as percentage (must be positive)"
     )
     take_profit_pct: Optional[float] = Field(
-        default=None,
-        description="Take profit target as percentage"
+        default=None, description="Take profit target as percentage"
     )
-    timeframe: str = Field(
-        default="1h",
-        description="Signal timeframe (default: '1h')"
-    )
-    entry_price: Optional[float] = Field(
-        default=None,
-        description="Suggested entry price"
-    )
-    metadata: Optional[dict] = Field(
-        default=None,
-        description="Additional signal metadata"
-    )
+    timeframe: str = Field(default="1h", description="Signal timeframe (default: '1h')")
+    entry_price: Optional[float] = Field(default=None, description="Suggested entry price")
+    metadata: Optional[dict] = Field(default=None, description="Additional signal metadata")
 
     @field_validator("direction")
     @classmethod

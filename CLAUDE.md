@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17O.
+Completed through Session 17P.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -72,8 +72,12 @@ Completed through Session 17O.
   - llm_context.py — LLM context overlay node: LLMContext dataclass (bullish_factors, bearish_factors, regime_flag, confidence), generate_market_context (async), Qwen system prompt (context only, NEVER direction), VRAM preflight, OLLAMA_KEEP_ALIVE=0 enforcement, graceful fallback on failure, forbidden words filter (LONG/SHORT/BUY/SELL)
 - run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence
 - run_verification.py — CLI: --once, --interval, --stats, --export, --check-trigger; runs on schedule (default 4h) or once mode
-- Tests: 1520+ tests (signals: 187, autoresearch: 30+)
+- execution/ — execution layer package (43 tests):
+  - hyperliquid_adapter.py — **NEW** Hyperliquid execution adapter: EIP-712 signing via hyperliquid-python-sdk, place_order (limit/market), cancel_order, get_positions, get_balance, flatten_all, auto exchange-side stop-loss on every position, connection retry logic (3 retries, exponential backoff), order logging to execution/order_log.jsonl
+  - exchange_router.py — **NEW** multi-exchange router: dispatches to HyperliquidAdapter or BinanceExecutionClient based on EXCHANGE env var, identical interface regardless of exchange, runtime switching via switch_exchange(), logs exchange selection at startup
+  - watchdog.py — **NEW** independent watchdog process: COMPLETELY SEPARATE from signal_loop (not imported, not part of LangGraph), polls positions every 30s, enforces max 2% daily loss (flatten all), position age >48h alerts, orphan position detection, STOP file triggers immediate flatten and exit, writes heartbeat to dashboard/health_status.json, CLI entry point for systemd/supervisor
+- Tests: 1560+ tests (signals: 187, execution: 43, autoresearch: 30+)
 
 ## Next Session
 
-Session 17P — Add funding rate / OI delta data fetching to market_data.py, integrate into signal_loop.py LLM context generation
+Session 17Q — Add funding rate / OI delta data fetching to market_data.py, integrate into signal_loop.py LLM context generation

@@ -162,14 +162,14 @@ def calculate_position_size(
     # Build reason string
     if capped_by_max:
         reason = (
-            f"Position capped at {max_position_pct*100:.1f}% of balance "
+            f"Position capped at {max_position_pct * 100:.1f}% of balance "
             f"(would have been {max_notional_from_risk:.2f} based on risk)"
         )
     else:
         reason = (
-            f"Position sized for {risk_pct*100:.1f}% risk with "
-            f"{stop_distance_pct*100:.2f}% stop distance and "
-            f"{fees_pct*100:.3f}% fees"
+            f"Position sized for {risk_pct * 100:.1f}% risk with "
+            f"{stop_distance_pct * 100:.2f}% stop distance and "
+            f"{fees_pct * 100:.3f}% fees"
         )
 
     return PositionSizeResult(

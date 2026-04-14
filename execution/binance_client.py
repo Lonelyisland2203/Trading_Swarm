@@ -79,12 +79,14 @@ class BinanceExecutionClient:
         self.testnet = execution_settings.testnet
 
         # Initialize CCXT exchange
-        self.exchange = getattr(ccxt, "binance")({
-            "apiKey": execution_settings.api_key,
-            "secret": execution_settings.api_secret,
-            "enableRateLimit": True,
-            "sandbox": execution_settings.testnet,
-        })
+        self.exchange = getattr(ccxt, "binance")(
+            {
+                "apiKey": execution_settings.api_key,
+                "secret": execution_settings.api_secret,
+                "enableRateLimit": True,
+                "sandbox": execution_settings.testnet,
+            }
+        )
 
         # Initialize state manager
         state_path = state_dir or execution_settings.state_dir
@@ -129,27 +131,25 @@ class BinanceExecutionClient:
         try:
             # Place order
             if side == "buy":
-                response = await self.exchange.create_limit_buy_order(
-                    symbol, amount, price
-                )
+                response = await self.exchange.create_limit_buy_order(symbol, amount, price)
             else:
-                response = await self.exchange.create_limit_sell_order(
-                    symbol, amount, price
-                )
+                response = await self.exchange.create_limit_sell_order(symbol, amount, price)
 
             # Parse response
             order = self._parse_order_response(response, "limit")
 
             # Log order
-            self.state_manager.log_order({
-                "order_id": order.order_id,
-                "symbol": order.symbol,
-                "side": order.side,
-                "type": order.order_type,
-                "amount": order.amount,
-                "price": order.price,
-                "status": order.status,
-            })
+            self.state_manager.log_order(
+                {
+                    "order_id": order.order_id,
+                    "symbol": order.symbol,
+                    "side": order.side,
+                    "type": order.order_type,
+                    "amount": order.amount,
+                    "price": order.price,
+                    "status": order.status,
+                }
+            )
 
             return order
 
@@ -211,14 +211,16 @@ class BinanceExecutionClient:
             order = self._parse_order_response(response, "market")
 
             # Log order
-            self.state_manager.log_order({
-                "order_id": order.order_id,
-                "symbol": order.symbol,
-                "side": order.side,
-                "type": order.order_type,
-                "amount": order.amount,
-                "status": order.status,
-            })
+            self.state_manager.log_order(
+                {
+                    "order_id": order.order_id,
+                    "symbol": order.symbol,
+                    "side": order.side,
+                    "type": order.order_type,
+                    "amount": order.amount,
+                    "status": order.status,
+                }
+            )
 
             return order
 
@@ -374,9 +376,7 @@ class BinanceExecutionClient:
                 break
 
         if not position_to_close:
-            raise OrderRejectedError(
-                reason=f"No open position found for {symbol}"
-            )
+            raise OrderRejectedError(reason=f"No open position found for {symbol}")
 
         # Close position with market order
         # If long, sell; if short, buy
@@ -438,7 +438,7 @@ class BinanceExecutionClient:
             return TradeDecision(
                 execute=False,
                 reason=f"Daily loss {daily_stats.daily_loss_pct:.2f}% exceeds limit "
-                       f"{self.execution_settings.max_daily_loss_pct:.2f}%",
+                f"{self.execution_settings.max_daily_loss_pct:.2f}%",
                 symbol=signal.symbol,
             )
 
@@ -464,7 +464,10 @@ class BinanceExecutionClient:
         # Stage 5: Order cooldown
         if daily_stats.last_order_timestamp:
             time_since_last_order = datetime.now() - daily_stats.last_order_timestamp
-            if time_since_last_order.total_seconds() < self.execution_settings.order_cooldown_seconds:
+            if (
+                time_since_last_order.total_seconds()
+                < self.execution_settings.order_cooldown_seconds
+            ):
                 seconds_remaining = (
                     self.execution_settings.order_cooldown_seconds
                     - time_since_last_order.total_seconds()
@@ -480,7 +483,7 @@ class BinanceExecutionClient:
             return TradeDecision(
                 execute=False,
                 reason=f"Confidence {signal.confidence:.2%} below threshold "
-                       f"{self.execution_settings.min_confidence:.2%}",
+                f"{self.execution_settings.min_confidence:.2%}",
                 symbol=signal.symbol,
             )
 
@@ -624,7 +627,9 @@ class BinanceExecutionClient:
             filled=response.get("filled", 0.0),
             remaining=response.get("remaining", 0.0),
             cost=response.get("cost", 0.0),
-            fee=response.get("fee", {}).get("cost", 0.0) if isinstance(response.get("fee"), dict) else response.get("fee", 0.0),
+            fee=response.get("fee", {}).get("cost", 0.0)
+            if isinstance(response.get("fee"), dict)
+            else response.get("fee", 0.0),
             timestamp=timestamp,
         )
 
