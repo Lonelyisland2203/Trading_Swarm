@@ -4,6 +4,7 @@ Tests for fee flip diagnostic in run_dpo_training.py.
 Verifies that the diagnostic correctly identifies examples that flip from
 profitable (under flat 0.1% fees) to unprofitable (under realistic fees).
 """
+
 import math
 
 
@@ -117,7 +118,7 @@ class TestFeeFlipDiagnostic:
         assert "1h" in captured.out
 
         # Should show 0 flips
-        lines = captured.out.split('\n')
+        lines = captured.out.split("\n")
         for line in lines:
             if "1h" in line and "|" in line:
                 # Parse the flip count from the table
@@ -170,7 +171,7 @@ class TestFeeFlipDiagnostic:
         assert "FEE FLIP DIAGNOSTIC" in captured.out
 
         # Should detect at least 1 flip (ex1 and ex2)
-        lines = captured.out.split('\n')
+        lines = captured.out.split("\n")
         for line in lines:
             if "1h" in line and "|" in line:
                 parts = [p.strip() for p in line.split("|")]
@@ -220,17 +221,21 @@ class TestFeeFlipDiagnostic:
 
         # 5 examples that flip (0.105% gross on 1h - between 0.10% and 0.113%)
         for i in range(5):
-            examples_and_outcomes.append((
-                create_example(f"flip{i}", "BTC/USDT", "1h"),
-                create_outcome(f"flip{i}", gross_return_pct=0.105),
-            ))
+            examples_and_outcomes.append(
+                (
+                    create_example(f"flip{i}", "BTC/USDT", "1h"),
+                    create_outcome(f"flip{i}", gross_return_pct=0.105),
+                )
+            )
 
         # 5 examples that don't flip (1.0% gross)
         for i in range(5):
-            examples_and_outcomes.append((
-                create_example(f"ok{i}", "BTC/USDT", "1h"),
-                create_outcome(f"ok{i}", gross_return_pct=1.0),
-            ))
+            examples_and_outcomes.append(
+                (
+                    create_example(f"ok{i}", "BTC/USDT", "1h"),
+                    create_outcome(f"ok{i}", gross_return_pct=1.0),
+                )
+            )
 
         compute_fee_flip_diagnostic(examples_and_outcomes, fee_model)
 
@@ -282,7 +287,7 @@ class TestFeeFlipDiagnostic:
         assert "Avg New Net" in captured.out
 
         # Parse the output to verify numbers are present
-        lines = captured.out.split('\n')
+        lines = captured.out.split("\n")
         for line in lines:
             if "1m" in line and "|" in line and "Avg" not in line:
                 parts = [p.strip() for p in line.split("|")]
@@ -327,7 +332,7 @@ class TestFeeFlipDiagnostic:
 
         # Should show TOTAL row with 5 examples
         assert "TOTAL" in captured.out
-        lines = captured.out.split('\n')
+        lines = captured.out.split("\n")
         for line in lines:
             if "TOTAL" in line and "|" in line:
                 parts = [p.strip() for p in line.split("|")]
@@ -356,7 +361,7 @@ class TestFeeFlipDiagnostic:
         captured = capsys.readouterr()
 
         # Should show 0 flips (was negative, still negative)
-        lines = captured.out.split('\n')
+        lines = captured.out.split("\n")
         for line in lines:
             if "1m" in line and "|" in line:
                 parts = [p.strip() for p in line.split("|")]
@@ -387,7 +392,6 @@ class TestFeeFlipDiagnostic:
                 create_example("1m_2", "BTC/USDT", "1m"),
                 create_outcome("1m_2", gross_return_pct=0.08),  # No flip
             ),
-
             # 1h: Some flips (funding makes new > old)
             (
                 create_example("1h_1", "ETH/USDT", "1h"),
@@ -397,7 +401,6 @@ class TestFeeFlipDiagnostic:
                 create_example("1h_2", "ETH/USDT", "1h"),
                 create_outcome("1h_2", gross_return_pct=0.50),  # Survives
             ),
-
             # 1d: Higher funding costs → wider flip zone
             (
                 create_example("1d_1", "BTC/USDT", "1d"),
@@ -428,7 +431,7 @@ class TestFeeFlipDiagnostic:
 
         # Should detect some flips (at least in 1h and 1d)
         total_flipped = 0
-        lines = captured.out.split('\n')
+        lines = captured.out.split("\n")
         for line in lines:
             if "|" in line and any(tf in line for tf in ["1m", "1h", "1d"]):
                 parts = [p.strip() for p in line.split("|")]

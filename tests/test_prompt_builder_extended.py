@@ -34,14 +34,16 @@ def sample_df():
         trend = i * 10
         prices.append(base_price + trend + noise)
 
-    df = pd.DataFrame({
-        "timestamp": timestamps,
-        "open": prices,
-        "high": [p + abs(np.random.normal(0, 50)) for p in prices],
-        "low": [p - abs(np.random.normal(0, 50)) for p in prices],
-        "close": [p + np.random.normal(0, 20) for p in prices],
-        "volume": [100.0] * 100,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "open": prices,
+            "high": [p + abs(np.random.normal(0, 50)) for p in prices],
+            "low": [p - abs(np.random.normal(0, 50)) for p in prices],
+            "close": [p + np.random.normal(0, 20) for p in prices],
+            "volume": [100.0] * 100,
+        }
+    )
 
     return df
 
@@ -71,17 +73,14 @@ class TestTaskSampling:
 
     def test_momentum_task_min_bars(self):
         """Test ASSESS_MOMENTUM has lower bar requirement."""
-        momentum_config = next(
-            c for c in TASK_CONFIGS if c.task_type == TaskType.ASSESS_MOMENTUM
-        )
+        momentum_config = next(c for c in TASK_CONFIGS if c.task_type == TaskType.ASSESS_MOMENTUM)
 
         assert momentum_config.min_bars_required == 30
 
     def test_support_resistance_task_min_bars(self):
         """Test IDENTIFY_SUPPORT_RESISTANCE requires more bars."""
         sr_config = next(
-            c for c in TASK_CONFIGS
-            if c.task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE
+            c for c in TASK_CONFIGS if c.task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE
         )
 
         assert sr_config.min_bars_required == 100
@@ -109,10 +108,12 @@ class TestSwingDetection:
 
     def test_swing_detection_insufficient_data(self):
         """Test swing detection with insufficient data."""
-        df = pd.DataFrame({
-            "high": [100, 101, 102],
-            "low": [99, 100, 101],
-        })
+        df = pd.DataFrame(
+            {
+                "high": [100, 101, 102],
+                "low": [99, 100, 101],
+            }
+        )
 
         swing_highs = detect_swing_highs(df, window=5)
         swing_lows = detect_swing_lows(df, window=5)
@@ -352,14 +353,16 @@ class TestPromptBuilderExtended:
     def test_unsupported_task_type_raises(self):
         """Test unsupported task type raises ValueError."""
         # Create df with enough data to pass min_bars check
-        df = pd.DataFrame({
-            "timestamp": range(250),
-            "open": [50000.0] * 250,
-            "high": [50100.0] * 250,
-            "low": [49900.0] * 250,
-            "close": [50000.0] * 250,
-            "volume": [100.0] * 250,
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": range(250),
+                "open": [50000.0] * 250,
+                "high": [50100.0] * 250,
+                "low": [49900.0] * 250,
+                "close": [50000.0] * 250,
+                "volume": [100.0] * 250,
+            }
+        )
 
         builder = PromptBuilder()
 

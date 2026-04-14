@@ -17,9 +17,9 @@ CRYPTO_TRADING_DAYS_PER_YEAR = 365
 class MarketRegime(Enum):
     """Market volatility regime classification."""
 
-    RISK_ON = "risk_on"         # Low volatility, trending markets
-    NEUTRAL = "neutral"          # Normal volatility
-    RISK_OFF = "risk_off"        # High volatility, choppy markets
+    RISK_ON = "risk_on"  # Low volatility, trending markets
+    NEUTRAL = "neutral"  # Normal volatility
+    RISK_OFF = "risk_off"  # High volatility, choppy markets
 
 
 class RegimeClassifier:
@@ -32,8 +32,8 @@ class RegimeClassifier:
     def __init__(
         self,
         risk_off_threshold: float = 75.0,  # Percentile
-        risk_on_threshold: float = 25.0,   # Percentile
-        lookback_period: int = 30,         # Days for volatility calculation
+        risk_on_threshold: float = 25.0,  # Percentile
+        lookback_period: int = 30,  # Days for volatility calculation
     ):
         """
         Initialize regime classifier.
@@ -103,8 +103,7 @@ class RegimeClassifier:
         regime[vol_percentile >= self.risk_off_threshold] = MarketRegime.RISK_OFF
         regime[vol_percentile <= self.risk_on_threshold] = MarketRegime.RISK_ON
         regime[
-            (vol_percentile > self.risk_on_threshold) &
-            (vol_percentile < self.risk_off_threshold)
+            (vol_percentile > self.risk_on_threshold) & (vol_percentile < self.risk_off_threshold)
         ] = MarketRegime.NEUTRAL
 
         # Fill NaN at start with NEUTRAL
@@ -126,7 +125,7 @@ class RegimeClassifier:
             logger.warning(
                 "Insufficient data for regime classification",
                 available=len(close),
-                required=self.lookback_period
+                required=self.lookback_period,
             )
             return MarketRegime.NEUTRAL, 0.0
 

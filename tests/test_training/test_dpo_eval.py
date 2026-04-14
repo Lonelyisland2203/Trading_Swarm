@@ -257,7 +257,10 @@ class TestShouldPromoteAdapter:
         )
 
         should_promote, reason = should_promote_adapter(
-            candidate_eval, baseline_eval, min_ic_improvement=0.02, min_brier_improvement=-0.05  # Allow slight Brier degradation
+            candidate_eval,
+            baseline_eval,
+            min_ic_improvement=0.02,
+            min_brier_improvement=-0.05,  # Allow slight Brier degradation
         )
 
         # Debug output
@@ -286,7 +289,9 @@ class TestShouldPromoteAdapter:
         )
 
         should_promote, reason = should_promote_adapter(
-            candidate_eval, baseline_eval, min_ic_improvement=0.1  # High threshold
+            candidate_eval,
+            baseline_eval,
+            min_ic_improvement=0.1,  # High threshold
         )
 
         assert not should_promote

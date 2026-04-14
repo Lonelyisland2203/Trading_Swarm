@@ -90,7 +90,9 @@ class TestSignalExtraction:
 
     def test_extract_momentum_signal_valid_json(self):
         """Test extracting momentum assessment signal from valid JSON."""
-        response = '{"direction": "INCREASING", "confidence": 0.82, "reasoning": "MACD crossing up"}'
+        response = (
+            '{"direction": "INCREASING", "confidence": 0.82, "reasoning": "MACD crossing up"}'
+        )
 
         signal = extract_signal(response, TradingPersona.MOMENTUM, TaskType.ASSESS_MOMENTUM)
 
@@ -101,15 +103,17 @@ class TestSignalExtraction:
 
     def test_extract_support_resistance_signal_valid_json(self):
         """Test extracting support/resistance signal from valid JSON."""
-        response = '''{
+        response = """{
             "support_price": 48500.0,
             "support_confidence": 0.88,
             "resistance_price": 51200.0,
             "resistance_confidence": 0.75,
             "reasoning": "Swing highs at 51200, swing lows at 48500"
-        }'''
+        }"""
 
-        signal = extract_signal(response, TradingPersona.CONSERVATIVE, TaskType.IDENTIFY_SUPPORT_RESISTANCE)
+        signal = extract_signal(
+            response, TradingPersona.CONSERVATIVE, TaskType.IDENTIFY_SUPPORT_RESISTANCE
+        )
 
         assert signal.task_type == TaskType.IDENTIFY_SUPPORT_RESISTANCE
         assert signal.signal_data["support_price"] == 48500.0
@@ -120,13 +124,13 @@ class TestSignalExtraction:
 
     def test_extract_signal_with_markdown_fences(self):
         """Test extracting signal from markdown-fenced JSON."""
-        response = '''```json
+        response = """```json
 {
     "direction": "LOWER",
     "confidence": 0.65,
     "reasoning": "Breaking support"
 }
-```'''
+```"""
 
         signal = extract_signal(response, TradingPersona.CONTRARIAN, TaskType.PREDICT_DIRECTION)
 
@@ -275,13 +279,13 @@ class TestGenerateSignalIntegration:
     async def test_generate_support_resistance_signal_success(self, monkeypatch):
         """Test successful support/resistance signal generation."""
         mock_response = {
-            "response": '''{
+            "response": """{
                 "support_price": 49000.0,
                 "support_confidence": 0.85,
                 "resistance_price": 51000.0,
                 "resistance_confidence": 0.78,
                 "reasoning": "Recent swing points"
-            }'''
+            }"""
         }
 
         async def mock_generate(*args, **kwargs):

@@ -32,8 +32,8 @@ def compute_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     loss = (-delta).where(delta < 0, 0.0)
 
     # Wilder's smoothing: alpha = 1/period
-    avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
     # Avoid division by zero with epsilon threshold
     rs = avg_gain / avg_loss.where(avg_loss > EPSILON, np.nan)
@@ -222,11 +222,11 @@ def compute_ichimoku_cloud(
     chikou_span = close.shift(-kijun_period)
 
     return {
-        'tenkan_sen': tenkan_sen,
-        'kijun_sen': kijun_sen,
-        'senkou_span_a': senkou_span_a,
-        'senkou_span_b': senkou_span_b,
-        'chikou_span': chikou_span,
+        "tenkan_sen": tenkan_sen,
+        "kijun_sen": kijun_sen,
+        "senkou_span_a": senkou_span_a,
+        "senkou_span_b": senkou_span_b,
+        "chikou_span": chikou_span,
     }
 
 
@@ -284,14 +284,13 @@ def compute_kama(
     # First valid value: use SMA
     first_valid_idx = period
     if first_valid_idx < len(close):
-        kama_values.iloc[first_valid_idx] = close.iloc[:first_valid_idx + 1].mean()
+        kama_values.iloc[first_valid_idx] = close.iloc[: first_valid_idx + 1].mean()
 
         # Iterate from first_valid + 1 to end
         for i in range(first_valid_idx + 1, len(close)):
             if pd.notna(sc.iloc[i]) and pd.notna(kama_values.iloc[i - 1]):
-                kama_values.iloc[i] = (
-                    kama_values.iloc[i - 1] +
-                    sc.iloc[i] * (close.iloc[i] - kama_values.iloc[i - 1])
+                kama_values.iloc[i] = kama_values.iloc[i - 1] + sc.iloc[i] * (
+                    close.iloc[i] - kama_values.iloc[i - 1]
                 )
 
     return kama_values
@@ -495,7 +494,7 @@ def compute_atr(
     true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
 
     # Wilder's smoothing: alpha = 1/period
-    return true_range.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    return true_range.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
 def compute_atr_normalized(
@@ -742,9 +741,9 @@ def fair_value_gaps(
     # Scan from bar 1 to bar n-2 (need bars i-1, i, i+1)
     for i in range(1, len(df) - 1):
         # Bullish FVG: candle[i-1].high < candle[i+1].low
-        if df.iloc[i - 1]['high'] < df.iloc[i + 1]['low']:
-            gap_bottom = df.iloc[i - 1]['high']
-            gap_top = df.iloc[i + 1]['low']
+        if df.iloc[i - 1]["high"] < df.iloc[i + 1]["low"]:
+            gap_bottom = df.iloc[i - 1]["high"]
+            gap_top = df.iloc[i + 1]["low"]
             gap_size_pct = ((gap_top - gap_bottom) / gap_bottom) * 100
 
             # Filter by minimum gap size
@@ -754,24 +753,26 @@ def fair_value_gaps(
             # Check if gap is filled by subsequent bars
             filled = False
             for j in range(i + 2, len(df)):
-                if df.iloc[j]['low'] < gap_top:
+                if df.iloc[j]["low"] < gap_top:
                     filled = True
                     break
 
             if not filled:
-                gaps.append({
-                    'index': i,
-                    'direction': 'bullish',
-                    'gap_top': gap_top,
-                    'gap_bottom': gap_bottom,
-                    'gap_size_pct': round(gap_size_pct, 2),
-                    'timestamp': int(df.iloc[i]['timestamp']),
-                })
+                gaps.append(
+                    {
+                        "index": i,
+                        "direction": "bullish",
+                        "gap_top": gap_top,
+                        "gap_bottom": gap_bottom,
+                        "gap_size_pct": round(gap_size_pct, 2),
+                        "timestamp": int(df.iloc[i]["timestamp"]),
+                    }
+                )
 
         # Bearish FVG: candle[i-1].low > candle[i+1].high
-        elif df.iloc[i - 1]['low'] > df.iloc[i + 1]['high']:
-            gap_top = df.iloc[i - 1]['low']
-            gap_bottom = df.iloc[i + 1]['high']
+        elif df.iloc[i - 1]["low"] > df.iloc[i + 1]["high"]:
+            gap_top = df.iloc[i - 1]["low"]
+            gap_bottom = df.iloc[i + 1]["high"]
             gap_size_pct = ((gap_top - gap_bottom) / gap_bottom) * 100
 
             # Filter by minimum gap size
@@ -781,19 +782,21 @@ def fair_value_gaps(
             # Check if gap is filled by subsequent bars
             filled = False
             for j in range(i + 2, len(df)):
-                if df.iloc[j]['high'] > gap_bottom:
+                if df.iloc[j]["high"] > gap_bottom:
                     filled = True
                     break
 
             if not filled:
-                gaps.append({
-                    'index': i,
-                    'direction': 'bearish',
-                    'gap_top': gap_top,
-                    'gap_bottom': gap_bottom,
-                    'gap_size_pct': round(gap_size_pct, 2),
-                    'timestamp': int(df.iloc[i]['timestamp']),
-                })
+                gaps.append(
+                    {
+                        "index": i,
+                        "direction": "bearish",
+                        "gap_top": gap_top,
+                        "gap_bottom": gap_bottom,
+                        "gap_size_pct": round(gap_size_pct, 2),
+                        "timestamp": int(df.iloc[i]["timestamp"]),
+                    }
+                )
 
     return gaps
 
@@ -829,49 +832,53 @@ def swing_points(
         }
     """
     if len(df) < window * 2 + 1:
-        return {'highs': [], 'lows': []}
+        return {"highs": [], "lows": []}
 
     swing_highs = []
     swing_lows = []
 
     # Iterate through potential swing points (excluding edges)
     for i in range(window, len(df) - window):
-        current_high = df.iloc[i]['high']
-        current_low = df.iloc[i]['low']
+        current_high = df.iloc[i]["high"]
+        current_low = df.iloc[i]["low"]
 
         # Check if this is a swing high
         is_swing_high = True
         for j in range(i - window, i + window + 1):
             if j == i:
                 continue
-            if df.iloc[j]['high'] >= current_high:
+            if df.iloc[j]["high"] >= current_high:
                 is_swing_high = False
                 break
 
         if is_swing_high:
-            swing_highs.append({
-                'index': i,
-                'price': current_high,
-                'timestamp': int(df.iloc[i]['timestamp']),
-            })
+            swing_highs.append(
+                {
+                    "index": i,
+                    "price": current_high,
+                    "timestamp": int(df.iloc[i]["timestamp"]),
+                }
+            )
 
         # Check if this is a swing low
         is_swing_low = True
         for j in range(i - window, i + window + 1):
             if j == i:
                 continue
-            if df.iloc[j]['low'] <= current_low:
+            if df.iloc[j]["low"] <= current_low:
                 is_swing_low = False
                 break
 
         if is_swing_low:
-            swing_lows.append({
-                'index': i,
-                'price': current_low,
-                'timestamp': int(df.iloc[i]['timestamp']),
-            })
+            swing_lows.append(
+                {
+                    "index": i,
+                    "price": current_low,
+                    "timestamp": int(df.iloc[i]["timestamp"]),
+                }
+            )
 
-    return {'highs': swing_highs, 'lows': swing_lows}
+    return {"highs": swing_highs, "lows": swing_lows}
 
 
 def compute_all_indicators(
@@ -909,11 +916,11 @@ def compute_all_indicators(
         raise ValueError("Cannot compute indicators on empty DataFrame")
 
     # Extract series from DataFrame
-    open_series = df['open']
-    high = df['high']
-    low = df['low']
-    close = df['close']
-    volume = df['volume'] if 'volume' in df.columns else None
+    open_series = df["open"]
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+    volume = df["volume"] if "volume" in df.columns else None
 
     # Initialize result dict
     result = {}
@@ -925,30 +932,58 @@ def compute_all_indicators(
 
     # RSI (14-period)
     rsi_series = compute_rsi(close, period=14)
-    result['rsi'] = rsi_series.iloc[-1] if not rsi_series.empty and not pd.isna(rsi_series.iloc[-1]) else None
-    series_dict['rsi'] = rsi_series
+    result["rsi"] = (
+        rsi_series.iloc[-1] if not rsi_series.empty and not pd.isna(rsi_series.iloc[-1]) else None
+    )
+    series_dict["rsi"] = rsi_series
 
     # MACD (12, 26, 9)
-    macd_line, macd_signal, macd_histogram = compute_macd(close, fast_period=12, slow_period=26, signal_period=9)
-    result['macd_line'] = macd_line.iloc[-1] if not macd_line.empty and not pd.isna(macd_line.iloc[-1]) else None
-    result['macd_signal'] = macd_signal.iloc[-1] if not macd_signal.empty and not pd.isna(macd_signal.iloc[-1]) else None
-    series_dict['macd_line'] = macd_line
-    series_dict['macd_signal'] = macd_signal
-    series_dict['macd_histogram'] = macd_histogram
+    macd_line, macd_signal, macd_histogram = compute_macd(
+        close, fast_period=12, slow_period=26, signal_period=9
+    )
+    result["macd_line"] = (
+        macd_line.iloc[-1] if not macd_line.empty and not pd.isna(macd_line.iloc[-1]) else None
+    )
+    result["macd_signal"] = (
+        macd_signal.iloc[-1]
+        if not macd_signal.empty and not pd.isna(macd_signal.iloc[-1])
+        else None
+    )
+    series_dict["macd_line"] = macd_line
+    series_dict["macd_signal"] = macd_signal
+    series_dict["macd_histogram"] = macd_histogram
 
     # Donchian Channels (20-period)
-    donchian_upper, donchian_middle, donchian_lower = compute_donchian_channels(high, low, period=20)
-    result['donchian_upper'] = donchian_upper.iloc[-1] if not donchian_upper.empty and not pd.isna(donchian_upper.iloc[-1]) else None
-    result['donchian_middle'] = donchian_middle.iloc[-1] if not donchian_middle.empty and not pd.isna(donchian_middle.iloc[-1]) else None
-    result['donchian_lower'] = donchian_lower.iloc[-1] if not donchian_lower.empty and not pd.isna(donchian_lower.iloc[-1]) else None
-    series_dict['donchian_upper'] = donchian_upper
-    series_dict['donchian_middle'] = donchian_middle
-    series_dict['donchian_lower'] = donchian_lower
+    donchian_upper, donchian_middle, donchian_lower = compute_donchian_channels(
+        high, low, period=20
+    )
+    result["donchian_upper"] = (
+        donchian_upper.iloc[-1]
+        if not donchian_upper.empty and not pd.isna(donchian_upper.iloc[-1])
+        else None
+    )
+    result["donchian_middle"] = (
+        donchian_middle.iloc[-1]
+        if not donchian_middle.empty and not pd.isna(donchian_middle.iloc[-1])
+        else None
+    )
+    result["donchian_lower"] = (
+        donchian_lower.iloc[-1]
+        if not donchian_lower.empty and not pd.isna(donchian_lower.iloc[-1])
+        else None
+    )
+    series_dict["donchian_upper"] = donchian_upper
+    series_dict["donchian_middle"] = donchian_middle
+    series_dict["donchian_lower"] = donchian_lower
 
     # KAMA (10-period)
     kama_series = compute_kama(close, period=10)
-    result['kama'] = kama_series.iloc[-1] if not kama_series.empty and not pd.isna(kama_series.iloc[-1]) else None
-    series_dict['kama'] = kama_series
+    result["kama"] = (
+        kama_series.iloc[-1]
+        if not kama_series.empty and not pd.isna(kama_series.iloc[-1])
+        else None
+    )
+    series_dict["kama"] = kama_series
 
     # ============================================================
     # Volume Indicators (4 indicators)
@@ -957,33 +992,49 @@ def compute_all_indicators(
     if include_volume and volume is not None:
         # OBV
         obv_series = compute_obv(close, volume)
-        result['obv'] = obv_series.iloc[-1] if not obv_series.empty and not pd.isna(obv_series.iloc[-1]) else None
-        series_dict['obv'] = obv_series
+        result["obv"] = (
+            obv_series.iloc[-1]
+            if not obv_series.empty and not pd.isna(obv_series.iloc[-1])
+            else None
+        )
+        series_dict["obv"] = obv_series
 
         # CMF (20-period)
         cmf_series = compute_cmf(high, low, close, volume, period=20)
-        result['cmf'] = cmf_series.iloc[-1] if not cmf_series.empty and not pd.isna(cmf_series.iloc[-1]) else None
-        series_dict['cmf'] = cmf_series
+        result["cmf"] = (
+            cmf_series.iloc[-1]
+            if not cmf_series.empty and not pd.isna(cmf_series.iloc[-1])
+            else None
+        )
+        series_dict["cmf"] = cmf_series
 
         # MFI (14-period)
         mfi_series = compute_mfi(high, low, close, volume, period=14)
-        result['mfi'] = mfi_series.iloc[-1] if not mfi_series.empty and not pd.isna(mfi_series.iloc[-1]) else None
-        series_dict['mfi'] = mfi_series
+        result["mfi"] = (
+            mfi_series.iloc[-1]
+            if not mfi_series.empty and not pd.isna(mfi_series.iloc[-1])
+            else None
+        )
+        series_dict["mfi"] = mfi_series
 
         # VWAP
         vwap_series = compute_vwap(high, low, close, volume)
-        result['vwap'] = vwap_series.iloc[-1] if not vwap_series.empty and not pd.isna(vwap_series.iloc[-1]) else None
-        series_dict['vwap'] = vwap_series
+        result["vwap"] = (
+            vwap_series.iloc[-1]
+            if not vwap_series.empty and not pd.isna(vwap_series.iloc[-1])
+            else None
+        )
+        series_dict["vwap"] = vwap_series
     else:
         # Set None if volume indicators skipped
-        result['obv'] = None
-        result['cmf'] = None
-        result['mfi'] = None
-        result['vwap'] = None
-        series_dict['obv'] = pd.Series(dtype=float)
-        series_dict['cmf'] = pd.Series(dtype=float)
-        series_dict['mfi'] = pd.Series(dtype=float)
-        series_dict['vwap'] = pd.Series(dtype=float)
+        result["obv"] = None
+        result["cmf"] = None
+        result["mfi"] = None
+        result["vwap"] = None
+        series_dict["obv"] = pd.Series(dtype=float)
+        series_dict["cmf"] = pd.Series(dtype=float)
+        series_dict["mfi"] = pd.Series(dtype=float)
+        series_dict["vwap"] = pd.Series(dtype=float)
 
     # ============================================================
     # Volatility Indicators (4 indicators)
@@ -991,25 +1042,45 @@ def compute_all_indicators(
 
     # ATR Normalized (14-period)
     atr_norm_series = compute_atr_normalized(high, low, close, period=14)
-    result['atr_normalized'] = atr_norm_series.iloc[-1] if not atr_norm_series.empty and not pd.isna(atr_norm_series.iloc[-1]) else None
-    series_dict['atr_normalized'] = atr_norm_series
+    result["atr_normalized"] = (
+        atr_norm_series.iloc[-1]
+        if not atr_norm_series.empty and not pd.isna(atr_norm_series.iloc[-1])
+        else None
+    )
+    series_dict["atr_normalized"] = atr_norm_series
 
     # BB Width (20-period)
     bb_width_series = compute_bb_width(close, period=20)
-    result['bb_width'] = bb_width_series.iloc[-1] if not bb_width_series.empty and not pd.isna(bb_width_series.iloc[-1]) else None
-    series_dict['bb_width'] = bb_width_series
+    result["bb_width"] = (
+        bb_width_series.iloc[-1]
+        if not bb_width_series.empty and not pd.isna(bb_width_series.iloc[-1])
+        else None
+    )
+    series_dict["bb_width"] = bb_width_series
 
     # Keltner Width (20-period EMA, 10-period ATR)
-    kc_upper, kc_middle, kc_lower = compute_keltner_channels(high, low, close, ema_period=20, atr_period=10)
+    kc_upper, kc_middle, kc_lower = compute_keltner_channels(
+        high, low, close, ema_period=20, atr_period=10
+    )
     # Keltner width = (upper - lower) / middle * 100
-    keltner_width_series = ((kc_upper - kc_lower) / kc_middle.where(kc_middle.abs() > EPSILON, np.nan)) * 100
-    result['keltner_width'] = keltner_width_series.iloc[-1] if not keltner_width_series.empty and not pd.isna(keltner_width_series.iloc[-1]) else None
-    series_dict['keltner_width'] = keltner_width_series
+    keltner_width_series = (
+        (kc_upper - kc_lower) / kc_middle.where(kc_middle.abs() > EPSILON, np.nan)
+    ) * 100
+    result["keltner_width"] = (
+        keltner_width_series.iloc[-1]
+        if not keltner_width_series.empty and not pd.isna(keltner_width_series.iloc[-1])
+        else None
+    )
+    series_dict["keltner_width"] = keltner_width_series
 
     # Donchian Width (20-period)
     donchian_width_series = compute_donchian_width(high, low, period=20)
-    result['donchian_width'] = donchian_width_series.iloc[-1] if not donchian_width_series.empty and not pd.isna(donchian_width_series.iloc[-1]) else None
-    series_dict['donchian_width'] = donchian_width_series
+    result["donchian_width"] = (
+        donchian_width_series.iloc[-1]
+        if not donchian_width_series.empty and not pd.isna(donchian_width_series.iloc[-1])
+        else None
+    )
+    series_dict["donchian_width"] = donchian_width_series
 
     # ============================================================
     # Market Structure (2 indicators)
@@ -1018,7 +1089,7 @@ def compute_all_indicators(
     if include_structure:
         # Fair Value Gaps
         fvgs = fair_value_gaps(df, min_gap_pct=0.1)
-        result['raw_fvgs'] = fvgs
+        result["raw_fvgs"] = fvgs
 
         # Scalar summaries for FVGs
         current_price = close.iloc[-1]
@@ -1026,57 +1097,57 @@ def compute_all_indicators(
         nearest_bearish_fvg_pct = None
 
         for gap in fvgs:
-            if gap['direction'] == 'bullish':
+            if gap["direction"] == "bullish":
                 # Bullish FVG: gap is above price
-                if gap['gap_bottom'] > current_price:
-                    distance_pct = (gap['gap_bottom'] - current_price) / current_price * 100
+                if gap["gap_bottom"] > current_price:
+                    distance_pct = (gap["gap_bottom"] - current_price) / current_price * 100
                     if nearest_bullish_fvg_pct is None or distance_pct < nearest_bullish_fvg_pct:
                         nearest_bullish_fvg_pct = distance_pct
-            elif gap['direction'] == 'bearish':
+            elif gap["direction"] == "bearish":
                 # Bearish FVG: gap is below price
-                if gap['gap_top'] < current_price:
-                    distance_pct = (current_price - gap['gap_top']) / current_price * 100
+                if gap["gap_top"] < current_price:
+                    distance_pct = (current_price - gap["gap_top"]) / current_price * 100
                     if nearest_bearish_fvg_pct is None or distance_pct < nearest_bearish_fvg_pct:
                         nearest_bearish_fvg_pct = distance_pct
 
-        result['nearest_bullish_fvg_pct'] = nearest_bullish_fvg_pct
-        result['nearest_bearish_fvg_pct'] = nearest_bearish_fvg_pct
-        result['open_fvg_count'] = len(fvgs)
+        result["nearest_bullish_fvg_pct"] = nearest_bullish_fvg_pct
+        result["nearest_bearish_fvg_pct"] = nearest_bearish_fvg_pct
+        result["open_fvg_count"] = len(fvgs)
 
         # Swing Points
         swing_data = swing_points(df, window=5)
-        result['raw_swing_points'] = swing_data
+        result["raw_swing_points"] = swing_data
 
         # Scalar summaries for swing points
         nearest_swing_high_pct = None
         nearest_swing_low_pct = None
 
-        for swing_high in swing_data['highs']:
-            if swing_high['price'] > current_price:
-                distance_pct = (swing_high['price'] - current_price) / current_price * 100
+        for swing_high in swing_data["highs"]:
+            if swing_high["price"] > current_price:
+                distance_pct = (swing_high["price"] - current_price) / current_price * 100
                 if nearest_swing_high_pct is None or distance_pct < nearest_swing_high_pct:
                     nearest_swing_high_pct = distance_pct
 
-        for swing_low in swing_data['lows']:
-            if swing_low['price'] < current_price:
-                distance_pct = (current_price - swing_low['price']) / current_price * 100
+        for swing_low in swing_data["lows"]:
+            if swing_low["price"] < current_price:
+                distance_pct = (current_price - swing_low["price"]) / current_price * 100
                 if nearest_swing_low_pct is None or distance_pct < nearest_swing_low_pct:
                     nearest_swing_low_pct = distance_pct
 
-        result['nearest_swing_high_pct'] = nearest_swing_high_pct
-        result['nearest_swing_low_pct'] = nearest_swing_low_pct
+        result["nearest_swing_high_pct"] = nearest_swing_high_pct
+        result["nearest_swing_low_pct"] = nearest_swing_low_pct
     else:
         # Set empty structures if structure indicators skipped
-        result['raw_fvgs'] = []
-        result['nearest_bullish_fvg_pct'] = None
-        result['nearest_bearish_fvg_pct'] = None
-        result['open_fvg_count'] = 0
-        result['raw_swing_points'] = {'highs': [], 'lows': []}
-        result['nearest_swing_high_pct'] = None
-        result['nearest_swing_low_pct'] = None
+        result["raw_fvgs"] = []
+        result["nearest_bullish_fvg_pct"] = None
+        result["nearest_bearish_fvg_pct"] = None
+        result["open_fvg_count"] = 0
+        result["raw_swing_points"] = {"highs": [], "lows": []}
+        result["nearest_swing_high_pct"] = None
+        result["nearest_swing_low_pct"] = None
 
     # Add series dict to result
-    result['series'] = series_dict
+    result["series"] = series_dict
 
     return result
 
@@ -1106,17 +1177,17 @@ def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
 
     # Check OHLC relationship: low <= open,close <= high
     invalid_bars = df[
-        (df["low"] > df["open"]) |
-        (df["low"] > df["close"]) |
-        (df["high"] < df["open"]) |
-        (df["high"] < df["close"])
+        (df["low"] > df["open"])
+        | (df["low"] > df["close"])
+        | (df["high"] < df["open"])
+        | (df["high"] < df["close"])
     ]
 
     if not invalid_bars.empty:
         logger.warning(
             "Invalid OHLC bars detected (dropping)",
             count=len(invalid_bars),
-            first_timestamp=invalid_bars.iloc[0]["timestamp"] if len(invalid_bars) > 0 else None
+            first_timestamp=invalid_bars.iloc[0]["timestamp"] if len(invalid_bars) > 0 else None,
         )
         # Drop invalid bars
         df = df.drop(invalid_bars.index)

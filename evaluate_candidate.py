@@ -60,6 +60,7 @@ def _extract_direction(sig: dict) -> str | None:
 # Fast path: load pre-saved test eval data
 # --------------------------------------------------------------------------- #
 
+
 def load_test_eval_data(
     test_data_path: Path,
 ) -> tuple[list[TrainingExample], list[VerifiedOutcome], list[ComputedReward]]:
@@ -117,6 +118,7 @@ def load_test_eval_data(
 
             # Reconstruct ComputedReward (minimal — only final_reward used in diagnostics)
             from datetime import datetime, UTC
+
             reward = ComputedReward(
                 final_reward=rec["final_reward"],
                 return_reward=rec.get("return_reward", 0.0),
@@ -154,6 +156,7 @@ def load_test_eval_data(
 # Slow path: re-run pipeline phases 1-4
 # --------------------------------------------------------------------------- #
 
+
 def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
     logger.info("Phase 1: Loading examples", path=str(jsonl_path))
     all_examples = load_examples_from_jsonl(jsonl_path)
@@ -162,7 +165,8 @@ def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
         sys.exit(1)
 
     verifiable = [
-        ex for ex in all_examples
+        ex
+        for ex in all_examples
         if _extract_direction(ex.generator_signal) in ("HIGHER", "LOWER", "FLAT")
     ]
     logger.info(
@@ -177,6 +181,7 @@ async def _run_verify(
     examples: list[TrainingExample], fee_model: FeeModelSettings
 ) -> list[VerifiedOutcome]:
     from data.market_data import MarketDataService
+
     async with MarketDataService() as svc:
         return await verify_batch(examples, svc, fee_model=fee_model)
 
@@ -189,9 +194,7 @@ def phase2_verify(
     outcomes = asyncio.run(_run_verify(examples, fee_model))
     outcome_by_id = {o.example_id: o for o in outcomes}
     matched = [
-        (ex, outcome_by_id[ex.example_id])
-        for ex in examples
-        if ex.example_id in outcome_by_id
+        (ex, outcome_by_id[ex.example_id]) for ex in examples if ex.example_id in outcome_by_id
     ]
     logger.info(
         "Phase 2 complete",
@@ -284,6 +287,7 @@ def run_slow_path(
 # Main evaluation
 # --------------------------------------------------------------------------- #
 
+
 def run_evaluation(
     candidate_path: Path,
     test_examples: list[TrainingExample],
@@ -326,8 +330,12 @@ def run_evaluation(
     ic_pass = evaluation.ic >= settings.dpo.min_oos_ic
     brier_pass = evaluation.brier_score <= settings.dpo.max_brier_score
     pval_pass = evaluation.ic_pvalue < 0.05
-    print(f"  IC >= {settings.dpo.min_oos_ic:.4f}:      {'PASS' if ic_pass else 'FAIL'}  ({evaluation.ic:+.4f})")
-    print(f"  Brier <= {settings.dpo.max_brier_score:.4f}:   {'PASS' if brier_pass else 'FAIL'}  ({evaluation.brier_score:.4f})")
+    print(
+        f"  IC >= {settings.dpo.min_oos_ic:.4f}:      {'PASS' if ic_pass else 'FAIL'}  ({evaluation.ic:+.4f})"
+    )
+    print(
+        f"  Brier <= {settings.dpo.max_brier_score:.4f}:   {'PASS' if brier_pass else 'FAIL'}  ({evaluation.brier_score:.4f})"
+    )
     print(f"  p < 0.05:         {'PASS' if pval_pass else 'FAIL'}  ({evaluation.ic_pvalue:.4f})")
     print()
 
@@ -372,6 +380,7 @@ def run_evaluation(
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

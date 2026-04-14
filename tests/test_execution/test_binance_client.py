@@ -79,7 +79,9 @@ def binance_client(execution_settings, fee_model_settings, temp_state_dir):
 class TestBinanceClientInit:
     """Test initialization and configuration."""
 
-    def test_init_with_testnet_defaults(self, execution_settings, fee_model_settings, temp_state_dir):
+    def test_init_with_testnet_defaults(
+        self, execution_settings, fee_model_settings, temp_state_dir
+    ):
         """Test client initializes with testnet defaults."""
         execution_settings.testnet = True
         with patch("execution.binance_client.ccxt") as mock_ccxt:
@@ -129,9 +131,11 @@ class TestBinanceClientInit:
     def test_state_manager_creation(self, binance_client, temp_state_dir):
         """Test StateManager is properly initialized."""
         assert binance_client.state_manager.state_dir == temp_state_dir
-        assert binance_client.state_manager.daily_stats_file.exists() or (
-            temp_state_dir / "daily_stats.json"
-        ).exists() or True  # May not exist until first access
+        assert (
+            binance_client.state_manager.daily_stats_file.exists()
+            or (temp_state_dir / "daily_stats.json").exists()
+            or True
+        )  # May not exist until first access
 
 
 class TestBinanceClientOrders:
@@ -221,9 +225,7 @@ class TestBinanceClientOrders:
     async def test_place_market_order_success(self, binance_client):
         """Test successful market order placement."""
         binance_client.exchange = AsyncMock()
-        binance_client.exchange.fetch_ticker = AsyncMock(
-            return_value={"last": 3000.0}
-        )
+        binance_client.exchange.fetch_ticker = AsyncMock(return_value={"last": 3000.0})
         binance_client.exchange.fetch_balance = AsyncMock(
             return_value={
                 "USDT": {"free": 10000.0, "used": 0.0, "total": 10000.0},
@@ -450,9 +452,7 @@ class TestBinanceClientPositions:
                 "BTC": {"free": 0.1, "used": 0.0, "total": 0.1},  # Have BTC available to sell
             }
         )
-        binance_client.exchange.fetch_ticker = AsyncMock(
-            return_value={"last": 51000.0}
-        )
+        binance_client.exchange.fetch_ticker = AsyncMock(return_value={"last": 51000.0})
         binance_client.exchange.create_market_sell_order = AsyncMock(
             return_value={
                 "id": "12348",
@@ -612,7 +612,10 @@ class TestBinanceClientSignalAcceptance:
         decision = await binance_client.accept_signal(signal)
 
         assert decision.execute is False
-        assert "expected return" in decision.reason.lower() or "fee threshold" in decision.reason.lower()
+        assert (
+            "expected return" in decision.reason.lower()
+            or "fee threshold" in decision.reason.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_accept_signal_daily_loss_limit_exceeded(self, binance_client):
@@ -750,9 +753,7 @@ class TestBinanceClientSignalAcceptance:
             }
         )
         binance_client.exchange.fetch_positions = AsyncMock(return_value=[])
-        binance_client.exchange.fetch_ticker = AsyncMock(
-            return_value={"last": 50000.0}
-        )
+        binance_client.exchange.fetch_ticker = AsyncMock(return_value={"last": 50000.0})
 
         signal = SignalInput(
             symbol="BTC/USDT",

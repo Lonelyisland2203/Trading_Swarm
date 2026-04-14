@@ -24,6 +24,7 @@ SYMBOLS = ["BTC/USDT", "ETH/USDT"]
 TIMEFRAME = "1h"
 LOOKBACK_BARS = 100
 
+
 async def process_symbol(
     symbol: str,
     service: MarketDataService,
@@ -31,7 +32,7 @@ async def process_symbol(
     prompt_builder: PromptBuilder,
 ) -> list:
     """Process a single symbol end-to-end.
-    
+
     Args:
         symbol: Trading pair e.g. BTC/USDT
         service: Shared market data service
@@ -66,9 +67,11 @@ async def process_symbol(
         task_type=task.task_type,
     )
 
-    print(f"  [{symbol}] Status: {summary['workflow_status']}, "
-          f"signals: {summary['signals_generated']}, "
-          f"accepted: {summary['signals_accepted']}")
+    print(
+        f"  [{symbol}] Status: {summary['workflow_status']}, "
+        f"signals: {summary['signals_generated']}, "
+        f"accepted: {summary['signals_accepted']}"
+    )
 
     return examples
 
@@ -97,10 +100,12 @@ async def main():
 
     async with MarketDataService() as service:
         # ── KEY CHANGE: both symbols run simultaneously ──────────────
-        results = await asyncio.gather(*[
-            process_symbol(symbol, service, regime_classifier, prompt_builder)
-            for symbol in SYMBOLS
-        ])
+        results = await asyncio.gather(
+            *[
+                process_symbol(symbol, service, regime_classifier, prompt_builder)
+                for symbol in SYMBOLS
+            ]
+        )
 
     all_examples = [ex for symbol_examples in results for ex in symbol_examples]
 

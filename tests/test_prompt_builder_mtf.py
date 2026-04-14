@@ -1,6 +1,5 @@
 """Tests for multi-timeframe context in prompt builder."""
 
-
 from data.prompt_builder import get_higher_timeframes
 from tests.fixtures.timeframe_fixtures import (
     create_test_df_bullish,
@@ -108,7 +107,9 @@ class TestTimeframeFixtures:
         for fixture_fn in [create_test_df_bullish, create_test_df_bearish, create_test_df_neutral]:
             df = fixture_fn()
             validated = validate_ohlcv(df)
-            assert len(validated) == len(df), f"{fixture_fn.__name__} lost {len(df)-len(validated)} bars"
+            assert len(validated) == len(df), (
+                f"{fixture_fn.__name__} lost {len(df) - len(validated)} bars"
+            )
 
 
 class TestSummarizeTimeframe:
@@ -155,7 +156,10 @@ class TestSummarizeTimeframe:
         assert result["rsi_zone"] == "neutral"
         # Trend will be determined by majority vote; cloud can be inside, above, or below
         # depending on the Ichimoku 52-bar lookback window
-        assert result["trend"] in ["neutral", "bearish"]  # Bearish/neutral expected for this fixture
+        assert result["trend"] in [
+            "neutral",
+            "bearish",
+        ]  # Bearish/neutral expected for this fixture
 
     def test_rsi_zone_overbought(self):
         """Should classify RSI > 70 as overbought."""
@@ -233,10 +237,14 @@ class TestSummarizeTimeframe:
 
         # Confidence should be present and a fraction (0.0-1.0)
         assert "confidence" in result, "Result must include 'confidence' field"
-        assert 0.0 <= result["confidence"] <= 1.0, f"Confidence must be between 0.0-1.0, got {result['confidence']}"
+        assert 0.0 <= result["confidence"] <= 1.0, (
+            f"Confidence must be between 0.0-1.0, got {result['confidence']}"
+        )
 
         # With strong bullish trend, expect high confidence (>= 0.75 means 3+ indicators agree)
-        assert result["confidence"] >= 0.75, f"Expected high confidence (>=0.75) for bullish setup, got {result['confidence']}"
+        assert result["confidence"] >= 0.75, (
+            f"Expected high confidence (>=0.75) for bullish setup, got {result['confidence']}"
+        )
 
 
 class TestComputeConfluence:
@@ -534,8 +542,15 @@ class TestPromptBuilderMultiTimeframe:
         # Should NOT include 1h or 4h in the summary lines (but may in confluence message)
         # More specific: 1h and 4h should not appear as timeframe labels
         lines = prompt.split("\n")
-        summary_lines = [l for l in lines if ":" in l and "1m" in prompt[:prompt.find(l)] and "Confluence:" not in l]
-        assert not any("1h:" in l for l in summary_lines) or "1h:" not in prompt.split("## Higher Timeframe Context")[1].split("Confluence")[0]
+        summary_lines = [
+            l
+            for l in lines
+            if ":" in l and "1m" in prompt[: prompt.find(l)] and "Confluence:" not in l
+        ]
+        assert (
+            not any("1h:" in l for l in summary_lines)
+            or "1h:" not in prompt.split("## Higher Timeframe Context")[1].split("Confluence")[0]
+        )
 
     def test_build_prompt_works_for_all_task_types(self):
         """Should work for all 3 task types."""

@@ -16,14 +16,16 @@ def sample_df():
     n = 100
     timestamps = [1704067200000 + i * 3600000 for i in range(n)]
 
-    return pd.DataFrame({
-        "timestamp": timestamps,
-        "open": np.random.uniform(99, 101, n),
-        "high": np.random.uniform(100, 102, n),
-        "low": np.random.uniform(98, 100, n),
-        "close": np.random.uniform(99, 101, n),
-        "volume": np.random.uniform(1000, 2000, n),
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "open": np.random.uniform(99, 101, n),
+            "high": np.random.uniform(100, 102, n),
+            "low": np.random.uniform(98, 100, n),
+            "close": np.random.uniform(99, 101, n),
+            "volume": np.random.uniform(1000, 2000, n),
+        }
+    )
 
 
 def test_execution_context_futures_mode(sample_df):
@@ -183,5 +185,6 @@ def test_execution_context_dynamic_costs_by_timeframe(sample_df):
     # 1h: 24 * 1/8 = 3 periods
     # 4h: 12 * 4/8 = 6 periods
     # 1d: 5 * 24/8 = 15 periods
-    assert costs[0][1] < costs[1][1] < costs[2][1], \
+    assert costs[0][1] < costs[1][1] < costs[2][1], (
         f"Costs should increase with holding period: {costs}"
+    )

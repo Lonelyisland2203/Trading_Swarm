@@ -28,6 +28,7 @@ try:
     import peft
     import trl
     import datasets
+
     TRAINING_DEPS_AVAILABLE = True
 except ImportError:
     TRAINING_DEPS_AVAILABLE = False
@@ -97,10 +98,12 @@ def many_preference_pairs(sample_preference_pair):
 
     pairs = []
     for i in range(700):
-        pairs.append(sample_preference_pair(
-            timestamp_ms=base_time + (i * hour_ms),
-            context_id=f"ctx-{i}",
-        ))
+        pairs.append(
+            sample_preference_pair(
+                timestamp_ms=base_time + (i * hour_ms),
+                context_id=f"ctx-{i}",
+            )
+        )
 
     return pairs
 
@@ -113,10 +116,12 @@ def few_preference_pairs(sample_preference_pair):
 
     pairs = []
     for i in range(100):
-        pairs.append(sample_preference_pair(
-            timestamp_ms=base_time + (i * hour_ms),
-            context_id=f"ctx-{i}",
-        ))
+        pairs.append(
+            sample_preference_pair(
+                timestamp_ms=base_time + (i * hour_ms),
+                context_id=f"ctx-{i}",
+            )
+        )
 
     return pairs
 
@@ -179,8 +184,13 @@ class TestTrainingConfig:
         config = TrainingConfig.from_settings()
 
         expected_modules = [
-            "q_proj", "k_proj", "v_proj", "o_proj",  # Attention
-            "gate_proj", "up_proj", "down_proj",  # MLP
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",  # Attention
+            "gate_proj",
+            "up_proj",
+            "down_proj",  # MLP
         ]
         assert config.lora_target_modules == expected_modules
 
@@ -325,11 +335,13 @@ class TestPromotionCooldown:
         for i in range(MAX_PROMOTIONS_PER_WEEK):
             # Spread across the week, but all outside cooldown
             timestamp = time.time() - (PROMOTION_COOLDOWN_HOURS + 24 + i) * 3600
-            records.append({
-                "timestamp": timestamp,
-                "adapter_path": f"/path/to/adapter-{i}",
-                "ic": 0.07,
-            })
+            records.append(
+                {
+                    "timestamp": timestamp,
+                    "adapter_path": f"/path/to/adapter-{i}",
+                    "ic": 0.07,
+                }
+            )
 
         with open(temp_promotions_log, "w") as f:
             for record in records:
@@ -441,12 +453,15 @@ class TestTrainDPOIntegration:
         """Test that lock unavailability returns error result."""
         from training.dpo_trainer import train_dpo
 
-        with patch(
-            "training.dpo_trainer.check_vram_availability",
-            return_value=mock_vram_available,
-        ), patch(
-            "training.dpo_trainer.check_can_train",
-            return_value=(False, "Inference process is running"),
+        with (
+            patch(
+                "training.dpo_trainer.check_vram_availability",
+                return_value=mock_vram_available,
+            ),
+            patch(
+                "training.dpo_trainer.check_can_train",
+                return_value=(False, "Inference process is running"),
+            ),
         ):
             result = train_dpo(many_preference_pairs)
 

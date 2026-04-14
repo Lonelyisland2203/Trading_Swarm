@@ -27,12 +27,12 @@ class TestMetricValue:
             p_value=0.01,
             ci_lower=0.3,
             ci_upper=0.7,
-            confidence_level='high',
+            confidence_level="high",
         )
         assert metric.value == 0.5
         assert metric.sample_size == 100
         assert metric.p_value == 0.01
-        assert metric.confidence_level == 'high'
+        assert metric.confidence_level == "high"
 
     def test_metric_value_is_frozen(self):
         """Test that MetricValue is immutable."""

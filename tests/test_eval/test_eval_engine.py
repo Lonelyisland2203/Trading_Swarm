@@ -137,8 +137,8 @@ class TestEvaluateBatch:
 
         assert result.sample_size_total == 3
         assert len(result.overall_metrics) > 0
-        assert 'ic_spearman' in result.overall_metrics
-        assert 'sharpe_ratio' in result.overall_metrics
+        assert "ic_spearman" in result.overall_metrics
+        assert "sharpe_ratio" in result.overall_metrics
 
     def test_overall_metrics_computed(self, sample_outcomes, sample_rewards):
         """Test that overall metrics are computed."""
@@ -148,13 +148,13 @@ class TestEvaluateBatch:
         metrics = result.overall_metrics
 
         # Check all expected metrics exist
-        assert 'ic_spearman' in metrics
-        assert 'ic_pearson' in metrics
-        assert 'sharpe_ratio' in metrics
-        assert 'sortino_ratio' in metrics
-        assert 'win_rate' in metrics
-        assert 'profit_factor' in metrics
-        assert 'mean_return' in metrics
+        assert "ic_spearman" in metrics
+        assert "ic_pearson" in metrics
+        assert "sharpe_ratio" in metrics
+        assert "sortino_ratio" in metrics
+        assert "win_rate" in metrics
+        assert "profit_factor" in metrics
+        assert "mean_return" in metrics
 
     def test_per_symbol_metrics_computed(self, sample_outcomes, sample_rewards):
         """Test that per-symbol metrics are computed."""
@@ -168,8 +168,8 @@ class TestEvaluateBatch:
         result = evaluate_batch(sample_outcomes, sample_rewards)
 
         # Should have metrics for RISK_ON and RISK_OFF
-        assert 'RISK_ON' in result.per_regime_metrics
-        assert 'RISK_OFF' in result.per_regime_metrics
+        assert "RISK_ON" in result.per_regime_metrics
+        assert "RISK_OFF" in result.per_regime_metrics
 
     def test_fdr_correction_applied(self, sample_outcomes, sample_rewards):
         """Test that FDR correction is applied to IC tests."""
@@ -183,11 +183,11 @@ class TestEvaluateBatch:
         config = EvaluationConfig(min_sample_size=2)  # Lower threshold for testing
         result = evaluate_batch(sample_outcomes, sample_rewards, config=config)
 
-        ic_metric = result.overall_metrics['ic_spearman']
+        ic_metric = result.overall_metrics["ic_spearman"]
 
         assert ic_metric.sample_size == 3
         assert ic_metric.p_value is not None
-        assert ic_metric.confidence_level in ['low', 'moderate', 'high', None]
+        assert ic_metric.confidence_level in ["low", "moderate", "high", None]
 
     def test_custom_config(self, sample_outcomes, sample_rewards):
         """Test evaluation with custom configuration."""

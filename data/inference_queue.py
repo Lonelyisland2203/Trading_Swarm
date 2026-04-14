@@ -26,6 +26,7 @@ class EnumJSONEncoder(json.JSONEncoder):
             return obj.value
         return super().default(obj)
 
+
 from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime
 from swarm.orchestrator import run_multi_persona_workflow

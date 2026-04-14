@@ -127,10 +127,20 @@ def client(temp_data_dir: Path):
     """Create test client with mocked data paths."""
     # Patch the paths used by data_readers before importing api
     with (
-        patch("dashboard.data_readers.SIGNAL_LOG_PATH", temp_data_dir / "signals" / "signal_log.jsonl"),
-        patch("dashboard.data_readers.ORDER_LOG_PATH", temp_data_dir / "execution" / "order_log.jsonl"),
-        patch("dashboard.data_readers.AUTORESEARCH_RESULTS_PATH", temp_data_dir / "autoresearch" / "results.tsv"),
-        patch("dashboard.data_readers.HEALTH_STATUS_PATH", temp_data_dir / "dashboard" / "health_status.json"),
+        patch(
+            "dashboard.data_readers.SIGNAL_LOG_PATH", temp_data_dir / "signals" / "signal_log.jsonl"
+        ),
+        patch(
+            "dashboard.data_readers.ORDER_LOG_PATH", temp_data_dir / "execution" / "order_log.jsonl"
+        ),
+        patch(
+            "dashboard.data_readers.AUTORESEARCH_RESULTS_PATH",
+            temp_data_dir / "autoresearch" / "results.tsv",
+        ),
+        patch(
+            "dashboard.data_readers.HEALTH_STATUS_PATH",
+            temp_data_dir / "dashboard" / "health_status.json",
+        ),
     ):
         from dashboard.api import app
 
@@ -141,10 +151,20 @@ def client(temp_data_dir: Path):
 def app_instance(temp_data_dir: Path) -> FastAPI:
     """Get the FastAPI app for route inspection."""
     with (
-        patch("dashboard.data_readers.SIGNAL_LOG_PATH", temp_data_dir / "signals" / "signal_log.jsonl"),
-        patch("dashboard.data_readers.ORDER_LOG_PATH", temp_data_dir / "execution" / "order_log.jsonl"),
-        patch("dashboard.data_readers.AUTORESEARCH_RESULTS_PATH", temp_data_dir / "autoresearch" / "results.tsv"),
-        patch("dashboard.data_readers.HEALTH_STATUS_PATH", temp_data_dir / "dashboard" / "health_status.json"),
+        patch(
+            "dashboard.data_readers.SIGNAL_LOG_PATH", temp_data_dir / "signals" / "signal_log.jsonl"
+        ),
+        patch(
+            "dashboard.data_readers.ORDER_LOG_PATH", temp_data_dir / "execution" / "order_log.jsonl"
+        ),
+        patch(
+            "dashboard.data_readers.AUTORESEARCH_RESULTS_PATH",
+            temp_data_dir / "autoresearch" / "results.tsv",
+        ),
+        patch(
+            "dashboard.data_readers.HEALTH_STATUS_PATH",
+            temp_data_dir / "dashboard" / "health_status.json",
+        ),
     ):
         from dashboard.api import app
 
@@ -180,7 +200,9 @@ def test_all_get_endpoints_return_200(client: TestClient, endpoint: str):
         patch("dashboard.api.get_open_interest", new_callable=AsyncMock, return_value={}),
     ):
         response = client.get(endpoint)
-        assert response.status_code == 200, f"{endpoint} returned {response.status_code}: {response.text}"
+        assert response.status_code == 200, (
+            f"{endpoint} returned {response.status_code}: {response.text}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +267,9 @@ def test_positions_response_schema(client: TestClient):
         }
     ]
 
-    with patch("dashboard.api.get_exchange_positions", new_callable=AsyncMock, return_value=mock_positions):
+    with patch(
+        "dashboard.api.get_exchange_positions", new_callable=AsyncMock, return_value=mock_positions
+    ):
         response = client.get("/api/positions")
         assert response.status_code == 200
         data = response.json()
@@ -411,7 +435,7 @@ def test_compute_rolling_sharpe():
 
     # Need enough data points for window
     equity_curve = [
-        {"timestamp": f"2024-01-{i+1:02d}T12:00:00", "cumulative_pnl": i * 10.0}
+        {"timestamp": f"2024-01-{i + 1:02d}T12:00:00", "cumulative_pnl": i * 10.0}
         for i in range(35)
     ]
 
@@ -490,7 +514,9 @@ def test_funding_rates_endpoint(client: TestClient):
     """GET /api/risk/funding must return funding rate data."""
     mock_funding = {"BTC": 0.0001, "ETH": -0.0002}
 
-    with patch("dashboard.api.get_funding_rates", new_callable=AsyncMock, return_value=mock_funding):
+    with patch(
+        "dashboard.api.get_funding_rates", new_callable=AsyncMock, return_value=mock_funding
+    ):
         response = client.get("/api/risk/funding")
         assert response.status_code == 200
         data = response.json()

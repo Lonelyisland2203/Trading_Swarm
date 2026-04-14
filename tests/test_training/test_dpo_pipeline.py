@@ -30,6 +30,7 @@ from swarm.training_capture import (
 # Helpers / fixtures
 # --------------------------------------------------------------------------- #
 
+
 def _make_example(**kwargs) -> dict:
     """Return a minimal serialisable TrainingExample dict."""
     ex = TrainingExample(
@@ -52,10 +53,12 @@ def _make_example(**kwargs) -> dict:
 @pytest.fixture
 def tmp_jsonl(tmp_path):
     """Return a factory that writes lines to a temp JSONL file."""
+
     def _write(lines: list[str]) -> Path:
         p = tmp_path / "examples.jsonl"
         p.write_text("\n".join(lines))
         return p
+
     return _write
 
 
@@ -70,11 +73,13 @@ def multi_example_jsonl(tmp_jsonl):
     """JSONL file with 5 valid examples (multi-persona context)."""
     personas = ["MOMENTUM", "CONTRARIAN", "SCALPER", "SWING", "MACRO"]
     lines = [
-        json.dumps(_make_example(
-            context_id="ctx-multi",
-            persona=p,
-            example_id_seed=i,
-        ))
+        json.dumps(
+            _make_example(
+                context_id="ctx-multi",
+                persona=p,
+                example_id_seed=i,
+            )
+        )
         for i, p in enumerate(personas)
     ]
     return tmp_jsonl(lines)
@@ -83,6 +88,7 @@ def multi_example_jsonl(tmp_jsonl):
 # --------------------------------------------------------------------------- #
 # load_examples_from_jsonl
 # --------------------------------------------------------------------------- #
+
 
 class TestLoadExamplesFromJsonl:
     def test_happy_path_single(self, single_example_jsonl):
@@ -147,6 +153,7 @@ class TestLoadExamplesFromJsonl:
 # phase1_load
 # --------------------------------------------------------------------------- #
 
+
 class TestPhase1Load:
     def test_filters_missing_direction(self, tmp_jsonl):
         no_dir = _make_example()
@@ -155,6 +162,7 @@ class TestPhase1Load:
         path = tmp_jsonl([json.dumps(no_dir), json.dumps(valid)])
 
         from run_dpo_training import phase1_load
+
         with patch("sys.exit") as mock_exit:
             mock_exit.side_effect = SystemExit
             result = phase1_load(path)
@@ -167,6 +175,7 @@ class TestPhase1Load:
         p.write_text("")
 
         from run_dpo_training import phase1_load
+
         with pytest.raises(SystemExit):
             phase1_load(p)
 
@@ -178,6 +187,7 @@ class TestPhase1Load:
         path = tmp_jsonl([json.dumps(e) for e in examples])
 
         from run_dpo_training import phase1_load
+
         result = phase1_load(path)
         assert len(result) == 3
 
@@ -186,9 +196,11 @@ class TestPhase1Load:
 # phase2_verify (matching logic)
 # --------------------------------------------------------------------------- #
 
+
 class TestPhase2Verify:
     def _make_outcome(self, example_id: str):
         from verifier.outcome import VerifiedOutcome
+
         return VerifiedOutcome(
             example_id=example_id,
             actual_direction="HIGHER",
@@ -209,6 +221,7 @@ class TestPhase2Verify:
             new=AsyncMock(return_value=[fake_outcome]),
         ):
             from run_dpo_training import phase2_verify
+
             matched = phase2_verify(examples)
 
         assert len(matched) == 1
@@ -229,6 +242,7 @@ class TestPhase2Verify:
             new=AsyncMock(return_value=[fake_outcome]),
         ):
             from run_dpo_training import phase2_verify
+
             matched = phase2_verify(examples)
 
         assert len(matched) == 1
@@ -241,6 +255,7 @@ class TestPhase2Verify:
             new=AsyncMock(return_value=[]),
         ):
             from run_dpo_training import phase2_verify
+
             matched = phase2_verify(examples)
 
         assert matched == []
@@ -250,9 +265,11 @@ class TestPhase2Verify:
 # phase3_reward
 # --------------------------------------------------------------------------- #
 
+
 class TestPhase3Reward:
     def _make_matched_pair(self):
         from verifier.outcome import VerifiedOutcome
+
         ex = TrainingExample(**_make_example())
         outcome = VerifiedOutcome(
             example_id=ex.example_id,
@@ -268,6 +285,7 @@ class TestPhase3Reward:
 
     def test_returns_triples(self):
         from run_dpo_training import phase3_reward
+
         pair = self._make_matched_pair()
         result = phase3_reward([pair])
         assert len(result) == 1
@@ -276,6 +294,7 @@ class TestPhase3Reward:
 
     def test_empty_input(self):
         from run_dpo_training import phase3_reward
+
         result = phase3_reward([])
         assert result == []
 
@@ -284,20 +303,23 @@ class TestPhase3Reward:
 # phase4_pairs (construct_preference_pairs plumbing)
 # --------------------------------------------------------------------------- #
 
+
 class TestPhase4Pairs:
     def _make_triple(self, persona: str, reward_val: float, context_id: str = "ctx-1"):
         from training.reward_engine import ComputedReward
         from verifier.outcome import VerifiedOutcome
 
-        ex = TrainingExample(**_make_example(
-            persona=persona,
-            context_id=context_id,
-            generator_signal={
-                "direction": "HIGHER",
-                "confidence": 0.8,
-                "reasoning": f"Reasoning from {persona}",
-            },
-        ))
+        ex = TrainingExample(
+            **_make_example(
+                persona=persona,
+                context_id=context_id,
+                generator_signal={
+                    "direction": "HIGHER",
+                    "confidence": 0.8,
+                    "reasoning": f"Reasoning from {persona}",
+                },
+            )
+        )
         outcome = VerifiedOutcome(
             example_id=ex.example_id,
             actual_direction="HIGHER",
@@ -333,12 +355,10 @@ class TestPhase4Pairs:
     def test_produces_pairs_with_sufficient_delta(self, tmp_path):
         personas = ["MOMENTUM", "CONTRARIAN", "SCALPER", "SWING", "MACRO"]
         rewards = [0.9, 0.7, 0.5, 0.3, 0.1]
-        triples = [
-            self._make_triple(p, r, context_id="ctx-1")
-            for p, r in zip(personas, rewards)
-        ]
+        triples = [self._make_triple(p, r, context_id="ctx-1") for p, r in zip(personas, rewards)]
 
         from run_dpo_training import phase4_pairs
+
         pairs = phase4_pairs(
             triples,
             min_delta=0.2,
@@ -352,12 +372,10 @@ class TestPhase4Pairs:
     def test_saves_jsonl_when_requested(self, tmp_path):
         personas = ["MOMENTUM", "CONTRARIAN", "SCALPER", "SWING", "MACRO"]
         rewards = [0.9, 0.7, 0.5, 0.3, 0.1]
-        triples = [
-            self._make_triple(p, r, context_id="ctx-1")
-            for p, r in zip(personas, rewards)
-        ]
+        triples = [self._make_triple(p, r, context_id="ctx-1") for p, r in zip(personas, rewards)]
 
         from run_dpo_training import phase4_pairs
+
         phase4_pairs(
             triples,
             min_delta=0.2,
@@ -368,6 +386,7 @@ class TestPhase4Pairs:
 
     def test_empty_triples_returns_empty(self, tmp_path):
         from run_dpo_training import phase4_pairs
+
         pairs = phase4_pairs([], min_delta=0.2, save_pairs=False, output_dir=tmp_path)
         assert pairs == []
 
@@ -376,20 +395,23 @@ class TestPhase4Pairs:
 # Dry-run path
 # --------------------------------------------------------------------------- #
 
+
 class TestDryRun:
     def test_train_dpo_not_called_on_dry_run(self, tmp_path, monkeypatch, tmp_jsonl):
         """train_dpo must never be called when --dry-run is set."""
         personas = ["MOMENTUM", "CONTRARIAN", "SCALPER", "SWING", "MACRO"]
         lines = [
-            json.dumps(_make_example(
-                context_id="ctx-dry",
-                persona=p,
-                generator_signal={
-                    "direction": "HIGHER",
-                    "confidence": 0.8,
-                    "reasoning": f"Reasoning {p}",
-                },
-            ))
+            json.dumps(
+                _make_example(
+                    context_id="ctx-dry",
+                    persona=p,
+                    generator_signal={
+                        "direction": "HIGHER",
+                        "confidence": 0.8,
+                        "reasoning": f"Reasoning {p}",
+                    },
+                )
+            )
             for p in personas
         ]
         path = tmp_jsonl(lines)
@@ -433,6 +455,7 @@ class TestDryRun:
         )
 
         from run_dpo_training import main
+
         main()  # Should return without calling phase5_train
 
         assert not train_dpo_called, "phase5_train was called during dry-run"
@@ -442,11 +465,13 @@ class TestDryRun:
 # CLI argument parsing
 # --------------------------------------------------------------------------- #
 
+
 class TestArgParsing:
     def test_required_dataset_arg(self, monkeypatch, tmp_path):
         p = tmp_path / "examples.jsonl"
         monkeypatch.setattr("sys.argv", ["run_dpo_training.py", "--dataset", str(p)])
         from run_dpo_training import parse_args
+
         args = parse_args()
         assert args.dataset == p
 
@@ -454,6 +479,7 @@ class TestArgParsing:
         p = tmp_path / "examples.jsonl"
         monkeypatch.setattr("sys.argv", ["run_dpo_training.py", "--dataset", str(p)])
         from run_dpo_training import parse_args
+
         args = parse_args()
         assert args.min_delta == 0.2
         assert args.dry_run is False
@@ -468,15 +494,19 @@ class TestArgParsing:
             "sys.argv",
             [
                 "run_dpo_training.py",
-                "--dataset", str(p),
-                "--output", str(out),
+                "--dataset",
+                str(p),
+                "--output",
+                str(out),
                 "--save-pairs",
                 "--dry-run",
-                "--min-delta", "0.3",
+                "--min-delta",
+                "0.3",
                 "--force",
             ],
         )
         from run_dpo_training import parse_args
+
         args = parse_args()
         assert args.output == out
         assert args.save_pairs is True
@@ -488,6 +518,7 @@ class TestArgParsing:
 # --------------------------------------------------------------------------- #
 # Fee flip diagnostic
 # --------------------------------------------------------------------------- #
+
 
 class TestPhase2VerifyUsesFeeModel:
     """Test that phase2_verify integrates fee_model parameter."""
@@ -537,17 +568,19 @@ class TestFeeFlipDiagnostic:
         # Create examples with gross returns > fee hurdle (0.083% at 0 periods)
         examples_and_outcomes = [
             # +0.15% gross → +0.067% net (no flip)
-            (TrainingExample(**_make_example(timeframe="1h")),
-             VerifiedOutcome(
-                 example_id="ex1",
-                 actual_direction="HIGHER",
-                 realized_return=0.0014925,  # ln(1 + 0.15/100)
-                 max_adverse_excursion=-0.01,
-                 net_return=0.00066,
-                 entry_price=50000.0,
-                 exit_price=50075.0,
-                 bars_held=24,
-             )),
+            (
+                TrainingExample(**_make_example(timeframe="1h")),
+                VerifiedOutcome(
+                    example_id="ex1",
+                    actual_direction="HIGHER",
+                    realized_return=0.0014925,  # ln(1 + 0.15/100)
+                    max_adverse_excursion=-0.01,
+                    net_return=0.00066,
+                    entry_price=50000.0,
+                    exit_price=50075.0,
+                    bars_held=24,
+                ),
+            ),
         ]
 
         fee_model = FeeModelSettings()
@@ -569,29 +602,33 @@ class TestFeeFlipDiagnostic:
         # Create examples with mixed outcomes
         examples_and_outcomes = [
             # +0.08% gross (below fee hurdle 0.083%) → negative net (FLIP!)
-            (TrainingExample(**_make_example(timeframe="1m")),
-             VerifiedOutcome(
-                 example_id="ex_flip1",
-                 actual_direction="HIGHER",
-                 realized_return=math.log(1 + 0.08 / 100),
-                 max_adverse_excursion=-0.01,
-                 net_return=-0.003,
-                 entry_price=50000.0,
-                 exit_price=50040.0,
-                 bars_held=1,
-             )),
+            (
+                TrainingExample(**_make_example(timeframe="1m")),
+                VerifiedOutcome(
+                    example_id="ex_flip1",
+                    actual_direction="HIGHER",
+                    realized_return=math.log(1 + 0.08 / 100),
+                    max_adverse_excursion=-0.01,
+                    net_return=-0.003,
+                    entry_price=50000.0,
+                    exit_price=50040.0,
+                    bars_held=1,
+                ),
+            ),
             # +0.15% gross → stays positive (no flip)
-            (TrainingExample(**_make_example(timeframe="1m")),
-             VerifiedOutcome(
-                 example_id="ex_stay1",
-                 actual_direction="HIGHER",
-                 realized_return=math.log(1 + 0.15 / 100),
-                 max_adverse_excursion=-0.01,
-                 net_return=0.067,
-                 entry_price=50000.0,
-                 exit_price=50075.0,
-                 bars_held=1,
-             )),
+            (
+                TrainingExample(**_make_example(timeframe="1m")),
+                VerifiedOutcome(
+                    example_id="ex_stay1",
+                    actual_direction="HIGHER",
+                    realized_return=math.log(1 + 0.15 / 100),
+                    max_adverse_excursion=-0.01,
+                    net_return=0.067,
+                    entry_price=50000.0,
+                    exit_price=50075.0,
+                    bars_held=1,
+                ),
+            ),
         ]
 
         fee_model = FeeModelSettings()
@@ -625,29 +662,33 @@ class TestFeeFlipDiagnostic:
         # Create examples from different timeframes
         examples_and_outcomes = [
             # 1m timeframe with flip
-            (TrainingExample(**_make_example(timeframe="1m")),
-             VerifiedOutcome(
-                 example_id="ex_1m",
-                 actual_direction="HIGHER",
-                 realized_return=math.log(1 + 0.08 / 100),
-                 max_adverse_excursion=-0.01,
-                 net_return=-0.003,
-                 entry_price=50000.0,
-                 exit_price=50040.0,
-                 bars_held=1,
-             )),
+            (
+                TrainingExample(**_make_example(timeframe="1m")),
+                VerifiedOutcome(
+                    example_id="ex_1m",
+                    actual_direction="HIGHER",
+                    realized_return=math.log(1 + 0.08 / 100),
+                    max_adverse_excursion=-0.01,
+                    net_return=-0.003,
+                    entry_price=50000.0,
+                    exit_price=50040.0,
+                    bars_held=1,
+                ),
+            ),
             # 1h timeframe without flip
-            (TrainingExample(**_make_example(timeframe="1h")),
-             VerifiedOutcome(
-                 example_id="ex_1h",
-                 actual_direction="HIGHER",
-                 realized_return=math.log(1 + 0.15 / 100),
-                 max_adverse_excursion=-0.01,
-                 net_return=0.067,
-                 entry_price=50000.0,
-                 exit_price=50075.0,
-                 bars_held=24,
-             )),
+            (
+                TrainingExample(**_make_example(timeframe="1h")),
+                VerifiedOutcome(
+                    example_id="ex_1h",
+                    actual_direction="HIGHER",
+                    realized_return=math.log(1 + 0.15 / 100),
+                    max_adverse_excursion=-0.01,
+                    net_return=0.067,
+                    entry_price=50000.0,
+                    exit_price=50075.0,
+                    bars_held=24,
+                ),
+            ),
         ]
 
         fee_model = FeeModelSettings()

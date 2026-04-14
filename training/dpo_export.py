@@ -92,7 +92,10 @@ def validate_preference_pair(
     """
     # Same context check
     if chosen_example.context_id != rejected_example.context_id:
-        return False, f"Context ID mismatch: {chosen_example.context_id} != {rejected_example.context_id}"
+        return (
+            False,
+            f"Context ID mismatch: {chosen_example.context_id} != {rejected_example.context_id}",
+        )
 
     if not chosen_example.context_id:
         return False, "Empty context_id (examples from single-persona workflow)"
@@ -100,7 +103,10 @@ def validate_preference_pair(
     # Reward ordering check
     delta = compute_reward_delta(chosen_reward.final_reward, rejected_reward.final_reward)
     if delta <= 0:
-        return False, f"Invalid reward ordering: chosen={chosen_reward.final_reward:.3f}, rejected={rejected_reward.final_reward:.3f}"
+        return (
+            False,
+            f"Invalid reward ordering: chosen={chosen_reward.final_reward:.3f}, rejected={rejected_reward.final_reward:.3f}",
+        )
 
     # Minimum delta check
     if delta < min_delta:
@@ -147,7 +153,9 @@ def construct_preference_pairs(
     from collections import defaultdict
 
     # Group by context_id
-    context_groups: dict[str, list[tuple[TrainingExample, VerifiedOutcome, ComputedReward]]] = defaultdict(list)
+    context_groups: dict[str, list[tuple[TrainingExample, VerifiedOutcome, ComputedReward]]] = (
+        defaultdict(list)
+    )
 
     for example, outcome, reward in examples_with_rewards:
         if example.context_id:  # Skip single-persona examples
@@ -181,7 +189,7 @@ def construct_preference_pairs(
 
         for i in range(num_pairs):
             chosen_example, chosen_outcome, chosen_reward = sorted_group[i]
-            rejected_example, rejected_outcome, rejected_reward = sorted_group[-(i+1)]
+            rejected_example, rejected_outcome, rejected_reward = sorted_group[-(i + 1)]
 
             # Validate pair
             is_valid, reason = validate_preference_pair(
@@ -279,11 +287,13 @@ def export_to_huggingface_format(pairs: list[PreferencePair]) -> list[dict]:
     hf_dataset = []
 
     for pair in pairs:
-        hf_dataset.append({
-            "prompt": pair.prompt,
-            "chosen": pair.chosen_reasoning,
-            "rejected": pair.rejected_reasoning,
-        })
+        hf_dataset.append(
+            {
+                "prompt": pair.prompt,
+                "chosen": pair.chosen_reasoning,
+                "rejected": pair.rejected_reasoning,
+            }
+        )
 
     logger.info(
         "Exported to HuggingFace format",
@@ -325,6 +335,7 @@ def export_to_jsonl(
             if include_metadata:
                 # Full metadata for analysis
                 from dataclasses import asdict
+
                 data = asdict(pair)
             else:
                 # HuggingFace format only

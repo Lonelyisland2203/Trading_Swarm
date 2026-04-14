@@ -10,7 +10,7 @@
 
 ## Commands
 - Install: `pip install -r requirements.txt`
-- Test: `pytest` (1400+ tests, run before every commit)
+- Test: `pytest` (1578 tests, run before every commit)
 - Lint: `ruff check --fix . && ruff format .`
 - Type check: `mypy --strict <module>`
 
@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17S.
+Session 17T complete. All systems validated. Test count: 1578. All audits clean.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -78,7 +78,7 @@ Completed through Session 17S.
   - hyperliquid_adapter.py — **NEW** Hyperliquid execution adapter: EIP-712 signing via hyperliquid-python-sdk, place_order (limit/market), cancel_order, get_positions, get_balance, flatten_all, auto exchange-side stop-loss on every position, connection retry logic (3 retries, exponential backoff), order logging to execution/order_log.jsonl
   - exchange_router.py — **NEW** multi-exchange router: dispatches to HyperliquidAdapter or BinanceExecutionClient based on EXCHANGE env var, identical interface regardless of exchange, runtime switching via switch_exchange(), logs exchange selection at startup
   - watchdog.py — **NEW** independent watchdog process: COMPLETELY SEPARATE from signal_loop (not imported, not part of LangGraph), polls positions every 30s, enforces max 2% daily loss (flatten all), position age >48h alerts, orphan position detection, STOP file triggers immediate flatten and exit, writes heartbeat to dashboard/health_status.json, CLI entry point for systemd/supervisor
-- Tests: 1590+ tests (signals: 187, execution: 43, autoresearch: 30+, orchestration: 13)
+- Tests: 1578 tests (signals: 187, execution: 43, autoresearch: 33, orchestration: 13, dashboard: 26)
 - dashboard/ — FastAPI dashboard backend package (26 tests):
   - data_readers.py — centralized data access: read_signal_log, read_order_log, read_autoresearch_results, read_health_status, compute_equity_curve, compute_rolling_sharpe, compute_drawdown, compute_win_rate, compute_daily_pnl. All functions handle missing files gracefully.
   - api.py — FastAPI app (port 8420): 10 GET endpoints + 1 WebSocket, CORS for localhost:5173, NO POST/PUT/DELETE (Architecture Constraint #11). Endpoints: /api/positions (cached 5s), /api/pnl/daily, /api/signals/recent (limit 50), /api/performance (equity curve, Sharpe, drawdown, win rate), /api/xgboost/features (SHAP), /api/xgboost/metrics (IC/Brier history), /api/autoresearch/log (TSV→JSON), /api/risk/funding (cached 60s), /api/risk/oi (cached 60s), /api/health (watchdog heartbeat). WS /ws/live pushes {positions, latest_signal, daily_pnl, health} every 5s.
@@ -91,4 +91,4 @@ Completed through Session 17S.
 
 ## Next Session
 
-Session 17T — Dashboard polish: responsive breakpoints, loading skeletons, error boundaries, accessibility (ARIA labels), Playwright E2E tests
+Session 17U — Deploy to Hyperliquid testnet. Run signal loop + watchdog for 2 weeks. Collect empirical slippage data.

@@ -176,7 +176,7 @@ async def _verify_signal_accuracy(
 
     # Check if prediction was correct
     predicted = pending["predicted_direction"]
-    correct = (predicted == actual_direction)
+    correct = predicted == actual_direction
 
     return AccuracyRecord(
         signal_timestamp=pending["signal_timestamp"],

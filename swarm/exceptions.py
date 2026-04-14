@@ -7,6 +7,7 @@ Distinguishes between retryable and non-retryable errors for proper error handli
 
 class OllamaError(Exception):
     """Base class for Ollama-related errors."""
+
     pass
 
 
@@ -16,6 +17,7 @@ class ModelNotFoundError(OllamaError):
 
     This is a non-retryable error - requires manual intervention to pull model.
     """
+
     pass
 
 
@@ -25,6 +27,7 @@ class VRAMExhaustedError(OllamaError):
 
     CRITICAL: Never retry this error. Must unload current model first.
     """
+
     pass
 
 
@@ -34,6 +37,7 @@ class OllamaNetworkError(OllamaError):
 
     Safe to retry with exponential backoff.
     """
+
     pass
 
 
@@ -46,6 +50,7 @@ class ResponseValidationError(OllamaError):
     - Model did not follow instructions
     - Schema drift
     """
+
     pass
 
 
@@ -55,4 +60,5 @@ class TokenBudgetExceededError(OllamaError):
 
     Indicates prompt is too large to fit in context window.
     """
+
     pass

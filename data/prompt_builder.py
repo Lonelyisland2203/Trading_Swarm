@@ -55,7 +55,7 @@ def get_higher_timeframes(current_tf: str, available_tfs: list[str]) -> list[str
 
     # Filter to only recognized timeframes higher in hierarchy
     higher_tfs = []
-    for tf in TIMEFRAME_HIERARCHY[current_idx + 1:]:
+    for tf in TIMEFRAME_HIERARCHY[current_idx + 1 :]:
         if tf in available_tfs:
             higher_tfs.append(tf)
 
@@ -103,6 +103,7 @@ def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
     # 1. Ichimoku Cloud Position (using Ichimoku components)
     # Compute Ichimoku components if not already in indicators
     from .indicators import compute_ichimoku_cloud
+
     ichimoku = compute_ichimoku_cloud(df["high"], df["low"], df["close"])
 
     senkou_span_a = ichimoku.get("senkou_span_a")
@@ -148,8 +149,12 @@ def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
     donchian_upper = indicators.get("donchian_upper")
     donchian_lower = indicators.get("donchian_lower")
 
-    if (donchian_upper is None or donchian_lower is None or
-        pd.isna(donchian_upper) or pd.isna(donchian_lower)):
+    if (
+        donchian_upper is None
+        or donchian_lower is None
+        or pd.isna(donchian_upper)
+        or pd.isna(donchian_lower)
+    ):
         donchian_position = "middle"
     else:
         channel_range = donchian_upper - donchian_lower
@@ -226,7 +231,11 @@ def summarize_timeframe(df: pd.DataFrame, timeframe: str) -> dict:
     trend_label = trend.capitalize()
     cloud_text = f"{cloud_position} cloud"
     kama_text = f"KAMA {kama_slope}"
-    donchian_text = f"near Donchian {donchian_position}" if donchian_position != "middle" else "middle of Donchian"
+    donchian_text = (
+        f"near Donchian {donchian_position}"
+        if donchian_position != "middle"
+        else "middle of Donchian"
+    )
     rsi_text = f"RSI {rsi:.0f} ({rsi_zone})"
 
     text = f"{timeframe}: {trend_label} ({cloud_text}, {kama_text}), {donchian_text}, {rsi_text}"
@@ -339,8 +348,8 @@ class TaskConfig:
     """Task metadata for weighted sampling."""
 
     task_type: TaskType
-    weight: float           # Sampling probability weight
-    difficulty: int         # 1-5 scale
+    weight: float  # Sampling probability weight
+    difficulty: int  # 1-5 scale
     min_bars_required: int  # Minimum data needed
 
 
@@ -348,7 +357,9 @@ class TaskConfig:
 TASK_CONFIGS = [
     TaskConfig(TaskType.PREDICT_DIRECTION, weight=1.0, difficulty=2, min_bars_required=50),
     TaskConfig(TaskType.ASSESS_MOMENTUM, weight=0.8, difficulty=2, min_bars_required=30),
-    TaskConfig(TaskType.IDENTIFY_SUPPORT_RESISTANCE, weight=0.6, difficulty=3, min_bars_required=100),
+    TaskConfig(
+        TaskType.IDENTIFY_SUPPORT_RESISTANCE, weight=0.6, difficulty=3, min_bars_required=100
+    ),
     # Temporarily disabled until templates are implemented:
     # TaskConfig(TaskType.DETECT_TREND_REVERSAL, weight=0.20, difficulty=4, min_bars_required=100),
     # TaskConfig(TaskType.IDENTIFY_PATTERN, weight=0.10, difficulty=5, min_bars_required=200),
@@ -378,7 +389,8 @@ def sample_task(
     rng = random.Random(seed) if seed is not None else _task_rng
 
     eligible = [
-        t for t in TASK_CONFIGS
+        t
+        for t in TASK_CONFIGS
         if t.min_bars_required <= available_bars
         and difficulty_range[0] <= t.difficulty <= difficulty_range[1]
     ]
@@ -901,9 +913,7 @@ Your prediction must account for these costs. Signals with expected moves smalle
             ValueError: If insufficient data or unsupported task type
         """
         if len(df) < task.min_bars_required:
-            raise ValueError(
-                f"Insufficient data: need {task.min_bars_required}, got {len(df)}"
-            )
+            raise ValueError(f"Insufficient data: need {task.min_bars_required}, got {len(df)}")
 
         template = self.templates.get(task.task_type)
         if template is None:
@@ -963,9 +973,9 @@ Your prediction must account for these costs. Signals with expected moves smalle
         indicators = compute_all_indicators(df, include_volume=True, include_structure=True)
 
         # Access scalars directly
-        rsi = indicators['rsi'] if indicators['rsi'] is not None else 50.0
-        macd = indicators['macd_line'] if indicators['macd_line'] is not None else 0.0
-        macd_signal = indicators['macd_signal'] if indicators['macd_signal'] is not None else 0.0
+        rsi = indicators["rsi"] if indicators["rsi"] is not None else 50.0
+        macd = indicators["macd_line"] if indicators["macd_line"] is not None else 0.0
+        macd_signal = indicators["macd_signal"] if indicators["macd_signal"] is not None else 0.0
 
         # BB position not yet in compute_all_indicators, compute separately
         bb_pos = compute_bb_position(df["close"]).iloc[-1]
@@ -979,15 +989,16 @@ Your prediction must account for these costs. Signals with expected moves smalle
         execution_context = ""
         if fee_model is not None:
             from verifier.constants import get_horizon_bars
+
             try:
                 horizon_bars = get_horizon_bars(timeframe)
             except (ValueError, KeyError):
                 logger.warning("Unknown timeframe for horizon", timeframe=timeframe)
                 horizon_bars = 5  # Default fallback
 
-            execution_context = "\n" + self._build_execution_context(
-                timeframe, horizon_bars, fee_model
-            ) + "\n"
+            execution_context = (
+                "\n" + self._build_execution_context(timeframe, horizon_bars, fee_model) + "\n"
+            )
 
         logger.debug(
             "Execution context built",
@@ -1013,18 +1024,28 @@ Your prediction must account for these costs. Signals with expected moves smalle
 
         elif task.task_type == TaskType.ASSESS_MOMENTUM:
             # Calculate momentum-specific indicators using series from indicators
-            rsi_series = indicators['series']['rsi']
-            macd_line = indicators['series']['macd_line']
+            rsi_series = indicators["series"]["rsi"]
+            macd_line = indicators["series"]["macd_line"]
 
-            rsi_prev = rsi_series.iloc[-2] if len(rsi_series) > 1 and not pd.isna(rsi_series.iloc[-2]) else rsi
+            rsi_prev = (
+                rsi_series.iloc[-2]
+                if len(rsi_series) > 1 and not pd.isna(rsi_series.iloc[-2])
+                else rsi
+            )
             rsi_delta = rsi - rsi_prev
 
-            macd_prev = macd_line.iloc[-2] if len(macd_line) > 1 and not pd.isna(macd_line.iloc[-2]) else macd
+            macd_prev = (
+                macd_line.iloc[-2]
+                if len(macd_line) > 1 and not pd.isna(macd_line.iloc[-2])
+                else macd
+            )
             macd_delta = macd - macd_prev
 
             # Calculate BB width
             current_bb_width = calculate_bb_width(df, period=20)
-            prev_bb_width = calculate_bb_width(df.iloc[:-1], period=20) if len(df) > 20 else current_bb_width
+            prev_bb_width = (
+                calculate_bb_width(df.iloc[:-1], period=20) if len(df) > 20 else current_bb_width
+            )
             bb_trend = get_bb_trend(current_bb_width, prev_bb_width)
 
             prompt = template.render(
@@ -1057,8 +1078,12 @@ Your prediction must account for these costs. Signals with expected moves smalle
             swing_lows = detect_swing_lows(df, window=5, num_swings=3)
 
             # Format swing points
-            swing_highs_str = ", ".join([f"${h:.2f}" for h in swing_highs]) if swing_highs else "None detected"
-            swing_lows_str = ", ".join([f"${l:.2f}" for l in swing_lows]) if swing_lows else "None detected"
+            swing_highs_str = (
+                ", ".join([f"${h:.2f}" for h in swing_highs]) if swing_highs else "None detected"
+            )
+            swing_lows_str = (
+                ", ".join([f"${l:.2f}" for l in swing_lows]) if swing_lows else "None detected"
+            )
 
             prompt = template.render(
                 symbol=symbol,

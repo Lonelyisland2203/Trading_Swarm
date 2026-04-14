@@ -35,9 +35,7 @@ class TestPersonaSampling:
     def test_regime_modifiers_affect_weights(self):
         """Test that regime modifiers change persona distribution."""
         # Sample many times in RISK_OFF regime
-        risk_off_personas = [
-            sample_persona(MarketRegime.RISK_OFF, seed=i) for i in range(1000)
-        ]
+        risk_off_personas = [sample_persona(MarketRegime.RISK_OFF, seed=i) for i in range(1000)]
 
         # Count conservative vs breakout
         conservative_count = sum(1 for p in risk_off_personas if p == TradingPersona.CONSERVATIVE)
@@ -77,11 +75,11 @@ class TestResponseExtraction:
 
     def test_extract_from_markdown_fences(self):
         """Test extraction from JSON in markdown code fences."""
-        response = '''Here is my prediction:
+        response = """Here is my prediction:
 ```json
 {"direction": "LOWER", "confidence": 0.6, "reasoning": "Overbought"}
 ```
-Hope this helps!'''
+Hope this helps!"""
 
         signal = extract_signal(response, TradingPersona.CONTRARIAN, TaskType.PREDICT_DIRECTION)
 
@@ -91,8 +89,8 @@ Hope this helps!'''
 
     def test_extract_from_thinking_tags(self):
         """Test extraction from DeepSeek thinking tags."""
-        response = '''<think>Let me analyze this...</think>
-{"direction": "HIGHER", "confidence": 0.8, "reasoning": "Breakout signal"}'''
+        response = """<think>Let me analyze this...</think>
+{"direction": "HIGHER", "confidence": 0.8, "reasoning": "Breakout signal"}"""
 
         signal = extract_signal(response, TradingPersona.BREAKOUT, TaskType.PREDICT_DIRECTION)
 
@@ -101,7 +99,7 @@ Hope this helps!'''
 
     def test_extract_with_regex_fallback(self):
         """Test regex extraction as last resort."""
-        response = '''My analysis shows "direction": "LOWER" with "confidence": 0.55'''
+        response = """My analysis shows "direction": "LOWER" with "confidence": 0.55"""
 
         signal = extract_signal(response, TradingPersona.CONSERVATIVE, TaskType.PREDICT_DIRECTION)
 

@@ -111,8 +111,13 @@ class SFTTrainingConfig:
     lora_dropout: float = 0.05
     lora_target_modules: List[str] = field(
         default_factory=lambda: [
-            "q_proj", "k_proj", "v_proj", "o_proj",  # Attention
-            "gate_proj", "up_proj", "down_proj",     # MLP
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",  # Attention
+            "gate_proj",
+            "up_proj",
+            "down_proj",  # MLP
         ]
     )
 
@@ -230,9 +235,7 @@ def load_sft_data(data_path: Path) -> List[Dict[str, Any]]:
                 if "market_snapshot" in example and "reasoning_trace" in example:
                     examples.append(example)
                 else:
-                    logger.warning(
-                        f"Line {line_num}: Missing required fields, skipping"
-                    )
+                    logger.warning(f"Line {line_num}: Missing required fields, skipping")
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON ({e}), skipping")
 
@@ -262,10 +265,12 @@ def format_for_sft(examples: List[Dict[str, Any]]) -> List[Dict[str, str]]:
             "and final decision.\n\n"
         )
 
-        formatted.append({
-            "input": instruction + ex["market_snapshot"],
-            "output": ex["reasoning_trace"],
-        })
+        formatted.append(
+            {
+                "input": instruction + ex["market_snapshot"],
+                "output": ex["reasoning_trace"],
+            }
+        )
 
     return formatted
 
@@ -295,9 +300,7 @@ def create_train_val_split(
     val_examples = shuffled[:val_size]
     train_examples = shuffled[val_size:]
 
-    logger.info(
-        f"Split: {len(train_examples)} train, {len(val_examples)} validation"
-    )
+    logger.info(f"Split: {len(train_examples)} train, {len(val_examples)} validation")
 
     return train_examples, val_examples
 
@@ -414,6 +417,7 @@ def _prepare_dataset(
 
     Tokenizes input-output pairs and creates labels for causal LM training.
     """
+
     def tokenize_function(example):
         # Combine input and output with separator
         full_text = example["input"] + "\n\n" + example["output"] + tokenizer.eos_token
@@ -614,9 +618,7 @@ def train_sft(
             val_dataset = _prepare_dataset(val_examples, tokenizer, config.max_length)
 
             # Create training arguments
-            training_args = _create_training_args(
-                config, adapter_output_dir, len(train_examples)
-            )
+            training_args = _create_training_args(config, adapter_output_dir, len(train_examples))
 
             # Create trainer with callbacks
             trainer = Trainer(
@@ -649,8 +651,14 @@ def train_sft(
             training_time = time.time() - start_time
 
             # Check if early stopped
-            steps_per_epoch = max(1, len(train_dataset) // config.batch_size // config.gradient_accumulation_steps)
-            epochs_completed = int(train_result.global_step / steps_per_epoch) if steps_per_epoch > 0 else config.num_epochs
+            steps_per_epoch = max(
+                1, len(train_dataset) // config.batch_size // config.gradient_accumulation_steps
+            )
+            epochs_completed = (
+                int(train_result.global_step / steps_per_epoch)
+                if steps_per_epoch > 0
+                else config.num_epochs
+            )
             early_stopped = epochs_completed < config.num_epochs
 
             logger.info(
@@ -681,6 +689,7 @@ def train_sft(
             if run_eval and config.run_eval_after_training:
                 try:
                     from training.dpo_eval import evaluate_adapter
+
                     evaluation = evaluate_adapter(adapter_path)
                     logger.info(
                         "Evaluation complete",

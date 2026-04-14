@@ -28,54 +28,54 @@ REWARD_VERSION = "1.0.0"
 class ComputedReward:
     """
     Complete reward computation record for DPO training.
-    
+
     Stores final reward, component breakdown, weights/scaling used,
     and raw input values for reproducibility.
-    
+
     Attributes:
         final_reward: Clipped reward in [-1, 1] for DPO training
-        
+
         return_reward: Return component contribution
         directional_reward: Directional accuracy contribution
         mae_reward: MAE penalty contribution
-        
+
         return_weight: Weight used for return component
         directional_weight: Weight used for directional component
         mae_weight: Weight used for MAE component
-        
+
         return_scale: Scale factor used for return
         mae_scale: Scale factor used for MAE
-        
+
         net_return: Net return after costs (used for reward)
         realized_return: Realized return before costs (for diagnostics)
         mae: Max adverse excursion (negative or zero)
-        
+
         predicted_direction: Signal direction
         actual_direction: Realized direction
         confidence: Signal confidence
-        
+
         components_used: Number of components in final reward (1-3)
         computation_timestamp: When reward was computed
         reward_version: Schema version for compatibility
     """
-    
+
     # Final reward
     final_reward: float
-    
+
     # Components
     return_reward: float
     directional_reward: float
     mae_reward: float
-    
+
     # Weights used (for reproducibility)
     return_weight: float
     directional_weight: float
     mae_weight: float
-    
+
     # Scaling used
     return_scale: float
     mae_scale: float
-    
+
     # Raw inputs (for recomputation)
     net_return: float
     realized_return: float
@@ -83,7 +83,7 @@ class ComputedReward:
     predicted_direction: str
     actual_direction: str
     confidence: float
-    
+
     # Metadata
     components_used: int
     computation_timestamp: str
@@ -98,24 +98,24 @@ def compute_reward(
 ) -> ComputedReward:
     """
     Compute DPO reward from verified outcome with fallback for missing components.
-    
+
     Implements graceful degradation:
     1. Full reward (all 3 components) - default
     2. Return + directional (if MAE unavailable)
     3. Return + MAE (if direction is FLAT)
     4. Return only (if both directional and MAE unavailable)
-    
+
     Weights are renormalized if components are missing to preserve total weight = 1.0.
     Final reward is clipped to [-1, 1].
-    
+
     Args:
         verified_outcome: Verified outcome from backtesting
         training_example: Training example with signal and critique
         scaling: Scaling parameters for component normalization
-    
+
     Returns:
         Complete reward record with all components and metadata
-        
+
     Example:
         >>> outcome = VerifiedOutcome(
         ...     actual_direction="HIGHER",
@@ -138,20 +138,18 @@ def compute_reward(
     _signal_data = signal.get("signal_data", {})
     predicted_direction = signal.get("direction") or _signal_data.get("direction", "UNKNOWN")
     confidence = signal.get("confidence") or _signal_data.get("confidence", 0.5)
-    
+
     # Get reward weights from config
     weights = settings.reward
-    
+
     # Always compute return component
     return_reward = compute_return_reward(
         verified_outcome.net_return,
         scaling.return_scale,
     )
-    
-    active_components = [
-        ("return", return_reward, weights.return_weight)
-    ]
-    
+
+    active_components = [("return", return_reward, weights.return_weight)]
+
     # Directional component: skip if FLAT outcome
     if verified_outcome.actual_direction != "FLAT":
         directional_reward = compute_directional_reward(
@@ -159,33 +157,29 @@ def compute_reward(
             verified_outcome.actual_direction,
             confidence,
         )
-        active_components.append(
-            ("directional", directional_reward, weights.directional_weight)
-        )
+        active_components.append(("directional", directional_reward, weights.directional_weight))
     else:
         directional_reward = 0.0
         logger.debug(
             "Skipping directional component (FLAT outcome)",
             example_id=training_example.example_id,
         )
-    
+
     # MAE component: skip if missing
     mae = verified_outcome.max_adverse_excursion
     if mae is not None:
         mae_reward = compute_mae_reward(mae, scaling.mae_scale)
-        active_components.append(
-            ("mae", mae_reward, weights.mae_weight)
-        )
+        active_components.append(("mae", mae_reward, weights.mae_weight))
     else:
         mae_reward = 0.0
         logger.debug(
             "Skipping MAE component (unavailable)",
             example_id=training_example.example_id,
         )
-    
+
     # Renormalize weights and compute final reward
     total_weight = sum(w for _, _, w in active_components)
-    
+
     if total_weight == 0:
         logger.error(
             "All component weights are zero",
@@ -193,12 +187,9 @@ def compute_reward(
         )
         final_reward = 0.0
     else:
-        final_reward = sum(
-            r * (w / total_weight)
-            for _, r, w in active_components
-        )
+        final_reward = sum(r * (w / total_weight) for _, r, w in active_components)
         final_reward = clip_reward(final_reward)
-    
+
     # Log component summary
     logger.debug(
         "Reward computed",
@@ -206,10 +197,12 @@ def compute_reward(
         final_reward=final_reward,
         components=len(active_components),
         return_contrib=return_reward * (weights.return_weight / total_weight),
-        dir_contrib=directional_reward * (weights.directional_weight / total_weight) if verified_outcome.actual_direction != "FLAT" else 0.0,
+        dir_contrib=directional_reward * (weights.directional_weight / total_weight)
+        if verified_outcome.actual_direction != "FLAT"
+        else 0.0,
         mae_contrib=mae_reward * (weights.mae_weight / total_weight) if mae is not None else 0.0,
     )
-    
+
     return ComputedReward(
         final_reward=final_reward,
         return_reward=return_reward,
@@ -237,10 +230,10 @@ def compute_reward(
 class BatchDiagnostics:
     """
     Batch-level reward distribution diagnostics.
-    
+
     Computed for monitoring only - does not affect reward values.
     """
-    
+
     mean_reward: float
     std_reward: float
     min_reward: float
@@ -253,7 +246,7 @@ class BatchDiagnostics:
 @dataclass(slots=True, frozen=True)
 class BatchRewardResult:
     """Result from batch reward computation."""
-    
+
     rewards: list[ComputedReward]
     diagnostics: BatchDiagnostics
 
@@ -264,17 +257,17 @@ def compute_rewards_for_batch(
 ) -> BatchRewardResult:
     """
     Compute rewards for a batch with diagnostics.
-    
+
     Rewards are computed per-example (deterministic, order-independent).
     Diagnostics are computed for the batch (monitoring only).
-    
+
     Args:
         examples_and_outcomes: List of (TrainingExample, VerifiedOutcome) pairs
         scaling: Scaling parameters for component normalization
-    
+
     Returns:
         Batch result with rewards and diagnostics
-        
+
     Example:
         >>> pairs = [(example1, outcome1), (example2, outcome2), ...]
         >>> result = compute_rewards_for_batch(pairs)
@@ -295,30 +288,29 @@ def compute_rewards_for_batch(
                 total_examples=0,
             ),
         )
-    
+
     # Compute per-example rewards
     rewards = [
-        compute_reward(outcome, example, scaling)
-        for example, outcome in examples_and_outcomes
+        compute_reward(outcome, example, scaling) for example, outcome in examples_and_outcomes
     ]
-    
+
     # Compute batch diagnostics
     reward_values = [r.final_reward for r in rewards]
-    
+
     mean_reward = sum(reward_values) / len(reward_values)
-    
+
     if len(reward_values) > 1:
         variance = sum((r - mean_reward) ** 2 for r in reward_values) / len(reward_values)
-        std_reward = variance ** 0.5
+        std_reward = variance**0.5
     else:
         std_reward = 0.0
-    
+
     min_reward = min(reward_values)
     max_reward = max(reward_values)
-    
+
     pct_positive = sum(1 for r in reward_values if r > 0) / len(reward_values)
     pct_clipped = sum(1 for r in reward_values if abs(r) >= 0.99) / len(reward_values)
-    
+
     diagnostics = BatchDiagnostics(
         mean_reward=mean_reward,
         std_reward=std_reward,
@@ -328,7 +320,7 @@ def compute_rewards_for_batch(
         pct_clipped=pct_clipped,
         total_examples=len(rewards),
     )
-    
+
     logger.info(
         "Batch rewards computed",
         total=len(rewards),
@@ -337,5 +329,5 @@ def compute_rewards_for_batch(
         pct_positive=f"{pct_positive:.1%}",
         pct_clipped=f"{pct_clipped:.1%}",
     )
-    
+
     return BatchRewardResult(rewards=rewards, diagnostics=diagnostics)

@@ -80,7 +80,7 @@ def _compute_metrics_for_group(
         # Insufficient data
         return {}
 
-    if confidence_level == 'low':
+    if confidence_level == "low":
         logger.warning(
             "Marginal sample size for metrics",
             sample_size=n,
@@ -101,7 +101,7 @@ def _compute_metrics_for_group(
         spearman_ic, spearman_p = compute_information_coefficient(
             confidences, net_returns, method="spearman"
         )
-        metrics['ic_spearman'] = MetricValue(
+        metrics["ic_spearman"] = MetricValue(
             value=spearman_ic,
             sample_size=n,
             p_value=spearman_p,
@@ -111,7 +111,7 @@ def _compute_metrics_for_group(
         pearson_ic, pearson_p = compute_information_coefficient(
             confidences, net_returns, method="pearson"
         )
-        metrics['ic_pearson'] = MetricValue(
+        metrics["ic_pearson"] = MetricValue(
             value=pearson_ic,
             sample_size=n,
             p_value=pearson_p,
@@ -129,7 +129,7 @@ def _compute_metrics_for_group(
             lambda x: compute_sharpe_ratio(x, config.annualization_factor),
             n_bootstrap=config.bootstrap_samples,
         )
-        metrics['sharpe_ratio'] = MetricValue(
+        metrics["sharpe_ratio"] = MetricValue(
             value=sharpe,
             sample_size=n,
             ci_lower=sharpe_ci[0],
@@ -141,7 +141,7 @@ def _compute_metrics_for_group(
 
     try:
         sortino = compute_sortino_ratio(net_returns, config.annualization_factor)
-        metrics['sortino_ratio'] = MetricValue(
+        metrics["sortino_ratio"] = MetricValue(
             value=sortino,
             sample_size=n,
             confidence_level=confidence_level,
@@ -151,7 +151,7 @@ def _compute_metrics_for_group(
 
     try:
         calmar = compute_calmar_ratio(net_returns, config.annualization_factor)
-        metrics['calmar_ratio'] = MetricValue(
+        metrics["calmar_ratio"] = MetricValue(
             value=calmar,
             sample_size=n,
             confidence_level=confidence_level,
@@ -163,7 +163,7 @@ def _compute_metrics_for_group(
     try:
         cumulative = np.cumsum(net_returns)
         max_dd = compute_max_drawdown(cumulative)
-        metrics['max_drawdown'] = MetricValue(
+        metrics["max_drawdown"] = MetricValue(
             value=max_dd,
             sample_size=n,
             confidence_level=confidence_level,
@@ -175,7 +175,7 @@ def _compute_metrics_for_group(
     try:
         profitable_mask = net_returns > 0
         win_rate = compute_win_rate(profitable_mask)
-        metrics['win_rate'] = MetricValue(
+        metrics["win_rate"] = MetricValue(
             value=win_rate,
             sample_size=n,
             confidence_level=confidence_level,
@@ -186,7 +186,7 @@ def _compute_metrics_for_group(
     # --- Profit Factor ---
     try:
         profit_factor = compute_profit_factor(net_returns)
-        metrics['profit_factor'] = MetricValue(
+        metrics["profit_factor"] = MetricValue(
             value=profit_factor,
             sample_size=n,
             confidence_level=confidence_level,
@@ -201,7 +201,7 @@ def _compute_metrics_for_group(
         if np.sum(non_flat_mask) > 0:
             correct_mask = predicted_directions[non_flat_mask] == actual_directions[non_flat_mask]
             directional_accuracy = np.mean(correct_mask)
-            metrics['directional_accuracy'] = MetricValue(
+            metrics["directional_accuracy"] = MetricValue(
                 value=float(directional_accuracy),
                 sample_size=int(np.sum(non_flat_mask)),
                 confidence_level=confidence_level,
@@ -212,12 +212,12 @@ def _compute_metrics_for_group(
     # --- Mean Return ---
     mean_return = float(np.mean(net_returns))
     annualized_return = mean_return * config.annualization_factor
-    metrics['mean_return'] = MetricValue(
+    metrics["mean_return"] = MetricValue(
         value=mean_return,
         sample_size=n,
         confidence_level=confidence_level,
     )
-    metrics['annualized_return'] = MetricValue(
+    metrics["annualized_return"] = MetricValue(
         value=annualized_return,
         sample_size=n,
         confidence_level=confidence_level,
@@ -262,14 +262,14 @@ def evaluate_batch(
     requirements = SampleSizeRequirements(minimum=config.min_sample_size)
 
     # --- Overall Metrics ---
-    overall_metrics = _compute_metrics_for_group(
-        verified_outcomes, rewards, config, requirements
-    )
+    overall_metrics = _compute_metrics_for_group(verified_outcomes, rewards, config, requirements)
 
     # --- Group by Symbol ---
     symbol_groups: dict[str, list[tuple[VerifiedOutcome, ComputedReward]]] = defaultdict(list)
     for outcome, reward in zip(verified_outcomes, rewards):
-        symbol_groups[outcome.example_id.split('-')[0]].append((outcome, reward))  # Extract symbol from ID
+        symbol_groups[outcome.example_id.split("-")[0]].append(
+            (outcome, reward)
+        )  # Extract symbol from ID
 
     per_symbol_metrics = {}
     for symbol, pairs in symbol_groups.items():
@@ -284,7 +284,7 @@ def evaluate_batch(
     regime_groups: dict[str, list[tuple[VerifiedOutcome, ComputedReward]]] = defaultdict(list)
     for outcome, reward in zip(verified_outcomes, rewards):
         # Assume regime stored in reward metadata (from training example)
-        regime = getattr(reward, 'market_regime', 'UNKNOWN')
+        regime = getattr(reward, "market_regime", "UNKNOWN")
         regime_groups[regime].append((outcome, reward))
 
     per_regime_metrics = {}
@@ -300,34 +300,31 @@ def evaluate_batch(
     ic_tests = {}
 
     for symbol, metrics in per_symbol_metrics.items():
-        if 'ic_spearman' in metrics and metrics['ic_spearman'].p_value is not None:
-            ic_tests[f"symbol_{symbol}"] = metrics['ic_spearman'].p_value
+        if "ic_spearman" in metrics and metrics["ic_spearman"].p_value is not None:
+            ic_tests[f"symbol_{symbol}"] = metrics["ic_spearman"].p_value
 
     for regime, metrics in per_regime_metrics.items():
-        if 'ic_spearman' in metrics and metrics['ic_spearman'].p_value is not None:
-            ic_tests[f"regime_{regime}"] = metrics['ic_spearman'].p_value
+        if "ic_spearman" in metrics and metrics["ic_spearman"].p_value is not None:
+            ic_tests[f"regime_{regime}"] = metrics["ic_spearman"].p_value
 
     # Apply BH-FDR correction
     if len(ic_tests) > 0:
         p_values_list = list(ic_tests.values())
         try:
             # scipy 1.11+ has false_discovery_control
-            rejected = false_discovery_control(p_values_list, method='bh')
-            fdr_adjusted = {
-                key: p_val for key, p_val in zip(ic_tests.keys(), p_values_list)
-            }
+            rejected = false_discovery_control(p_values_list, method="bh")
+            fdr_adjusted = {key: p_val for key, p_val in zip(ic_tests.keys(), p_values_list)}
             significant_groups = frozenset(
                 key for key, is_rejected in zip(ic_tests.keys(), rejected) if is_rejected
             )
         except Exception:
             # Fallback: use statsmodels if scipy version too old
             from statsmodels.stats.multitest import multipletests
+
             rejected, p_adj, _, _ = multipletests(
-                p_values_list, alpha=config.fdr_alpha, method='fdr_bh'
+                p_values_list, alpha=config.fdr_alpha, method="fdr_bh"
             )
-            fdr_adjusted = {
-                key: p_val for key, p_val in zip(ic_tests.keys(), p_adj)
-            }
+            fdr_adjusted = {key: p_val for key, p_val in zip(ic_tests.keys(), p_adj)}
             significant_groups = frozenset(
                 key for key, is_rejected in zip(ic_tests.keys(), rejected) if is_rejected
             )

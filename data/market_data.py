@@ -25,6 +25,7 @@ CACHE_TTL_SECONDS = 3600
 
 class DataUnavailableError(Exception):
     """Raised when market data cannot be fetched."""
+
     pass
 
 
@@ -64,7 +65,7 @@ async def retry_with_backoff(
             return await func()
         except retryable_exceptions as e:
             last_exception = e
-            delay = min(base_delay * (2 ** attempt), max_delay)
+            delay = min(base_delay * (2**attempt), max_delay)
 
             # Extra delay for rate limits
             if isinstance(e, ccxt.RateLimitExceeded):
@@ -102,10 +103,12 @@ class ExchangeClient:
             exchange_id: CCXT exchange identifier
         """
         self.exchange_id = exchange_id
-        self.exchange = getattr(ccxt, exchange_id)({
-            "enableRateLimit": True,  # CCXT built-in rate limiting
-            "rateLimit": 100,         # ms between requests
-        })
+        self.exchange = getattr(ccxt, exchange_id)(
+            {
+                "enableRateLimit": True,  # CCXT built-in rate limiting
+                "rateLimit": 100,  # ms between requests
+            }
+        )
         # Inject a session using ThreadedResolver so aiodns is bypassed.
         # aiodns (c-ares) fails on Windows; Python's built-in resolver works fine.
         connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
@@ -147,10 +150,9 @@ class ExchangeClient:
             DataUnavailableError: If data cannot be fetched
         """
         async with self.throttler:
+
             async def _fetch():
-                return await self.exchange.fetch_ohlcv(
-                    symbol, timeframe, since, limit
-                )
+                return await self.exchange.fetch_ohlcv(symbol, timeframe, since, limit)
 
             try:
                 return await retry_with_backoff(_fetch)
@@ -160,10 +162,7 @@ class ExchangeClient:
                 )
 
     async def fetch_funding_rate_history(
-        self,
-        symbol: str,
-        since: int | None = None,
-        limit: int = 100
+        self, symbol: str, since: int | None = None, limit: int = 100
     ) -> list[dict]:
         """
         Fetch funding rate history for a perpetual contract.
@@ -180,12 +179,10 @@ class ExchangeClient:
             DataUnavailableError: If funding rate data cannot be fetched
         """
         async with self.throttler:
+
             async def _fetch():
                 return await asyncio.to_thread(
-                    self.exchange.fetch_funding_rate_history,
-                    symbol,
-                    since=since,
-                    limit=limit
+                    self.exchange.fetch_funding_rate_history, symbol, since=since, limit=limit
                 )
 
             try:
@@ -196,11 +193,7 @@ class ExchangeClient:
                 )
 
     async def fetch_open_interest_history(
-        self,
-        symbol: str,
-        timeframe: str = '1h',
-        since: int | None = None,
-        limit: int = 100
+        self, symbol: str, timeframe: str = "1h", since: int | None = None, limit: int = 100
     ) -> list[dict]:
         """
         Fetch open interest history for a perpetual contract.
@@ -218,13 +211,14 @@ class ExchangeClient:
             DataUnavailableError: If open interest data cannot be fetched
         """
         async with self.throttler:
+
             async def _fetch():
                 return await asyncio.to_thread(
                     self.exchange.fetch_open_interest_history,
                     symbol,
                     timeframe=timeframe,
                     since=since,
-                    limit=limit
+                    limit=limit,
                 )
 
             try:
@@ -315,8 +309,13 @@ class MarketDataService:
         """
         # Map common timeframes to minutes
         timeframe_minutes = {
-            '1m': 1, '5m': 5, '15m': 15, '30m': 30,
-            '1h': 60, '4h': 240, '1d': 1440
+            "1m": 1,
+            "5m": 5,
+            "15m": 15,
+            "30m": 30,
+            "1h": 60,
+            "4h": 240,
+            "1d": 1440,
         }
 
         minutes = timeframe_minutes.get(timeframe, 60)  # default to 1h
@@ -338,9 +337,9 @@ class MarketDataService:
         if age > timedelta(days=7):
             return 86400  # Historical: 24 hours
         elif age > timedelta(hours=1):
-            return 7200   # Recent: 2 hours
+            return 7200  # Recent: 2 hours
         else:
-            return 1800   # Live: 30 minutes
+            return 1800  # Live: 30 minutes
 
     async def _load_perpetual_markets(self) -> dict[str, str]:
         """
@@ -357,25 +356,19 @@ class MarketDataService:
             return cached
 
         # Load markets from exchange
-        markets = await asyncio.to_thread(
-            self.exchange_client.load_markets
-        )
+        markets = await asyncio.to_thread(self.exchange_client.load_markets)
 
         # Build spot -> perp mapping
         mapping = {}
         for symbol, market in markets.items():
-            if market.get('type') == 'swap' and market.get('settle') == 'USDT':
+            if market.get("type") == "swap" and market.get("settle") == "USDT":
                 # Extract base symbol (BTC/USDT:USDT -> BTC/USDT)
-                base_symbol = symbol.split(':')[0]
+                base_symbol = symbol.split(":")[0]
                 if base_symbol != symbol:  # Ensure it's actually a perp
                     mapping[base_symbol] = symbol
 
         # Cache for 24 hours
-        await self.cache.set(
-            cache_key,
-            mapping,
-            expire=86400
-        )
+        await self.cache.set(cache_key, mapping, expire=86400)
 
         return mapping
 
@@ -440,7 +433,9 @@ class MarketDataService:
             return pd.DataFrame(cached)
 
         # Fetch from exchange
-        logger.info("Fetching from exchange", symbol=symbol, timeframe=timeframe, bars=lookback_bars)
+        logger.info(
+            "Fetching from exchange", symbol=symbol, timeframe=timeframe, bars=lookback_bars
+        )
         ohlcv_list = await self.exchange_client.fetch_ohlcv(
             symbol=symbol,
             timeframe=timeframe,
@@ -450,8 +445,7 @@ class MarketDataService:
 
         # Convert to DataFrame
         df = pd.DataFrame(
-            ohlcv_list,
-            columns=["timestamp", "open", "high", "low", "close", "volume"]
+            ohlcv_list, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
 
         # Validate data
@@ -504,17 +498,12 @@ class MarketDataService:
         pit_safe = df[df["close_time"] <= as_of].copy()
 
         if pit_safe.empty:
-            raise DataUnavailableError(
-                f"No point-in-time safe data for {symbol} as of {as_of}"
-            )
+            raise DataUnavailableError(f"No point-in-time safe data for {symbol} as of {as_of}")
 
         return pit_safe.drop(columns=["close_time"])
 
     async def fetch_funding_rates(
-        self,
-        symbol: str,
-        as_of: datetime | None = None,
-        limit: int = 100
+        self, symbol: str, as_of: datetime | None = None, limit: int = 100
     ) -> pd.DataFrame | None:
         """
         Fetch funding rate history for a symbol with adaptive caching.
@@ -528,10 +517,10 @@ class MarketDataService:
             DataFrame with columns [timestamp, funding_rate] or None if unsupported
         """
         # Check exchange capability
-        if not self.exchange_client.exchange.has.get('fetchFundingRateHistory', False):
+        if not self.exchange_client.exchange.has.get("fetchFundingRateHistory", False):
             logger.warning(
                 "Exchange does not support funding rate history",
-                exchange=self.exchange_client.exchange_id
+                exchange=self.exchange_client.exchange_id,
             )
             return None
 
@@ -552,8 +541,7 @@ class MarketDataService:
             # Fetch from exchange
             try:
                 raw_data = await self.exchange_client.fetch_funding_rate_history(
-                    perp_symbol,
-                    limit=limit
+                    perp_symbol, limit=limit
                 )
             except DataUnavailableError as e:
                 logger.error("Failed to fetch funding rates", symbol=symbol, error=str(e))
@@ -565,11 +553,11 @@ class MarketDataService:
                 return None
 
             # Standardize columns
-            df = df.rename(columns={'fundingRate': 'funding_rate'})
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            df = df.rename(columns={"fundingRate": "funding_rate"})
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
 
             # Determine TTL based on most recent data timestamp
-            most_recent = df['timestamp'].max()
+            most_recent = df["timestamp"].max()
             now = datetime.now(timezone.utc)
             ttl = self._compute_adaptive_ttl(most_recent, now)
 
@@ -578,16 +566,12 @@ class MarketDataService:
 
         # Apply point-in-time filter if requested
         if as_of is not None:
-            df = df[df['timestamp'] <= as_of]
+            df = df[df["timestamp"] <= as_of]
 
-        return df[['timestamp', 'funding_rate']]
+        return df[["timestamp", "funding_rate"]]
 
     async def fetch_open_interest(
-        self,
-        symbol: str,
-        timeframe: str = '1h',
-        as_of: datetime | None = None,
-        limit: int = 100
+        self, symbol: str, timeframe: str = "1h", as_of: datetime | None = None, limit: int = 100
     ) -> pd.DataFrame | None:
         """
         Fetch open interest history for a symbol with adaptive caching.
@@ -602,10 +586,10 @@ class MarketDataService:
             DataFrame with columns [timestamp, open_interest, open_interest_value] or None if unsupported
         """
         # Check exchange capability
-        if not self.exchange_client.exchange.has.get('fetchOpenInterestHistory', False):
+        if not self.exchange_client.exchange.has.get("fetchOpenInterestHistory", False):
             logger.warning(
                 "Exchange does not support open interest history",
-                exchange=self.exchange_client.exchange_id
+                exchange=self.exchange_client.exchange_id,
             )
             return None
 
@@ -626,9 +610,7 @@ class MarketDataService:
             # Fetch from exchange
             try:
                 raw_data = await self.exchange_client.fetch_open_interest_history(
-                    perp_symbol,
-                    timeframe=timeframe,
-                    limit=limit
+                    perp_symbol, timeframe=timeframe, limit=limit
                 )
             except DataUnavailableError as e:
                 logger.error("Failed to fetch open interest", symbol=symbol, error=str(e))
@@ -640,16 +622,16 @@ class MarketDataService:
                 return None
 
             # Standardize columns
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
 
             # Extract relevant columns (may have openInterestValue or openInterest)
-            if 'openInterestValue' in df.columns:
-                df = df.rename(columns={'openInterestValue': 'open_interest_value'})
-            if 'openInterest' in df.columns:
-                df = df.rename(columns={'openInterest': 'open_interest'})
+            if "openInterestValue" in df.columns:
+                df = df.rename(columns={"openInterestValue": "open_interest_value"})
+            if "openInterest" in df.columns:
+                df = df.rename(columns={"openInterest": "open_interest"})
 
             # Determine TTL based on most recent data timestamp
-            most_recent = df['timestamp'].max()
+            most_recent = df["timestamp"].max()
             now = datetime.now(timezone.utc)
             ttl = self._compute_adaptive_ttl(most_recent, now)
 
@@ -658,18 +640,16 @@ class MarketDataService:
 
         # Apply point-in-time filter if requested
         if as_of is not None:
-            df = df[df['timestamp'] <= as_of]
+            df = df[df["timestamp"] <= as_of]
 
         # Return standardized columns
-        available_cols = [c for c in ['timestamp', 'open_interest', 'open_interest_value'] if c in df.columns]
+        available_cols = [
+            c for c in ["timestamp", "open_interest", "open_interest_value"] if c in df.columns
+        ]
         return df[available_cols]
 
     async def get_market_context(
-        self,
-        symbol: str,
-        timeframe: str = '1h',
-        as_of: datetime | None = None,
-        limit: int = 100
+        self, symbol: str, timeframe: str = "1h", as_of: datetime | None = None, limit: int = 100
     ) -> dict:
         """
         Fetch unified market context including OHLCV, funding rates, and open interest.
@@ -702,28 +682,30 @@ class MarketDataService:
         # Fetch funding rates (optional)
         funding_df = await self.fetch_funding_rates(symbol, as_of=as_of, limit=limit)
         if funding_df is not None and len(funding_df) > 0:
-            funding_rate = float(funding_df['funding_rate'].iloc[-1])
+            funding_rate = float(funding_df["funding_rate"].iloc[-1])
             funding_rate_history = funding_df
         else:
             funding_rate = None
             funding_rate_history = None
 
         # Fetch open interest (optional)
-        oi_df = await self.fetch_open_interest(symbol, timeframe=timeframe, as_of=as_of, limit=limit)
+        oi_df = await self.fetch_open_interest(
+            symbol, timeframe=timeframe, as_of=as_of, limit=limit
+        )
         if oi_df is not None and len(oi_df) > 0:
             # Get most recent value
-            if 'open_interest_value' in oi_df.columns:
-                latest_oi = float(oi_df['open_interest_value'].iloc[-1])
+            if "open_interest_value" in oi_df.columns:
+                latest_oi = float(oi_df["open_interest_value"].iloc[-1])
                 # Calculate 24-hour change if enough data
                 # Number of bars depends on timeframe (e.g., 1m=1440 bars, 1h=24 bars, 4h=6 bars)
                 bars_needed = self._bars_for_24_hours(timeframe)
                 if len(oi_df) >= bars_needed:
-                    oi_24h_ago = float(oi_df['open_interest_value'].iloc[-bars_needed])
+                    oi_24h_ago = float(oi_df["open_interest_value"].iloc[-bars_needed])
                     oi_change_pct = ((latest_oi - oi_24h_ago) / oi_24h_ago) * 100
                 else:
                     oi_change_pct = None
-            elif 'open_interest' in oi_df.columns:
-                latest_oi = float(oi_df['open_interest'].iloc[-1])
+            elif "open_interest" in oi_df.columns:
+                latest_oi = float(oi_df["open_interest"].iloc[-1])
                 oi_change_pct = None  # Can't calculate value change from contract count
             else:
                 latest_oi = None
@@ -733,11 +715,11 @@ class MarketDataService:
             oi_change_pct = None
 
         return {
-            'ohlcv_df': ohlcv_df,
-            'funding_rate': funding_rate,
-            'funding_rate_history': funding_rate_history,
-            'open_interest': latest_oi,
-            'open_interest_change_pct': oi_change_pct
+            "ohlcv_df": ohlcv_df,
+            "funding_rate": funding_rate,
+            "funding_rate_history": funding_rate_history,
+            "open_interest": latest_oi,
+            "open_interest_change_pct": oi_change_pct,
         }
 
     async def close(self):

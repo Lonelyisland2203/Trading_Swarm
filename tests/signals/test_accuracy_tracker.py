@@ -111,14 +111,18 @@ class TestProcessPendingVerifications:
     def mock_market_data(self):
         """Create mock market data service."""
         mock = AsyncMock()
-        mock.fetch_ohlcv = AsyncMock(return_value=pd.DataFrame({
-            "timestamp": [1704000000000, 1704003600000],
-            "open": [42000.0, 42100.0],
-            "high": [42200.0, 42300.0],
-            "low": [41900.0, 42000.0],
-            "close": [42100.0, 42200.0],
-            "volume": [100, 150],
-        }))
+        mock.fetch_ohlcv = AsyncMock(
+            return_value=pd.DataFrame(
+                {
+                    "timestamp": [1704000000000, 1704003600000],
+                    "open": [42000.0, 42100.0],
+                    "high": [42200.0, 42300.0],
+                    "low": [41900.0, 42000.0],
+                    "close": [42100.0, 42200.0],
+                    "volume": [100, 150],
+                }
+            )
+        )
         return mock
 
     @pytest.mark.asyncio

@@ -18,29 +18,20 @@ from config.fee_model import FeeModelSettings
 class OllamaSettings(BaseModel):
     """Ollama LLM service configuration."""
 
-    base_url: str = Field(
-        default="http://localhost:11434",
-        description="Ollama API base URL"
-    )
+    base_url: str = Field(default="http://localhost:11434", description="Ollama API base URL")
     generator_model: str = Field(
-        default="qwen3:8b",
-        description="Generator model tag (Qwen3-8B, non-thinking mode)"
+        default="qwen3:8b", description="Generator model tag (Qwen3-8B, non-thinking mode)"
     )
     critic_model: str = Field(
         default="deepseek-r1:14b",
-        description="Critic model tag (DeepSeek-R1-14B, native reasoning)"
+        description="Critic model tag (DeepSeek-R1-14B, native reasoning)",
     )
     keep_alive: int = Field(
         default=0,
         ge=0,
-        description="Model keep-alive seconds (0=immediate unload, REQUIRED for VRAM management)"
+        description="Model keep-alive seconds (0=immediate unload, REQUIRED for VRAM management)",
     )
-    timeout: int = Field(
-        default=300,
-        ge=30,
-        le=600,
-        description="Request timeout in seconds"
-    )
+    timeout: int = Field(default=300, ge=30, le=600, description="Request timeout in seconds")
 
     @field_validator("keep_alive")
     @classmethod
@@ -61,27 +52,22 @@ class SwarmSettings(BaseModel):
         default=3,
         ge=1,
         le=5,
-        description="Number of generator personas (diversity vs compute trade-off)"
+        description="Number of generator personas (diversity vs compute trade-off)",
     )
     critique_enabled: bool = Field(
-        default=True,
-        description="Enable critic agent (disable for testing only)"
+        default=True, description="Enable critic agent (disable for testing only)"
     )
     dpo_batch_size: int = Field(
-        default=4,
-        ge=1,
-        le=16,
-        description="Batch size for DPO training dataset collection"
+        default=4, ge=1, le=16, description="Batch size for DPO training dataset collection"
     )
     training_enabled: bool = Field(
-        default=False,
-        description="Enable DPO training (WARNING: runs in separate process)"
+        default=False, description="Enable DPO training (WARNING: runs in separate process)"
     )
     concurrency: int = Field(
         default=2,
         ge=1,
         le=4,
-        description="Max concurrent LLM requests (2 recommended for single GPU)"
+        description="Max concurrent LLM requests (2 recommended for single GPU)",
     )
 
 
@@ -101,19 +87,16 @@ class RewardWeights(BaseModel):
         default=0.50,
         ge=0.0,
         le=1.0,
-        description="Net return component weight (after transaction costs)"
+        description="Net return component weight (after transaction costs)",
     )
     directional_weight: float = Field(
         default=0.30,
         ge=0.0,
         le=1.0,
-        description="Directional accuracy component weight (confidence-weighted)"
+        description="Directional accuracy component weight (confidence-weighted)",
     )
     mae_weight: float = Field(
-        default=0.20,
-        ge=0.0,
-        le=1.0,
-        description="Max adverse excursion penalty weight"
+        default=0.20, ge=0.0, le=1.0, description="Max adverse excursion penalty weight"
     )
 
     @model_validator(mode="after")
@@ -133,31 +116,23 @@ class MarketDataSettings(BaseModel):
     """Market data fetching configuration."""
 
     exchange: str = Field(
-        default="binance",
-        description="CCXT exchange name (binance, coinbase, kraken, etc.)"
+        default="binance", description="CCXT exchange name (binance, coinbase, kraken, etc.)"
     )
     symbols: List[str] = Field(
-        default=["BTC/USDT", "ETH/USDT", "BNB/USDT"],
-        description="Trading pairs to fetch"
+        default=["BTC/USDT", "ETH/USDT", "BNB/USDT"], description="Trading pairs to fetch"
     )
-    timeframe: str = Field(
-        default="1h",
-        description="Candle timeframe (1m, 5m, 15m, 1h, 4h, 1d)"
-    )
+    timeframe: str = Field(default="1h", description="Candle timeframe (1m, 5m, 15m, 1h, 4h, 1d)")
     lookback_bars: int = Field(
         default=100,
         ge=20,
         le=1000,
-        description="Number of historical bars for indicator calculation"
+        description="Number of historical bars for indicator calculation",
     )
-    cache_dir: Path = Field(
-        default=Path("data/cache"),
-        description="Market data cache directory"
-    )
+    cache_dir: Path = Field(default=Path("data/cache"), description="Market data cache directory")
     cache_size_limit: int = Field(
         default=1_073_741_824,  # 1 GB
         ge=104_857_600,  # 100 MB minimum
-        description="Disk cache size limit in bytes"
+        description="Disk cache size limit in bytes",
     )
 
     @field_validator("symbols", mode="before")
@@ -185,26 +160,31 @@ class DPOTrainingSettings(BaseModel):
         default=32,
         ge=8,
         le=128,
-        description="LoRA rank (r). Higher = more expressive but more VRAM. Recommended: 32"
+        description="LoRA rank (r). Higher = more expressive but more VRAM. Recommended: 32",
     )
     lora_alpha: int = Field(
         default=64,
         ge=16,
         le=256,
-        description="LoRA alpha scaling. Typically 2x rank. Recommended: 64"
+        description="LoRA alpha scaling. Typically 2x rank. Recommended: 64",
     )
     lora_dropout: float = Field(
         default=0.05,
         ge=0.0,
         le=0.2,
-        description="LoRA dropout for regularization. Recommended: 0.05"
+        description="LoRA dropout for regularization. Recommended: 0.05",
     )
     lora_target_modules: List[str] = Field(
         default=[
-            "q_proj", "k_proj", "v_proj", "o_proj",  # Attention
-            "gate_proj", "up_proj", "down_proj",     # MLP
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",  # Attention
+            "gate_proj",
+            "up_proj",
+            "down_proj",  # MLP
         ],
-        description="Target modules for LoRA. Attention + MLP for maximum capacity."
+        description="Target modules for LoRA. Attention + MLP for maximum capacity.",
     )
 
     # DPO hyperparameters
@@ -212,11 +192,10 @@ class DPOTrainingSettings(BaseModel):
         default=0.1,
         ge=0.01,
         le=0.5,
-        description="DPO beta parameter. Controls preference strength. Start at 0.1."
+        description="DPO beta parameter. Controls preference strength. Start at 0.1.",
     )
     dpo_loss_type: str = Field(
-        default="sigmoid",
-        description="DPO loss type. 'sigmoid' is standard."
+        default="sigmoid", description="DPO loss type. 'sigmoid' is standard."
     )
 
     # Training hyperparameters
@@ -224,19 +203,16 @@ class DPOTrainingSettings(BaseModel):
         default=5e-6,
         ge=1e-7,
         le=1e-4,
-        description="Learning rate. Conservative for DPO. Recommended: 5e-6"
+        description="Learning rate. Conservative for DPO. Recommended: 5e-6",
     )
     batch_size: int = Field(
-        default=1,
-        ge=1,
-        le=4,
-        description="Per-device batch size. Must be 1 for 16 GB VRAM."
+        default=1, ge=1, le=4, description="Per-device batch size. Must be 1 for 16 GB VRAM."
     )
     gradient_accumulation_steps: int = Field(
         default=16,
         ge=1,
         le=64,
-        description="Gradient accumulation steps. Effective batch = batch_size * this."
+        description="Gradient accumulation steps. Effective batch = batch_size * this.",
     )
     max_length: int = Field(
         default=1200,
@@ -249,81 +225,59 @@ class DPOTrainingSettings(BaseModel):
         ),
     )
     num_epochs: int = Field(
-        default=1,
-        ge=1,
-        le=5,
-        description="Number of training epochs. 1 recommended for DPO."
+        default=1, ge=1, le=5, description="Number of training epochs. 1 recommended for DPO."
     )
 
     # Walk-forward validation
     min_training_pairs: int = Field(
         default=500,
         ge=100,
-        description="Minimum preference pairs before training. Below this, wait."
+        description="Minimum preference pairs before training. Below this, wait.",
     )
     train_window: int = Field(
-        default=500,
-        ge=100,
-        description="Number of pairs in training window."
+        default=500, ge=100, description="Number of pairs in training window."
     )
     test_window: int = Field(
-        default=100,
-        ge=50,
-        description="Number of pairs in test window (~10-20% of train)."
+        default=100, ge=50, description="Number of pairs in test window (~10-20% of train)."
     )
     retrain_threshold: int = Field(
         default=250,
         ge=50,
-        description="Trigger retraining after N new pairs (quarter of train window)."
+        description="Trigger retraining after N new pairs (quarter of train window).",
     )
 
     # Replay buffer (catastrophic forgetting mitigation)
     replay_ratio: float = Field(
-        default=0.15,
-        ge=0.0,
-        le=0.3,
-        description="Fraction of training batch from replay buffer."
+        default=0.15, ge=0.0, le=0.3, description="Fraction of training batch from replay buffer."
     )
     replay_buffer_size: int = Field(
-        default=1000,
-        ge=100,
-        description="Maximum pairs in replay buffer."
+        default=1000, ge=100, description="Maximum pairs in replay buffer."
     )
 
     # Evaluation & promotion criteria
     min_oos_ic: float = Field(
-        default=0.05,
-        ge=0.0,
-        le=1.0,
-        description="Minimum out-of-sample IC for promotion."
+        default=0.05, ge=0.0, le=1.0, description="Minimum out-of-sample IC for promotion."
     )
     min_ic_delta: float = Field(
-        default=0.02,
-        ge=0.0,
-        le=0.5,
-        description="Minimum IC improvement for promotion."
+        default=0.02, ge=0.0, le=0.5, description="Minimum IC improvement for promotion."
     )
     max_brier_score: float = Field(
-        default=0.25,
-        ge=0.0,
-        le=1.0,
-        description="Maximum Brier score (calibration) for promotion."
+        default=0.25, ge=0.0, le=1.0, description="Maximum Brier score (calibration) for promotion."
     )
     min_directional_accuracy: float = Field(
         default=0.52,
         ge=0.5,
         le=1.0,
-        description="Minimum directional accuracy for promotion (> random)."
+        description="Minimum directional accuracy for promotion (> random).",
     )
 
     # Paths
     adapter_dir: Path = Field(
         default=Path("models/adapters/qwen3-8b-dpo"),
-        description="Directory for saving LoRA adapters."
+        description="Directory for saving LoRA adapters.",
     )
     base_model_id: str = Field(
-        default="Qwen/Qwen3-8B",
-        description="HuggingFace model ID for base model."
+        default="Qwen/Qwen3-8B", description="HuggingFace model ID for base model."
     )
 
     @field_validator("adapter_dir", mode="before")
@@ -342,36 +296,25 @@ class DatasetGenerationSettings(BaseModel):
         default=15,
         ge=1,
         le=100,
-        description="Default number of historical windows per symbol/timeframe"
+        description="Default number of historical windows per symbol/timeframe",
     )
     default_window_stride: int = Field(
-        default=100,
-        ge=10,
-        le=1000,
-        description="Default stride between windows (in bars)"
+        default=100, ge=10, le=1000, description="Default stride between windows (in bars)"
     )
     min_data_completeness: float = Field(
         default=0.95,
         ge=0.0,
         le=1.0,
-        description="Minimum data completeness ratio (skip windows below this threshold)"
+        description="Minimum data completeness ratio (skip windows below this threshold)",
     )
     save_frequency: int = Field(
-        default=1,
-        ge=1,
-        description="Save after every N contexts (1=after each context)"
+        default=1, ge=1, description="Save after every N contexts (1=after each context)"
     )
     max_retries_per_job: int = Field(
-        default=2,
-        ge=0,
-        le=5,
-        description="Max retries for failed inference jobs"
+        default=2, ge=0, le=5, description="Max retries for failed inference jobs"
     )
     retry_delay_seconds: int = Field(
-        default=10,
-        ge=1,
-        le=300,
-        description="Delay between retries (seconds)"
+        default=10, ge=1, le=300, description="Delay between retries (seconds)"
     )
 
 
@@ -388,17 +331,31 @@ class ExecutionSettings(BaseModel):
 
     # Safety limits
     max_daily_trades: int = Field(default=10, ge=1, le=100, description="Maximum trades per day")
-    max_daily_loss_pct: float = Field(default=2.0, ge=0.1, le=10.0, description="Maximum daily loss %")
-    max_open_positions: int = Field(default=3, ge=1, le=20, description="Maximum concurrent positions")
-    max_position_pct: float = Field(default=0.02, ge=0.001, le=0.10, description="Maximum position size %")
-    order_cooldown_seconds: int = Field(default=60, ge=0, le=3600, description="Minimum seconds between orders")
+    max_daily_loss_pct: float = Field(
+        default=2.0, ge=0.1, le=10.0, description="Maximum daily loss %"
+    )
+    max_open_positions: int = Field(
+        default=3, ge=1, le=20, description="Maximum concurrent positions"
+    )
+    max_position_pct: float = Field(
+        default=0.02, ge=0.001, le=0.10, description="Maximum position size %"
+    )
+    order_cooldown_seconds: int = Field(
+        default=60, ge=0, le=3600, description="Minimum seconds between orders"
+    )
 
     # Signal thresholds
-    min_confidence: float = Field(default=0.6, ge=0.0, le=1.0, description="Minimum signal confidence")
-    min_expected_return_pct: float = Field(default=0.1, ge=0.0, description="Minimum expected return %")
+    min_confidence: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="Minimum signal confidence"
+    )
+    min_expected_return_pct: float = Field(
+        default=0.1, ge=0.0, description="Minimum expected return %"
+    )
 
     # State persistence
-    state_dir: Path = Field(default=Path("execution/state"), description="Directory for state files")
+    state_dir: Path = Field(
+        default=Path("execution/state"), description="Directory for state files"
+    )
 
     @field_validator("state_dir", mode="before")
     @classmethod
@@ -416,10 +373,7 @@ class AppSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
 
     # Nested settings groups
@@ -434,26 +388,18 @@ class AppSettings(BaseSettings):
 
     # Paths
     model_save_dir: Path = Field(
-        default=Path("models"),
-        description="Directory for saving model weights"
+        default=Path("models"), description="Directory for saving model weights"
     )
-    output_dir: Path = Field(
-        default=Path("outputs"),
-        description="Directory for results and logs"
-    )
-    cache_dir: Path = Field(
-        default=Path(".cache"),
-        description="LLM response cache directory"
-    )
+    output_dir: Path = Field(default=Path("outputs"), description="Directory for results and logs")
+    cache_dir: Path = Field(default=Path(".cache"), description="LLM response cache directory")
 
     # Logging
     log_level: str = Field(
-        default="INFO",
-        description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
     )
     log_format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        description="Log message format"
+        description="Log message format",
     )
 
     @field_validator("model_save_dir", "output_dir", "cache_dir", mode="before")
@@ -487,19 +433,16 @@ class AppSettings(BaseSettings):
             "OLLAMA_CRITIC_MODEL": ("ollama", "critic_model"),
             "OLLAMA_KEEP_ALIVE": ("ollama", "keep_alive"),
             "OLLAMA_TIMEOUT": ("ollama", "timeout"),
-
             # Swarm settings
             "GENERATOR_PERSONAS": ("swarm", "generator_personas"),
             "CRITIQUE_ENABLED": ("swarm", "critique_enabled"),
             "DPO_BATCH_SIZE": ("swarm", "dpo_batch_size"),
             "TRAINING_ENABLED": ("swarm", "training_enabled"),
             "CONCURRENCY": ("swarm", "concurrency"),
-
             # Reward weights
             "REWARD_RETURN_WEIGHT": ("reward", "return_weight"),
             "REWARD_DIRECTIONAL_WEIGHT": ("reward", "directional_weight"),
             "REWARD_MAE_WEIGHT": ("reward", "mae_weight"),
-
             # Market data settings
             "EXCHANGE": ("market_data", "exchange"),
             "SYMBOLS": ("market_data", "symbols"),
@@ -507,7 +450,6 @@ class AppSettings(BaseSettings):
             "LOOKBACK_BARS": ("market_data", "lookback_bars"),
             "DATA_CACHE_DIR": ("market_data", "cache_dir"),
             "DATA_CACHE_SIZE_LIMIT": ("market_data", "cache_size_limit"),
-
             # DPO training settings (Process B only)
             "DPO_LORA_RANK": ("dpo", "lora_rank"),
             "DPO_LORA_ALPHA": ("dpo", "lora_alpha"),
@@ -518,7 +460,6 @@ class AppSettings(BaseSettings):
             "DPO_GRADIENT_ACCUMULATION_STEPS": ("dpo", "gradient_accumulation_steps"),
             "DPO_MIN_TRAINING_PAIRS": ("dpo", "min_training_pairs"),
             "DPO_ADAPTER_DIR": ("dpo", "adapter_dir"),
-
             # Fee model settings
             "FEE_MAKER_PCT": ("fee_model", "maker_fee_pct"),
             "FEE_TAKER_PCT": ("fee_model", "taker_fee_pct"),
@@ -528,7 +469,6 @@ class AppSettings(BaseSettings):
             "FEE_FUNDING_RATE_PER_8H": ("fee_model", "funding_rate_pct"),
             "FEE_INCLUDE_FUNDING": ("fee_model", "include_funding"),
             "FEE_SLIPPAGE_PCT": ("fee_model", "slippage_pct"),
-
             # Execution settings
             "EXECUTION_TESTNET": ("execution", "testnet"),
             "BINANCE_API_KEY": ("execution", "api_key"),
@@ -555,15 +495,25 @@ class AppSettings(BaseSettings):
                 field_type = field_info.annotation
 
                 # Convert string value to appropriate type
-                if field_type == bool or (hasattr(field_type, "__origin__") and field_type.__origin__ == bool):
+                if field_type == bool or (
+                    hasattr(field_type, "__origin__") and field_type.__origin__ == bool
+                ):
                     converted = value.lower() in ("true", "1", "yes")
-                elif field_type == int or (hasattr(field_type, "__origin__") and field_type.__origin__ == int):
+                elif field_type == int or (
+                    hasattr(field_type, "__origin__") and field_type.__origin__ == int
+                ):
                     converted = int(value)
-                elif field_type == float or (hasattr(field_type, "__origin__") and field_type.__origin__ == float):
+                elif field_type == float or (
+                    hasattr(field_type, "__origin__") and field_type.__origin__ == float
+                ):
                     converted = float(value)
-                elif field_type == Path or (hasattr(field_type, "__origin__") and field_type.__origin__ == Path):
+                elif field_type == Path or (
+                    hasattr(field_type, "__origin__") and field_type.__origin__ == Path
+                ):
                     converted = Path(value)
-                elif field_type == List[str] or (hasattr(field_type, "__origin__") and field_type.__origin__ == list):
+                elif field_type == List[str] or (
+                    hasattr(field_type, "__origin__") and field_type.__origin__ == list
+                ):
                     converted = [s.strip() for s in value.split(",")]
                 else:
                     converted = value
@@ -597,11 +547,7 @@ async def validate_ollama_models() -> dict:
     """
     import aiohttp
 
-    result = {
-        "available": [],
-        "missing": [],
-        "error": None
-    }
+    result = {"available": [], "missing": [], "error": None}
 
     try:
         async with aiohttp.ClientSession() as session:

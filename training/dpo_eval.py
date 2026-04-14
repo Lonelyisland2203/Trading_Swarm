@@ -328,9 +328,7 @@ def compare_adapters(
     }
 
     # Regime IC comparison
-    all_regimes = set(baseline_eval.ic_by_regime.keys()) | set(
-        candidate_eval.ic_by_regime.keys()
-    )
+    all_regimes = set(baseline_eval.ic_by_regime.keys()) | set(candidate_eval.ic_by_regime.keys())
     for regime in all_regimes:
         baseline_ic = baseline_eval.ic_by_regime.get(regime, 0.0)
         candidate_ic = candidate_eval.ic_by_regime.get(regime, 0.0)

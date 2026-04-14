@@ -233,14 +233,16 @@ class TestMarketContextBuilding:
         from swarm.orchestrator import _build_market_context
 
         # Create sample OHLCV data
-        df = pd.DataFrame({
-            "timestamp": [1704067200000 + i * 3600000 for i in range(100)],
-            "open": [100.0 + i * 0.1 for i in range(100)],
-            "high": [102.0 + i * 0.1 for i in range(100)],
-            "low": [98.0 + i * 0.1 for i in range(100)],
-            "close": [101.0 + i * 0.1 for i in range(100)],
-            "volume": [1000.0] * 100,
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": [1704067200000 + i * 3600000 for i in range(100)],
+                "open": [100.0 + i * 0.1 for i in range(100)],
+                "high": [102.0 + i * 0.1 for i in range(100)],
+                "low": [98.0 + i * 0.1 for i in range(100)],
+                "close": [101.0 + i * 0.1 for i in range(100)],
+                "volume": [1000.0] * 100,
+            }
+        )
 
         context = _build_market_context(df, MarketRegime.NEUTRAL)
 
@@ -258,14 +260,16 @@ class TestMarketContextBuilding:
         import json
         from swarm.orchestrator import _build_market_context
 
-        df = pd.DataFrame({
-            "timestamp": [1704067200000 + i * 3600000 for i in range(100)],
-            "open": [100.0] * 100,
-            "high": [102.0] * 100,
-            "low": [98.0] * 100,
-            "close": [101.0] * 100,
-            "volume": [1000.0] * 100,
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": [1704067200000 + i * 3600000 for i in range(100)],
+                "open": [100.0] * 100,
+                "high": [102.0] * 100,
+                "low": [98.0] * 100,
+                "close": [101.0] * 100,
+                "volume": [1000.0] * 100,
+            }
+        )
 
         context = _build_market_context(df, MarketRegime.RISK_OFF)
 
@@ -281,14 +285,16 @@ class TestMarketContextBuilding:
         """Test that recent_ohlcv includes exactly 5 bars."""
         from swarm.orchestrator import _build_market_context
 
-        df = pd.DataFrame({
-            "timestamp": [1704067200000 + i * 3600000 for i in range(100)],
-            "open": [100.0] * 100,
-            "high": [102.0] * 100,
-            "low": [98.0] * 100,
-            "close": [101.0] * 100,
-            "volume": [1000.0] * 100,
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": [1704067200000 + i * 3600000 for i in range(100)],
+                "open": [100.0] * 100,
+                "high": [102.0] * 100,
+                "low": [98.0] * 100,
+                "close": [101.0] * 100,
+                "volume": [1000.0] * 100,
+            }
+        )
 
         context = _build_market_context(df, MarketRegime.NEUTRAL)
 

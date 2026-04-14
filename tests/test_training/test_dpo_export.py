@@ -23,6 +23,7 @@ def sample_context_id():
 @pytest.fixture
 def sample_training_example(sample_context_id):
     """Create a sample training example."""
+
     def _make_example(
         persona: str,
         direction: str,
@@ -45,12 +46,14 @@ def sample_training_example(sample_context_id):
                 "persona": persona,
             },
         )
+
     return _make_example
 
 
 @pytest.fixture
 def sample_verified_outcome():
     """Create a sample verified outcome."""
+
     def _make_outcome(realized_return: float):
         return VerifiedOutcome(
             example_id="ex-123",
@@ -62,12 +65,14 @@ def sample_verified_outcome():
             exit_price=100.0 * (1 + realized_return),
             bars_held=24,
         )
+
     return _make_outcome
 
 
 @pytest.fixture
 def sample_computed_reward():
     """Create a sample computed reward."""
+
     def _make_reward(final_reward: float):
         return ComputedReward(
             final_reward=final_reward,
@@ -90,6 +95,7 @@ def sample_computed_reward():
             market_regime="NEUTRAL",
             reward_version="1.0.0",
         )
+
     return _make_reward
 
 
@@ -145,7 +151,9 @@ class TestValidatePreferencePair:
     ):
         """Test validation fails on context ID mismatch."""
         chosen = sample_training_example("MOMENTUM", "HIGHER", 0.8, "Uptrend", context_id="ctx-1")
-        rejected = sample_training_example("CONTRARIAN", "LOWER", 0.6, "Overbought", context_id="ctx-2")
+        rejected = sample_training_example(
+            "CONTRARIAN", "LOWER", 0.6, "Overbought", context_id="ctx-2"
+        )
 
         chosen_reward = sample_computed_reward(0.8)
         rejected_reward = sample_computed_reward(0.3)
@@ -244,17 +252,23 @@ class TestConstructPreferencePairs:
         # Pairing: (0.8, 0.2) delta=0.6, (0.7, 0.5) delta=0.2, middle (0.6) unpaired
         examples_with_rewards = [
             (
-                sample_training_example("MOMENTUM", "HIGHER", 0.9, "Strong momentum", sample_context_id),
+                sample_training_example(
+                    "MOMENTUM", "HIGHER", 0.9, "Strong momentum", sample_context_id
+                ),
                 sample_verified_outcome(0.05),
                 sample_computed_reward(0.8),
             ),
             (
-                sample_training_example("CONTRARIAN", "LOWER", 0.7, "Overbought", sample_context_id),
+                sample_training_example(
+                    "CONTRARIAN", "LOWER", 0.7, "Overbought", sample_context_id
+                ),
                 sample_verified_outcome(-0.04),
                 sample_computed_reward(0.2),
             ),
             (
-                sample_training_example("MEAN_REVERSION", "LOWER", 0.6, "Mean reversion", sample_context_id),
+                sample_training_example(
+                    "MEAN_REVERSION", "LOWER", 0.6, "Mean reversion", sample_context_id
+                ),
                 sample_verified_outcome(-0.01),
                 sample_computed_reward(0.5),
             ),
@@ -264,7 +278,9 @@ class TestConstructPreferencePairs:
                 sample_computed_reward(0.7),
             ),
             (
-                sample_training_example("CONSERVATIVE", "HIGHER", 0.5, "Conservative", sample_context_id),
+                sample_training_example(
+                    "CONSERVATIVE", "HIGHER", 0.5, "Conservative", sample_context_id
+                ),
                 sample_verified_outcome(0.01),
                 sample_computed_reward(0.6),
             ),
@@ -307,7 +323,9 @@ class TestConstructPreferencePairs:
                 sample_computed_reward(0.8),
             ),
             (
-                sample_training_example("CONTRARIAN", "LOWER", 0.7, "Contrarian", sample_context_id),
+                sample_training_example(
+                    "CONTRARIAN", "LOWER", 0.7, "Contrarian", sample_context_id
+                ),
                 sample_verified_outcome(-0.03),
                 sample_computed_reward(0.3),
             ),

@@ -108,9 +108,7 @@ class OllamaClient:
 
         # VRAM safety: verify keep_alive=0
         if settings.ollama.keep_alive != 0:
-            raise ValueError(
-                f"VRAM safety: keep_alive must be 0, got {settings.ollama.keep_alive}"
-            )
+            raise ValueError(f"VRAM safety: keep_alive must be 0, got {settings.ollama.keep_alive}")
 
         # Model exclusion lock
         self._model_lock = asyncio.Semaphore(1)
@@ -228,7 +226,7 @@ class OllamaClient:
 
             except RETRYABLE_ERRORS as e:
                 last_exception = e
-                delay = min(base_delay * (2 ** attempt), 30.0)
+                delay = min(base_delay * (2**attempt), 30.0)
                 logger.warning(
                     "Retryable error, backing off",
                     attempt=attempt + 1,
@@ -283,9 +281,7 @@ class OllamaClient:
         try:
             async with self._session.post(url, json=payload) as resp:
                 if resp.status == 404:
-                    raise ModelNotFoundError(
-                        f"Model '{model}' not found. Run: ollama pull {model}"
-                    )
+                    raise ModelNotFoundError(f"Model '{model}' not found. Run: ollama pull {model}")
 
                 if resp.status == 500:
                     error_text = await resp.text()
@@ -333,7 +329,9 @@ class OllamaClient:
         url = f"{self.base_url}/api/generate"
 
         try:
-            async with self._session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with self._session.post(
+                url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 if resp.status == 200:
                     logger.debug("Model unloaded", model=model)
                 else:

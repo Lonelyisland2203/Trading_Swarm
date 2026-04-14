@@ -159,8 +159,7 @@ def create_walk_forward_splits(
     total_training = len(train_pairs) + len(replay_pairs)
     if total_training < min_training_pairs:
         raise TemporalSplitError(
-            f"Insufficient training pairs: have {total_training}, "
-            f"need {min_training_pairs} minimum"
+            f"Insufficient training pairs: have {total_training}, need {min_training_pairs} minimum"
         )
 
     logger.info(

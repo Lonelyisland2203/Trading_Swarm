@@ -52,6 +52,7 @@ if sys.platform == "win32":
 # Phase 1 – Load & filter
 # --------------------------------------------------------------------------- #
 
+
 def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
     """Load examples from JSONL and filter to those with verifiable signals."""
     logger.info("Phase 1: Loading examples", path=str(jsonl_path))
@@ -67,7 +68,8 @@ def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
         return sig.get("direction") or sig.get("signal_data", {}).get("direction")
 
     verifiable = [
-        ex for ex in all_examples
+        ex
+        for ex in all_examples
         if _extract_direction(ex.generator_signal) in ("HIGHER", "LOWER", "FLAT")
     ]
     dropped = len(all_examples) - len(verifiable)
@@ -92,8 +94,12 @@ def phase1_load(jsonl_path: Path) -> list[TrainingExample]:
 # Phase 2 – Verify
 # --------------------------------------------------------------------------- #
 
-async def _run_verify(examples: list[TrainingExample], fee_model: FeeModelSettings) -> list[VerifiedOutcome]:
+
+async def _run_verify(
+    examples: list[TrainingExample], fee_model: FeeModelSettings
+) -> list[VerifiedOutcome]:
     from data.market_data import MarketDataService
+
     async with MarketDataService() as svc:
         return await verify_batch(examples, svc, fee_model=fee_model)
 
@@ -204,12 +210,10 @@ def compute_fee_flip_diagnostic(
     )
     print()
     print(
-        "Timeframe | Total Examples | Flipped to Negative | Flip Rate | "
-        "Avg Old Net | Avg New Net"
+        "Timeframe | Total Examples | Flipped to Negative | Flip Rate | Avg Old Net | Avg New Net"
     )
     print(
-        "----------|----------------|---------------------|-----------|"
-        "-------------|-------------"
+        "----------|----------------|---------------------|-----------|-------------|-------------"
     )
 
     total_examples = 0
@@ -226,8 +230,7 @@ def compute_fee_flip_diagnostic(
         total_flipped += stats["flipped"]
 
     print(
-        "----------|----------------|---------------------|-----------|"
-        "-------------|-------------"
+        "----------|----------------|---------------------|-----------|-------------|-------------"
     )
     overall_flip_rate = total_flipped / total_examples if total_examples > 0 else 0
     print(
@@ -255,8 +258,7 @@ def compute_fee_flip_diagnostic(
                 "signals may not clear fee hurdle."
             )
             print(
-                "Consider focusing training on longer timeframes or increasing "
-                "signal selectivity."
+                "Consider focusing training on longer timeframes or increasing signal selectivity."
             )
             print()
 
@@ -264,6 +266,7 @@ def compute_fee_flip_diagnostic(
 # --------------------------------------------------------------------------- #
 # Phase 3 – Reward
 # --------------------------------------------------------------------------- #
+
 
 def phase3_reward(
     matched: list[tuple[TrainingExample, VerifiedOutcome]],
@@ -299,6 +302,7 @@ def phase3_reward(
 # Phase 4 – Preference pairs
 # --------------------------------------------------------------------------- #
 
+
 def phase4_pairs(
     examples_with_rewards: list[tuple[TrainingExample, VerifiedOutcome, ComputedReward]],
     min_delta: float,
@@ -329,6 +333,7 @@ def phase4_pairs(
 # --------------------------------------------------------------------------- #
 # Phase 5 – Train
 # --------------------------------------------------------------------------- #
+
 
 def save_test_eval_data(
     pairs: list[PreferencePair],
@@ -387,29 +392,31 @@ def save_test_eval_data(
             outcome = outcome_map[example_id]
             reward = reward_map[example_id]
 
-            records.append({
-                "example_id": ex.example_id,
-                "context_id": ex.context_id,
-                "symbol": ex.symbol,
-                "timeframe": ex.timeframe,
-                "timestamp_ms": ex.timestamp_ms,
-                "market_regime": ex.market_regime,
-                "persona": ex.persona,
-                "task_prompt": ex.task_prompt,
-                "generator_signal": ex.generator_signal,
-                # Verified outcome fields
-                "realized_return": outcome.realized_return,
-                "net_return": outcome.net_return,
-                "actual_direction": outcome.actual_direction,
-                "max_adverse_excursion": outcome.max_adverse_excursion,
-                "entry_price": outcome.entry_price,
-                "exit_price": outcome.exit_price,
-                # Reward fields
-                "final_reward": reward.final_reward,
-                "return_reward": reward.return_reward,
-                "directional_reward": reward.directional_reward,
-                "mae_reward": reward.mae_reward,
-            })
+            records.append(
+                {
+                    "example_id": ex.example_id,
+                    "context_id": ex.context_id,
+                    "symbol": ex.symbol,
+                    "timeframe": ex.timeframe,
+                    "timestamp_ms": ex.timestamp_ms,
+                    "market_regime": ex.market_regime,
+                    "persona": ex.persona,
+                    "task_prompt": ex.task_prompt,
+                    "generator_signal": ex.generator_signal,
+                    # Verified outcome fields
+                    "realized_return": outcome.realized_return,
+                    "net_return": outcome.net_return,
+                    "actual_direction": outcome.actual_direction,
+                    "max_adverse_excursion": outcome.max_adverse_excursion,
+                    "entry_price": outcome.entry_price,
+                    "exit_price": outcome.exit_price,
+                    # Reward fields
+                    "final_reward": reward.final_reward,
+                    "return_reward": reward.return_reward,
+                    "directional_reward": reward.directional_reward,
+                    "mae_reward": reward.mae_reward,
+                }
+            )
 
     if not records:
         logger.warning("No test eval records to save")
@@ -461,6 +468,7 @@ def phase5_train(pairs: list[PreferencePair], force: bool) -> None:
 # Fee Model Helper
 # --------------------------------------------------------------------------- #
 
+
 def create_fee_model(mode: str) -> FeeModelSettings | None:
     """
     Create fee model based on selected mode.
@@ -494,6 +502,7 @@ def create_fee_model(mode: str) -> FeeModelSettings | None:
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

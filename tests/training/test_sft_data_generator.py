@@ -119,12 +119,15 @@ DECISION: LONG"""
         result = parse_reasoning_trace(trace)
         assert result is None
 
-    @pytest.mark.parametrize("missing_section", [
-        "THESIS:",
-        "EVIDENCE:",
-        "RISK:",
-        "DECISION:",
-    ])
+    @pytest.mark.parametrize(
+        "missing_section",
+        [
+            "THESIS:",
+            "EVIDENCE:",
+            "RISK:",
+            "DECISION:",
+        ],
+    )
     def test_each_missing_section_returns_none(self, missing_section: str) -> None:
         """Each required section must be present."""
         from training.sft_data_generator import parse_reasoning_trace
@@ -170,9 +173,7 @@ class TestBuildMarketSnapshot:
         assert "## Execution Context" in snapshot
         assert "round-trip cost:" in snapshot
 
-    def test_snapshot_uses_fee_model_costs(
-        self, sample_ohlcv_df: pd.DataFrame
-    ) -> None:
+    def test_snapshot_uses_fee_model_costs(self, sample_ohlcv_df: pd.DataFrame) -> None:
         """Snapshot reflects fee model costs."""
         from training.sft_data_generator import build_market_snapshot
 
@@ -358,9 +359,7 @@ class TestPreflightOrder:
     """Tests for pre-flight check order enforcement."""
 
     @patch("training.sft_data_generator.settings")
-    async def test_preflight_checks_data_first(
-        self, mock_settings: MagicMock
-    ) -> None:
+    async def test_preflight_checks_data_first(self, mock_settings: MagicMock) -> None:
         """Pre-flight checks DATA availability first."""
         from training.sft_data_generator import preflight_checks
 
@@ -451,7 +450,7 @@ class TestLoadCompletedIds:
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"example_id": "valid_1"}\n')
-            f.write('not valid json\n')
+            f.write("not valid json\n")
             f.write('{"no_id_field": true}\n')
             f.write('{"example_id": "valid_2"}\n')
             path = Path(f.name)

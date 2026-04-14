@@ -156,13 +156,13 @@ class TestCritiqueExtraction:
 
     def test_extract_direct_json(self):
         """Test extraction from direct JSON."""
-        response = '''{
+        response = """{
             "reasoning_quality": 0.8,
             "technical_alignment": 0.7,
             "confidence_calibration": 0.6,
             "critique": "Strong analysis with good technical support",
             "recommendation": "ACCEPT"
-        }'''
+        }"""
 
         critique = extract_critique(response)
 
@@ -174,7 +174,7 @@ class TestCritiqueExtraction:
 
     def test_extract_from_markdown_fences(self):
         """Test extraction from JSON in markdown code fences."""
-        response = '''Here is my critique:
+        response = """Here is my critique:
 ```json
 {
     "reasoning_quality": 0.5,
@@ -184,7 +184,7 @@ class TestCritiqueExtraction:
     "recommendation": "REJECT"
 }
 ```
-Hope this helps!'''
+Hope this helps!"""
 
         critique = extract_critique(response)
 
@@ -193,12 +193,12 @@ Hope this helps!'''
 
     def test_extract_with_regex_fallback(self):
         """Test regex extraction as last resort."""
-        response = '''My analysis:
+        response = """My analysis:
         "reasoning_quality": 0.7,
         "technical_alignment": 0.8,
         "confidence_calibration": 0.65,
         "recommendation": "ACCEPT"
-        '''
+        """
 
         critique = extract_critique(response)
 
@@ -210,13 +210,13 @@ Hope this helps!'''
 
     def test_extract_invalid_recommendation_raises_error(self):
         """Test that invalid recommendation raises ValueError."""
-        response = '''{
+        response = """{
             "reasoning_quality": 0.7,
             "technical_alignment": 0.6,
             "confidence_calibration": 0.5,
             "critique": "Test",
             "recommendation": "MAYBE"
-        }'''
+        }"""
 
         with pytest.raises(ValueError, match="Invalid recommendation"):
             extract_critique(response)
@@ -224,36 +224,36 @@ Hope this helps!'''
     def test_extract_scores_clamped(self):
         """Test that scores are clamped to [0, 1]."""
         # Too high
-        response1 = '''{
+        response1 = """{
             "reasoning_quality": 1.5,
             "technical_alignment": 0.6,
             "confidence_calibration": 0.5,
             "critique": "Test",
             "recommendation": "ACCEPT"
-        }'''
+        }"""
         critique1 = extract_critique(response1)
         assert critique1.reasoning_quality == 1.0
 
         # Too low
-        response2 = '''{
+        response2 = """{
             "reasoning_quality": 0.5,
             "technical_alignment": -0.2,
             "confidence_calibration": 0.5,
             "critique": "Test",
             "recommendation": "REJECT"
-        }'''
+        }"""
         critique2 = extract_critique(response2)
         assert critique2.technical_alignment == 0.0
 
     def test_extract_case_insensitive_recommendation(self):
         """Test that recommendation matching is case-insensitive."""
-        response = '''{
+        response = """{
             "reasoning_quality": 0.7,
             "technical_alignment": 0.6,
             "confidence_calibration": 0.5,
             "critique": "Test",
             "recommendation": "accept"
-        }'''
+        }"""
 
         critique = extract_critique(response)
         assert critique.recommendation == "ACCEPT"  # Normalized to uppercase
@@ -267,25 +267,25 @@ Hope this helps!'''
 
     def test_extract_preserves_raw_response(self):
         """Test that raw response is preserved in critique."""
-        response = '''{
+        response = """{
             "reasoning_quality": 0.7,
             "technical_alignment": 0.6,
             "confidence_calibration": 0.5,
             "critique": "Test",
             "recommendation": "UNCERTAIN"
-        }'''
+        }"""
 
         critique = extract_critique(response)
         assert critique.raw_response == response
 
     def test_extract_handles_missing_critique_field(self):
         """Test that missing critique field is handled gracefully."""
-        response = '''{
+        response = """{
             "reasoning_quality": 0.7,
             "technical_alignment": 0.6,
             "confidence_calibration": 0.5,
             "recommendation": "ACCEPT"
-        }'''
+        }"""
 
         critique = extract_critique(response)
         assert critique.critique == ""  # Empty string for missing critique
@@ -301,7 +301,11 @@ class TestCritiquePrompt:
         template_lower = CRITIQUE_TEMPLATE.lower()
 
         # Template uses objective framing (rewritten from adversarial to balanced)
-        assert "objective" in template_lower or "fairly" in template_lower or "accurately" in template_lower
+        assert (
+            "objective" in template_lower
+            or "fairly" in template_lower
+            or "accurately" in template_lower
+        )
         assert "specific" in template_lower  # Still requires specific citations
 
     def test_prompt_requires_specific_citations(self):

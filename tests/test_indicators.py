@@ -34,14 +34,16 @@ def sample_ohlcv_df():
     n = 100
     timestamps = [1704067200000 + i * 3600000 for i in range(n)]  # Hourly
 
-    df = pd.DataFrame({
-        "timestamp": timestamps,
-        "open": np.random.uniform(99, 101, n),
-        "high": np.random.uniform(100, 102, n),
-        "low": np.random.uniform(98, 100, n),
-        "close": np.random.uniform(99, 101, n),
-        "volume": np.random.uniform(1000, 2000, n),
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "open": np.random.uniform(99, 101, n),
+            "high": np.random.uniform(100, 102, n),
+            "low": np.random.uniform(98, 100, n),
+            "close": np.random.uniform(99, 101, n),
+            "volume": np.random.uniform(1000, 2000, n),
+        }
+    )
 
     # Ensure OHLC relationship
     df["high"] = df[["open", "close", "high"]].max(axis=1)
@@ -75,7 +77,7 @@ class TestRSI:
 
         # First values before period should be NaN (EWM starts at min_periods)
         # EWM with min_periods=14 starts producing values at index 13
-        assert rsi.iloc[:period-1].isna().all()
+        assert rsi.iloc[: period - 1].isna().all()
         # After warmup, should have values
         assert not rsi.iloc[period:].isna().all()
 
@@ -101,19 +103,12 @@ class TestMACD:
         valid_idx = ~(macd_line.isna() | signal_line.isna() | histogram.isna())
         diff = macd_line[valid_idx] - signal_line[valid_idx]
 
-        np.testing.assert_array_almost_equal(
-            diff.values,
-            histogram[valid_idx].values,
-            decimal=6
-        )
+        np.testing.assert_array_almost_equal(diff.values, histogram[valid_idx].values, decimal=6)
 
     def test_macd_custom_parameters(self, sample_price_data):
         """Test MACD with custom parameters."""
         macd_line, signal_line, histogram = compute_macd(
-            sample_price_data,
-            fast_period=8,
-            slow_period=17,
-            signal_period=9
+            sample_price_data, fast_period=8, slow_period=17, signal_period=9
         )
 
         assert len(macd_line) == len(sample_price_data)
@@ -171,14 +166,16 @@ class TestValidateOHLCV:
 
     def test_invalid_ohlc_relationship_removed(self):
         """Test that bars with invalid OHLC are removed."""
-        df = pd.DataFrame({
-            "timestamp": [1, 2, 3],
-            "open": [100, 100, 100],
-            "high": [102, 102, 102],
-            "low": [98, 98, 105],  # Invalid: low > high
-            "close": [101, 101, 101],
-            "volume": [1000, 1000, 1000],
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": [1, 2, 3],
+                "open": [100, 100, 100],
+                "high": [102, 102, 102],
+                "low": [98, 98, 105],  # Invalid: low > high
+                "close": [101, 101, 101],
+                "volume": [1000, 1000, 1000],
+            }
+        )
 
         result = validate_ohlcv(df)
         # Should remove the invalid bar
@@ -206,23 +203,23 @@ class TestValidateOHLCV:
 
     def test_data_sorted_by_timestamp(self):
         """Test that output is sorted by timestamp."""
-        df = pd.DataFrame({
-            "timestamp": [3, 1, 2],
-            "open": [100, 100, 100],
-            "high": [102, 102, 102],
-            "low": [98, 98, 98],
-            "close": [101, 101, 101],
-            "volume": [1000, 1000, 1000],
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": [3, 1, 2],
+                "open": [100, 100, 100],
+                "high": [102, 102, 102],
+                "low": [98, 98, 98],
+                "close": [101, 101, 101],
+                "volume": [1000, 1000, 1000],
+            }
+        )
 
         result = validate_ohlcv(df)
         assert list(result["timestamp"]) == [1, 2, 3]
 
     def test_empty_dataframe_raises_error(self):
         """Test that empty DataFrame raises ValueError."""
-        empty_df = pd.DataFrame(
-            columns=["timestamp", "open", "high", "low", "close", "volume"]
-        )
+        empty_df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
 
         with pytest.raises(ValueError, match="empty"):
             validate_ohlcv(empty_df)

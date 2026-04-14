@@ -85,7 +85,9 @@ class TestPreferencePairNetRanking:
         net_return_b_pct = (math.exp(net_log_b) - 1) * 100
 
         # Verify net returns match expectations
-        assert net_return_a_pct > 0.20, f"Example A net return {net_return_a_pct:.3f}% should be > 0.20%"
+        assert net_return_a_pct > 0.20, (
+            f"Example A net return {net_return_a_pct:.3f}% should be > 0.20%"
+        )
         assert net_return_b_pct < 0, f"Example B net return {net_return_b_pct:.3f}% should be < 0%"
 
         # Create verified outcomes with net returns
@@ -157,8 +159,12 @@ class TestPreferencePairNetRanking:
         )
 
         # Verify that rewards are based on net returns
-        assert reward_a.net_return > 0.20, f"Example A net_return {reward_a.net_return:.3f} should be > 0.20%"
-        assert reward_b.net_return < 0, f"Example B net_return {reward_b.net_return:.3f} should be < 0%"
+        assert reward_a.net_return > 0.20, (
+            f"Example A net_return {reward_a.net_return:.3f} should be > 0.20%"
+        )
+        assert reward_b.net_return < 0, (
+            f"Example B net_return {reward_b.net_return:.3f} should be < 0%"
+        )
 
     def test_construct_preference_pairs_chooses_net_profitable(self, fee_model, context_id):
         """
@@ -312,9 +318,7 @@ class TestPreferencePairNetRanking:
         )
 
         # Verify reward delta
-        assert pair.reward_delta > 0.2, (
-            f"Reward delta should be > 0.2, got {pair.reward_delta:.3f}"
-        )
+        assert pair.reward_delta > 0.2, f"Reward delta should be > 0.2, got {pair.reward_delta:.3f}"
 
         # Verify that chosen reward > rejected reward
         assert pair.chosen_reward > pair.rejected_reward, (
@@ -408,7 +412,9 @@ class TestPreferencePairNetRanking:
         reward_b = compute_reward(outcome_b, example_b)
 
         # Verify net returns
-        assert net_return_a_pct > 0.15, f"Example A net return {net_return_a_pct:.3f}% should be > 0.15%"
+        assert net_return_a_pct > 0.15, (
+            f"Example A net return {net_return_a_pct:.3f}% should be > 0.15%"
+        )
         assert net_return_b_pct > net_return_a_pct, (
             f"Example B net return {net_return_b_pct:.3f}% should be > Example A {net_return_a_pct:.3f}%"
         )

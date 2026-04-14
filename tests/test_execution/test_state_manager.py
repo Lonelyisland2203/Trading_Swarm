@@ -79,10 +79,7 @@ class TestStateManager:
         # Create stats for yesterday
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         old_stats = DailyStats(
-            date=yesterday,
-            trade_count=10,
-            realized_pnl=-200.0,
-            starting_balance=10000.0
+            date=yesterday, trade_count=10, realized_pnl=-200.0, starting_balance=10000.0
         )
 
         # Manually write yesterday's stats
@@ -125,7 +122,7 @@ class TestStateManager:
             "symbol": "BTCUSDT",
             "side": "buy",
             "amount": 0.001,
-            "price": 50000.0
+            "price": 50000.0,
         }
 
         state_manager.log_order(order_data)

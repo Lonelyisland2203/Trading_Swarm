@@ -7,12 +7,12 @@ Defines timeframe-specific horizons and transaction cost defaults.
 # Timeframe-adaptive forward measurement windows
 # Maps timeframe -> number of bars to measure forward return
 HORIZON_BARS: dict[str, int] = {
-    "1m": 60,    # 1 hour  - scalping signals
-    "5m": 48,    # 4 hours - intraday swing
-    "15m": 24,   # 6 hours - intraday position
-    "1h": 24,    # 24 hours - day trade
-    "4h": 12,    # 48 hours - swing trade
-    "1d": 5,     # 5 days - position trade
+    "1m": 60,  # 1 hour  - scalping signals
+    "5m": 48,  # 4 hours - intraday swing
+    "15m": 24,  # 6 hours - intraday position
+    "1h": 24,  # 24 hours - day trade
+    "4h": 12,  # 48 hours - swing trade
+    "1d": 5,  # 5 days - position trade
 }
 
 # Default transaction cost (conservative estimate)
@@ -42,9 +42,7 @@ def get_horizon_bars(timeframe: str) -> int:
     """
     if timeframe not in HORIZON_BARS:
         valid = ", ".join(sorted(HORIZON_BARS.keys()))
-        raise ValueError(
-            f"Unknown timeframe: '{timeframe}'. Valid timeframes: {valid}"
-        )
+        raise ValueError(f"Unknown timeframe: '{timeframe}'. Valid timeframes: {valid}")
 
     return HORIZON_BARS[timeframe]
 

@@ -18,7 +18,7 @@ def mock_ollama_response():
                 "name": "deepseek-r1:14b",
                 "modified_at": "2024-01-01T00:00:00Z",
                 "size": 8200000000,
-            }
+            },
         ]
     }
 
@@ -82,18 +82,22 @@ def env_vars(monkeypatch, tmp_path):
 @pytest.fixture
 def mock_market_data_service():
     """Factory for mock market data service."""
+
     def _create_mock(return_df):
         mock_service = MagicMock()
         mock_service.get_ohlcv_as_of = AsyncMock(return_value=return_df)
         return mock_service
+
     return _create_mock
 
 
 @pytest.fixture
 def mock_market_data_service_exception():
     """Factory for mock market data service that raises exception."""
+
     def _create_mock(exception):
         mock_service = MagicMock()
         mock_service.get_ohlcv_as_of = AsyncMock(side_effect=exception)
         return mock_service
+
     return _create_mock

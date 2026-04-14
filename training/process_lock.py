@@ -41,7 +41,10 @@ if sys.platform == "win32":
         if not _k32.LockFileEx(
             handle,
             _LOCKFILE_EXCLUSIVE_LOCK | _LOCKFILE_FAIL_IMMEDIATELY,
-            0, 1, 0, ctypes.byref(ovlp),
+            0,
+            1,
+            0,
+            ctypes.byref(ovlp),
         ):
             raise OSError("Could not acquire exclusive lock")
 
@@ -51,7 +54,10 @@ if sys.platform == "win32":
         if not _k32.LockFileEx(
             handle,
             _LOCKFILE_FAIL_IMMEDIATELY,  # No EXCLUSIVE flag → shared
-            0, 1, 0, ctypes.byref(ovlp),
+            0,
+            1,
+            0,
+            ctypes.byref(ovlp),
         ):
             raise OSError("Could not acquire shared lock")
 
@@ -84,6 +90,7 @@ LOCK_DIR = Path.home() / "Trading Swarm" / ".locks"
 
 class ProcessLockError(Exception):
     """Raised when process lock cannot be acquired."""
+
     pass
 
 

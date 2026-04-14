@@ -87,40 +87,28 @@ class TestWindowTimestampCalculation:
         current_ts = 1704067200000
 
         # 1m timeframe
-        ts_1m = calculate_window_timestamps(
-            current_ts, "1m", window_count=2, stride_bars=100
-        )
+        ts_1m = calculate_window_timestamps(current_ts, "1m", window_count=2, stride_bars=100)
         assert ts_1m[1] == current_ts - (100 * 60_000)
 
         # 1d timeframe
-        ts_1d = calculate_window_timestamps(
-            current_ts, "1d", window_count=2, stride_bars=10
-        )
+        ts_1d = calculate_window_timestamps(current_ts, "1d", window_count=2, stride_bars=10)
         assert ts_1d[1] == current_ts - (10 * 86_400_000)
 
     def test_invalid_window_count_raises(self):
         """Test invalid window_count raises ValueError."""
         with pytest.raises(ValueError, match="window_count must be >= 1"):
-            calculate_window_timestamps(
-                1704067200000, "1h", window_count=0, stride_bars=100
-            )
+            calculate_window_timestamps(1704067200000, "1h", window_count=0, stride_bars=100)
 
         with pytest.raises(ValueError, match="window_count must be >= 1"):
-            calculate_window_timestamps(
-                1704067200000, "1h", window_count=-1, stride_bars=100
-            )
+            calculate_window_timestamps(1704067200000, "1h", window_count=-1, stride_bars=100)
 
     def test_invalid_stride_raises(self):
         """Test invalid stride_bars raises ValueError."""
         with pytest.raises(ValueError, match="stride_bars must be >= 1"):
-            calculate_window_timestamps(
-                1704067200000, "1h", window_count=3, stride_bars=0
-            )
+            calculate_window_timestamps(1704067200000, "1h", window_count=3, stride_bars=0)
 
         with pytest.raises(ValueError, match="stride_bars must be >= 1"):
-            calculate_window_timestamps(
-                1704067200000, "1h", window_count=3, stride_bars=-10
-            )
+            calculate_window_timestamps(1704067200000, "1h", window_count=3, stride_bars=-10)
 
 
 class TestDataCompleteness:
@@ -159,14 +147,16 @@ class TestFetchWindowData:
         """Test successful window data fetch."""
         # Create mock data
         timestamps = [1704067200000 + i * 3_600_000 for i in range(100)]
-        mock_df = pd.DataFrame({
-            "timestamp": timestamps,
-            "open": [50000.0] * 100,
-            "high": [50100.0] * 100,
-            "low": [49900.0] * 100,
-            "close": [50000.0 + i * 10 for i in range(100)],
-            "volume": [100.0] * 100,
-        })
+        mock_df = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "open": [50000.0] * 100,
+                "high": [50100.0] * 100,
+                "low": [49900.0] * 100,
+                "close": [50000.0 + i * 10 for i in range(100)],
+                "volume": [100.0] * 100,
+            }
+        )
 
         mock_service = mock_market_data_service(mock_df)
 
@@ -188,14 +178,16 @@ class TestFetchWindowData:
         """Test returns None when completeness below threshold."""
         # Create incomplete data (only 90 bars)
         timestamps = [1704067200000 + i * 3_600_000 for i in range(90)]
-        mock_df = pd.DataFrame({
-            "timestamp": timestamps,
-            "open": [50000.0] * 90,
-            "high": [50100.0] * 90,
-            "low": [49900.0] * 90,
-            "close": [50000.0 + i * 10 for i in range(90)],
-            "volume": [100.0] * 90,
-        })
+        mock_df = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "open": [50000.0] * 90,
+                "high": [50100.0] * 90,
+                "low": [49900.0] * 90,
+                "close": [50000.0 + i * 10 for i in range(90)],
+                "volume": [100.0] * 90,
+            }
+        )
 
         mock_service = mock_market_data_service(mock_df)
 
@@ -215,14 +207,16 @@ class TestFetchWindowData:
         """Test custom completeness threshold."""
         # Create data with 90% completeness
         timestamps = [1704067200000 + i * 3_600_000 for i in range(90)]
-        mock_df = pd.DataFrame({
-            "timestamp": timestamps,
-            "open": [50000.0] * 90,
-            "high": [50100.0] * 90,
-            "low": [49900.0] * 90,
-            "close": [50000.0 + i * 10 for i in range(90)],
-            "volume": [100.0] * 90,
-        })
+        mock_df = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "open": [50000.0] * 90,
+                "high": [50100.0] * 90,
+                "low": [49900.0] * 90,
+                "close": [50000.0 + i * 10 for i in range(90)],
+                "volume": [100.0] * 90,
+            }
+        )
 
         mock_service = mock_market_data_service(mock_df)
 
@@ -257,9 +251,7 @@ class TestFetchWindowData:
 
     async def test_service_exception_returns_none(self, mock_market_data_service_exception):
         """Test returns None when service raises exception."""
-        mock_service = mock_market_data_service_exception(
-            Exception("Connection error")
-        )
+        mock_service = mock_market_data_service_exception(Exception("Connection error"))
 
         window = HistoricalWindow(
             symbol="BTC/USDT",

@@ -92,18 +92,14 @@ class TestRewardWeights:
             RewardWeights(
                 return_weight=0.6,  # This makes total > 1.0
                 directional_weight=0.3,
-                mae_weight=0.2
+                mae_weight=0.2,
             )
 
         assert "must sum to 1.0" in str(exc_info.value)
 
     def test_custom_valid_weights(self):
         """Test custom weights that sum to 1.0."""
-        weights = RewardWeights(
-            return_weight=0.5,
-            directional_weight=0.3,
-            mae_weight=0.2
-        )
+        weights = RewardWeights(return_weight=0.5, directional_weight=0.3, mae_weight=0.2)
         total = weights.return_weight + weights.directional_weight + weights.mae_weight
         assert abs(total - 1.0) < 1e-6
 
@@ -152,7 +148,7 @@ class TestAppSettings:
     def test_app_settings_has_fee_model(self):
         """Test AppSettings includes fee_model field."""
         settings = AppSettings()
-        assert hasattr(settings, 'fee_model')
+        assert hasattr(settings, "fee_model")
         assert isinstance(settings.fee_model, FeeModelSettings)
 
     def test_fee_model_env_var_mapping(self, monkeypatch):
@@ -212,9 +208,9 @@ class TestAppSettings:
         # Verify nested validation works
         assert settings.ollama.keep_alive == 0
         total_weights = (
-            settings.reward.return_weight +
-            settings.reward.directional_weight +
-            settings.reward.mae_weight
+            settings.reward.return_weight
+            + settings.reward.directional_weight
+            + settings.reward.mae_weight
         )
         assert abs(total_weights - 1.0) < 1e-6
 
@@ -226,6 +222,7 @@ class TestValidateOllamaModels:
     async def test_both_models_available(self, mock_ollama_client, monkeypatch, env_vars):
         """Test successful validation when both models are available."""
         import aiohttp
+
         monkeypatch.setattr(aiohttp, "ClientSession", lambda: mock_ollama_client)
 
         result = await validate_ollama_models()
@@ -252,6 +249,7 @@ class TestValidateOllamaModels:
         mock_session.__aexit__ = AsyncMock(return_value=None)
 
         import aiohttp
+
         monkeypatch.setattr(aiohttp, "ClientSession", lambda: mock_session)
 
         result = await validate_ollama_models()

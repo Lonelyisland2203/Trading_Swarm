@@ -26,11 +26,7 @@ class TestCacheKeyGeneration:
 
     def test_deterministic_generation_cached(self):
         """Test that deterministic generations (temp=0) produce cache keys."""
-        key = make_llm_cache_key(
-            "qwen3:8b",
-            "Test prompt",
-            {"temperature": 0.0, "top_p": 1.0}
-        )
+        key = make_llm_cache_key("qwen3:8b", "Test prompt", {"temperature": 0.0, "top_p": 1.0})
         assert key is not None
         assert key.startswith("llm:")
 
@@ -121,13 +117,15 @@ class TestOllamaClient:
         """Mock successful Ollama response."""
         mock_resp = MagicMock()
         mock_resp.status = 200
-        mock_resp.json = AsyncMock(return_value={
-            "model": "qwen3:8b",
-            "response": '{"direction": "HIGHER", "confidence": 0.75, "reasoning": "Test"}',
-            "done": True,
-            "prompt_eval_count": 100,
-            "eval_count": 50,
-        })
+        mock_resp.json = AsyncMock(
+            return_value={
+                "model": "qwen3:8b",
+                "response": '{"direction": "HIGHER", "confidence": 0.75, "reasoning": "Test"}',
+                "done": True,
+                "prompt_eval_count": 100,
+                "eval_count": 50,
+            }
+        )
         return mock_resp
 
     async def test_client_initialization_validates_keep_alive(self):
@@ -271,9 +269,7 @@ class TestOllamaClient:
             client._session = mock_session
 
             # Always fail
-            mock_session.post = MagicMock(
-                side_effect=aiohttp.ClientError("Persistent error")
-            )
+            mock_session.post = MagicMock(side_effect=aiohttp.ClientError("Persistent error"))
 
             # aiohttp.ClientError is wrapped in OllamaNetworkError
             with pytest.raises(OllamaNetworkError):

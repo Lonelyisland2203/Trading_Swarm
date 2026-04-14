@@ -50,12 +50,7 @@ class AsyncDiskCache:
         """
         return await asyncio.to_thread(self.cache.get, key, default)
 
-    async def set(
-        self,
-        key: str,
-        value: Any,
-        expire: int | None = None
-    ) -> bool:
+    async def set(self, key: str, value: Any, expire: int | None = None) -> bool:
         """
         Set value in cache asynchronously.
 

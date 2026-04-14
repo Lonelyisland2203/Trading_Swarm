@@ -218,11 +218,17 @@ def _check_promotion_cooldown() -> tuple[bool, str]:
     if recent_promotions:
         last_promotion = max(recent_promotions, key=lambda r: r.get("timestamp", 0))
         hours_ago = (now - last_promotion.get("timestamp", 0)) / 3600
-        return False, f"Cooldown active: last promotion {hours_ago:.1f}h ago (need {PROMOTION_COOLDOWN_HOURS}h)"
+        return (
+            False,
+            f"Cooldown active: last promotion {hours_ago:.1f}h ago (need {PROMOTION_COOLDOWN_HOURS}h)",
+        )
 
     # Check weekly rate limit
     if week_promotions >= MAX_PROMOTIONS_PER_WEEK:
-        return False, f"Weekly limit reached: {week_promotions}/{MAX_PROMOTIONS_PER_WEEK} promotions this week"
+        return (
+            False,
+            f"Weekly limit reached: {week_promotions}/{MAX_PROMOTIONS_PER_WEEK} promotions this week",
+        )
 
     return True, "Promotion allowed"
 

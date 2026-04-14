@@ -16,6 +16,7 @@ from training.process_lock import (
 def _hold_training_lock(ready_event=None):
     """Subprocess: hold training lock for 2 seconds."""
     import time
+
     with acquire_training_lock():
         if ready_event is not None:
             ready_event.set()  # Signal that lock is acquired
@@ -25,6 +26,7 @@ def _hold_training_lock(ready_event=None):
 def _hold_inference_lock(ready_event=None):
     """Subprocess: hold inference lock for 2 seconds."""
     import time
+
     with acquire_inference_lock():
         if ready_event is not None:
             ready_event.set()  # Signal that lock is acquired

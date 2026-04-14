@@ -43,14 +43,16 @@ def create_test_df_bullish(bars: int = 100, base_price: float = 50000.0) -> pd.D
 
     volume = np.random.uniform(1000, 2000, bars)
 
-    df = pd.DataFrame({
-        "timestamp": timestamps_ms,
-        "open": open_prices,
-        "high": high_prices,
-        "low": low_prices,
-        "close": close_prices,
-        "volume": volume,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps_ms,
+            "open": open_prices,
+            "high": high_prices,
+            "low": low_prices,
+            "close": close_prices,
+            "volume": volume,
+        }
+    )
 
     # Ensure OHLC relationship
     df["high"] = df[["open", "close", "high"]].max(axis=1)
@@ -98,14 +100,16 @@ def create_test_df_bearish(bars: int = 100, base_price: float = 50000.0) -> pd.D
 
     volume = np.random.uniform(1000, 2000, bars)
 
-    df = pd.DataFrame({
-        "timestamp": timestamps_ms,
-        "open": open_prices,
-        "high": high_prices,
-        "low": low_prices,
-        "close": close_prices,
-        "volume": volume,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps_ms,
+            "open": open_prices,
+            "high": high_prices,
+            "low": low_prices,
+            "close": close_prices,
+            "volume": volume,
+        }
+    )
 
     # Ensure OHLC relationship
     df["high"] = df[["open", "close", "high"]].max(axis=1)
@@ -150,14 +154,16 @@ def create_test_df_neutral(bars: int = 100, base_price: float = 50000.0) -> pd.D
 
     volume = np.random.uniform(1000, 2000, bars)
 
-    df = pd.DataFrame({
-        "timestamp": timestamps_ms,
-        "open": open_prices,
-        "high": high_prices,
-        "low": low_prices,
-        "close": close_prices,
-        "volume": volume,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps_ms,
+            "open": open_prices,
+            "high": high_prices,
+            "low": low_prices,
+            "close": close_prices,
+            "volume": volume,
+        }
+    )
 
     # Ensure OHLC relationship
     df["high"] = df[["open", "close", "high"]].max(axis=1)

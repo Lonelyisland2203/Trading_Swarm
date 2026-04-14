@@ -11,6 +11,7 @@ print("=" * 60)
 print("\n[1/5] Testing config loading...")
 try:
     from config.settings import settings
+
     print("✓ Config loaded")
     print(f"  - Generator model: {settings.ollama.generator_model}")
     print(f"  - Critic model: {settings.ollama.critic_model}")
@@ -24,10 +25,8 @@ except Exception as e:
 print("\n[2/5] Testing Ollama connection...")
 try:
     import httpx
-    response = httpx.get(
-        f"{settings.ollama.base_url}/api/tags",
-        timeout=5.0
-    )
+
+    response = httpx.get(f"{settings.ollama.base_url}/api/tags", timeout=5.0)
     if response.status_code == 200:
         models = response.json().get("models", [])
         model_names = [m["name"] for m in models]
@@ -52,6 +51,7 @@ except Exception as e:
 print("\n[3/5] Testing market data client...")
 try:
     from data.market_data import MarketDataClient
+
     client = MarketDataClient()
     print("✓ Market data client initialized")
     print(f"  - Exchange: {client.exchange.name}")
@@ -64,6 +64,7 @@ except Exception as e:
 print("\n[4/5] Testing generator...")
 try:
     from swarm.generator import Generator
+
     generator = Generator()
     print("✓ Generator initialized")
     print(f"  - Personas: {settings.swarm.generator_personas}")
@@ -75,6 +76,7 @@ except Exception as e:
 print("\n[5/5] Testing critic...")
 try:
     from swarm.critic import Critic
+
     critic = Critic()
     print("✓ Critic initialized")
     print(f"  - Critique enabled: {settings.swarm.critique_enabled}")
@@ -88,7 +90,11 @@ print("✅ ALL CHECKS PASSED — Trading Swarm is ready!")
 print("=" * 60)
 print("\nNext steps:")
 print("  1. Run a test signal generation:")
-print("     python -c \"from swarm.workflow import run_single_signal; import asyncio; asyncio.run(run_single_signal('BTC/USDT', '1h'))\"")
+print(
+    "     python -c \"from swarm.workflow import run_single_signal; import asyncio; asyncio.run(run_single_signal('BTC/USDT', '1h'))\""
+)
 print("\n  2. Run multi-persona workflow:")
-print("     python -c \"from swarm.multi_persona import run_multi_persona_workflow; import asyncio; asyncio.run(run_multi_persona_workflow())\"")
+print(
+    '     python -c "from swarm.multi_persona import run_multi_persona_workflow; import asyncio; asyncio.run(run_multi_persona_workflow())"'
+)
 print()

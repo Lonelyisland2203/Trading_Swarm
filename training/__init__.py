@@ -56,6 +56,7 @@ def __getattr__(name: str):
     if name in training_exports:
         try:
             from . import dpo_trainer
+
             return getattr(dpo_trainer, name)
         except ImportError as e:
             raise ImportError(

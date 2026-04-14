@@ -8,14 +8,16 @@ import pytest
 def sample_ohlcv():
     """50-bar sample OHLCV data for testing."""
     dates = pd.date_range(start="2024-01-01", periods=50, freq="1h")
-    return pd.DataFrame({
-        "timestamp": dates,
-        "open": [100.0 + i * 0.5 for i in range(50)],
-        "high": [102.0 + i * 0.5 for i in range(50)],
-        "low": [98.0 + i * 0.5 for i in range(50)],
-        "close": [101.0 + i * 0.5 for i in range(50)],
-        "volume": [1000.0 for _ in range(50)],
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": dates,
+            "open": [100.0 + i * 0.5 for i in range(50)],
+            "high": [102.0 + i * 0.5 for i in range(50)],
+            "low": [98.0 + i * 0.5 for i in range(50)],
+            "close": [101.0 + i * 0.5 for i in range(50)],
+            "volume": [1000.0 for _ in range(50)],
+        }
+    )
 
 
 class TestDonchianChannels:
@@ -25,9 +27,7 @@ class TestDonchianChannels:
         """Test Donchian Channels with default 20-period."""
         from data.indicators import compute_donchian_channels
 
-        upper, middle, lower = compute_donchian_channels(
-            sample_ohlcv["high"], sample_ohlcv["low"]
-        )
+        upper, middle, lower = compute_donchian_channels(sample_ohlcv["high"], sample_ohlcv["low"])
 
         assert isinstance(upper, pd.Series)
         assert isinstance(middle, pd.Series)
@@ -112,19 +112,14 @@ class TestIchimokuCloud:
         from data.indicators import compute_ichimoku_cloud
 
         components = compute_ichimoku_cloud(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            sample_ohlcv["close"]
+            sample_ohlcv["high"], sample_ohlcv["low"], sample_ohlcv["close"]
         )
 
         # Check return type
         assert isinstance(components, dict)
 
         # Check all components present
-        expected_keys = {
-            'tenkan_sen', 'kijun_sen', 'senkou_span_a',
-            'senkou_span_b', 'chikou_span'
-        }
+        expected_keys = {"tenkan_sen", "kijun_sen", "senkou_span_a", "senkou_span_b", "chikou_span"}
         assert set(components.keys()) == expected_keys
 
         # Check all are Series
@@ -133,22 +128,20 @@ class TestIchimokuCloud:
             assert len(series) == 50
 
         # Tenkan-sen and Kijun-sen should not be NaN at end (sufficient data)
-        assert not pd.isna(components['tenkan_sen'].iloc[-1])
-        assert not pd.isna(components['kijun_sen'].iloc[-1])
+        assert not pd.isna(components["tenkan_sen"].iloc[-1])
+        assert not pd.isna(components["kijun_sen"].iloc[-1])
 
         # Verify Tenkan-sen calculation at bar 8 (first non-NaN)
         expected_tenkan = (
-            sample_ohlcv["high"].iloc[0:9].max() +
-            sample_ohlcv["low"].iloc[0:9].min()
+            sample_ohlcv["high"].iloc[0:9].max() + sample_ohlcv["low"].iloc[0:9].min()
         ) / 2.0
-        assert abs(components['tenkan_sen'].iloc[8] - expected_tenkan) < 1e-6
+        assert abs(components["tenkan_sen"].iloc[8] - expected_tenkan) < 1e-6
 
         # Verify Kijun-sen calculation at bar 25 (first non-NaN)
         expected_kijun = (
-            sample_ohlcv["high"].iloc[0:26].max() +
-            sample_ohlcv["low"].iloc[0:26].min()
+            sample_ohlcv["high"].iloc[0:26].max() + sample_ohlcv["low"].iloc[0:26].min()
         ) / 2.0
-        assert abs(components['kijun_sen'].iloc[25] - expected_kijun) < 1e-6
+        assert abs(components["kijun_sen"].iloc[25] - expected_kijun) < 1e-6
 
     def test_ichimoku_cloud_insufficient_data(self):
         """Ichimoku with minimal data returns NaN."""
@@ -161,7 +154,7 @@ class TestIchimokuCloud:
         components = compute_ichimoku_cloud(high, low, close)
 
         # Tenkan (9-period) should be NaN with only 3 bars
-        assert pd.isna(components['tenkan_sen'].iloc[-1])
+        assert pd.isna(components["tenkan_sen"].iloc[-1])
 
     def test_ichimoku_cloud_flat_price(self):
         """Ichimoku with flat price returns same values for all lines."""
@@ -174,17 +167,17 @@ class TestIchimokuCloud:
         components = compute_ichimoku_cloud(high, low, close)
 
         # All components should equal 100.0 where not NaN
-        assert abs(components['tenkan_sen'].iloc[-1] - 100.0) < 1e-6
-        assert abs(components['kijun_sen'].iloc[-1] - 100.0) < 1e-6
+        assert abs(components["tenkan_sen"].iloc[-1] - 100.0) < 1e-6
+        assert abs(components["kijun_sen"].iloc[-1] - 100.0) < 1e-6
 
         # Senkou spans shifted forward 26: first valid at index 51
         # (senkou_span_a is (tenkan+kijun)/2 first valid at 25, then shifted 26 -> index 51)
-        assert pd.isna(components['senkou_span_a'].iloc[50])
-        assert abs(components['senkou_span_a'].iloc[51] - 100.0) < 1e-6
+        assert pd.isna(components["senkou_span_a"].iloc[50])
+        assert abs(components["senkou_span_a"].iloc[51] - 100.0) < 1e-6
 
         # Chikou span shifted backward 26: last 26 are NaN
-        assert pd.isna(components['chikou_span'].iloc[-1])
-        assert abs(components['chikou_span'].iloc[0] - 100.0) < 1e-6
+        assert pd.isna(components["chikou_span"].iloc[-1])
+        assert abs(components["chikou_span"].iloc[0] - 100.0) < 1e-6
 
     def test_ichimoku_cloud_custom_periods(self, sample_ohlcv):
         """Test Ichimoku with non-standard periods."""
@@ -197,17 +190,17 @@ class TestIchimokuCloud:
             sample_ohlcv["close"],
             tenkan_period=7,
             kijun_period=22,
-            senkou_span_b_period=44
+            senkou_span_b_period=44,
         )
 
         # Verify periods were actually used by checking NaN positions
         # Tenkan (7-period) should have first 6 NaN, then valid at index 6
-        assert components['tenkan_sen'].iloc[:6].isna().all()
-        assert not pd.isna(components['tenkan_sen'].iloc[6])
+        assert components["tenkan_sen"].iloc[:6].isna().all()
+        assert not pd.isna(components["tenkan_sen"].iloc[6])
 
         # Kijun (22-period) should have first 21 NaN, then valid at index 21
-        assert components['kijun_sen'].iloc[:21].isna().all()
-        assert not pd.isna(components['kijun_sen'].iloc[21])
+        assert components["kijun_sen"].iloc[:21].isna().all()
+        assert not pd.isna(components["kijun_sen"].iloc[21])
 
 
 @pytest.fixture
@@ -348,7 +341,7 @@ class TestVolumeIndicators:
             sample_ohlcv["low"],
             sample_ohlcv["close"],
             sample_ohlcv["volume"],
-            period=20
+            period=20,
         )
 
         assert isinstance(result, pd.Series)
@@ -388,7 +381,7 @@ class TestVolumeIndicators:
             sample_ohlcv["low"],
             sample_ohlcv["close"],
             sample_ohlcv["volume"],
-            period=14
+            period=14,
         )
 
         assert isinstance(result, pd.Series)
@@ -424,10 +417,7 @@ class TestVolumeIndicators:
         from data.indicators import compute_vwap
 
         result = compute_vwap(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            sample_ohlcv["close"],
-            sample_ohlcv["volume"]
+            sample_ohlcv["high"], sample_ohlcv["low"], sample_ohlcv["close"], sample_ohlcv["volume"]
         )
 
         assert isinstance(result, pd.Series)
@@ -436,9 +426,9 @@ class TestVolumeIndicators:
 
         # VWAP should be within reasonable range
         typical_price = (
-            sample_ohlcv["high"].iloc[-1] +
-            sample_ohlcv["low"].iloc[-1] +
-            sample_ohlcv["close"].iloc[-1]
+            sample_ohlcv["high"].iloc[-1]
+            + sample_ohlcv["low"].iloc[-1]
+            + sample_ohlcv["close"].iloc[-1]
         ) / 3.0
         assert abs(result.iloc[-1] - typical_price) < 20.0
 
@@ -495,17 +485,14 @@ class TestVolumeIndicators:
         from data.indicators import compute_vwap
 
         result = compute_vwap(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            sample_ohlcv["close"],
-            sample_ohlcv["volume"]
+            sample_ohlcv["high"], sample_ohlcv["low"], sample_ohlcv["close"], sample_ohlcv["volume"]
         )
 
         # Verify first value equals typical price on bar 0
         expected_first = (
-            sample_ohlcv["high"].iloc[0] +
-            sample_ohlcv["low"].iloc[0] +
-            sample_ohlcv["close"].iloc[0]
+            sample_ohlcv["high"].iloc[0]
+            + sample_ohlcv["low"].iloc[0]
+            + sample_ohlcv["close"].iloc[0]
         ) / 3.0
         assert abs(result.iloc[0] - expected_first) < 1e-6
 
@@ -518,7 +505,7 @@ class TestVolumeIndicators:
             sample_ohlcv["low"],
             sample_ohlcv["close"],
             sample_ohlcv["volume"],
-            period=10
+            period=10,
         )
 
         # First 9 values should be NaN (need 10 bars)
@@ -534,7 +521,7 @@ class TestVolumeIndicators:
             sample_ohlcv["low"],
             sample_ohlcv["close"],
             sample_ohlcv["volume"],
-            period=20
+            period=20,
         )
 
         # First 19 values should be NaN (need 20 bars for rolling window)
@@ -565,10 +552,7 @@ class TestVolatilityIndicators:
         from data.indicators import compute_atr
 
         result = compute_atr(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            sample_ohlcv["close"],
-            period=14
+            sample_ohlcv["high"], sample_ohlcv["low"], sample_ohlcv["close"], period=14
         )
 
         assert isinstance(result, pd.Series)
@@ -602,10 +586,7 @@ class TestVolatilityIndicators:
         from data.indicators import compute_atr_normalized
 
         result = compute_atr_normalized(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            sample_ohlcv["close"],
-            period=14
+            sample_ohlcv["high"], sample_ohlcv["low"], sample_ohlcv["close"], period=14
         )
 
         assert isinstance(result, pd.Series)
@@ -644,9 +625,7 @@ class TestVolatilityIndicators:
         from data.indicators import compute_keltner_channels
 
         upper, middle, lower = compute_keltner_channels(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            sample_ohlcv["close"]
+            sample_ohlcv["high"], sample_ohlcv["low"], sample_ohlcv["close"]
         )
 
         assert isinstance(upper, pd.Series)
@@ -664,8 +643,7 @@ class TestVolatilityIndicators:
         close = pd.Series([100, 101, 102])
 
         upper, middle, lower = compute_keltner_channels(
-            high, low, close,
-            ema_period=20, atr_period=10
+            high, low, close, ema_period=20, atr_period=10
         )
         assert pd.isna(upper.iloc[-1])
 
@@ -678,8 +656,7 @@ class TestVolatilityIndicators:
         close = pd.Series([100.0] * 30)
 
         upper, middle, lower = compute_keltner_channels(
-            high, low, close,
-            ema_period=20, atr_period=10
+            high, low, close, ema_period=20, atr_period=10
         )
 
         assert abs(upper.iloc[-1] - middle.iloc[-1]) < 1e-6
@@ -689,11 +666,7 @@ class TestVolatilityIndicators:
         """Donchian width calculation on 50 bars."""
         from data.indicators import compute_donchian_width
 
-        result = compute_donchian_width(
-            sample_ohlcv["high"],
-            sample_ohlcv["low"],
-            period=20
-        )
+        result = compute_donchian_width(sample_ohlcv["high"], sample_ohlcv["low"], period=20)
 
         assert isinstance(result, pd.Series)
         assert len(result) == 50
@@ -758,7 +731,9 @@ class TestTTMSqueeze:
         from data.indicators import compute_bollinger_bands, compute_keltner_channels, ttm_squeeze
 
         # Volatile price creates wide Bollinger Bands
-        close = pd.Series([100.0 + (i % 2) * 10 for i in range(30)])  # Oscillating 100, 110, 100, 110...
+        close = pd.Series(
+            [100.0 + (i % 2) * 10 for i in range(30)]
+        )  # Oscillating 100, 110, 100, 110...
 
         # Calculate BB on volatile price (wide bands)
         bb_upper, bb_middle, bb_lower = compute_bollinger_bands(close, period=20)
@@ -852,33 +827,35 @@ def fvg_pattern_df():
         if 10 <= i <= 12:
             # Bullish FVG pattern
             if i == 10:
-                bar = {'high': 100.0, 'low': 99.0}
+                bar = {"high": 100.0, "low": 99.0}
             elif i == 11:
-                bar = {'high': 103.0, 'low': 102.0}  # Gap candle
+                bar = {"high": 103.0, "low": 102.0}  # Gap candle
             else:  # i == 12
-                bar = {'high': 105.0, 'low': 101.0}  # candle3.low > candle1.high
+                bar = {"high": 105.0, "low": 101.0}  # candle3.low > candle1.high
         elif 20 <= i <= 22:
             # Bearish FVG pattern
             if i == 20:
-                bar = {'high': 105.0, 'low': 104.0}
+                bar = {"high": 105.0, "low": 104.0}
             elif i == 21:
-                bar = {'high': 102.0, 'low': 101.5}  # Gap candle
+                bar = {"high": 102.0, "low": 101.5}  # Gap candle
             else:  # i == 22
-                bar = {'high': 103.0, 'low': 101.5}  # candle3.high < candle1.low
+                bar = {"high": 103.0, "low": 101.5}  # candle3.high < candle1.low
         else:
             # Default bars: must not fill either gap
             # Bullish gap zone: [100.0, 101.0] - need low >= 101.0
             # Bearish gap zone: [103.0, 104.0] - need high <= 103.0
             # Use range [101.5, 102.5] which is above bullish gap and below bearish gap
-            bar = {'high': 102.5, 'low': 101.5}
+            bar = {"high": 102.5, "low": 101.5}
 
-        data.append({
-            'timestamp': i * 60000,
-            'high': bar['high'],
-            'low': bar['low'],
-            'open': bar['low'],
-            'close': bar['high'],
-        })
+        data.append(
+            {
+                "timestamp": i * 60000,
+                "high": bar["high"],
+                "low": bar["low"],
+                "open": bar["low"],
+                "close": bar["high"],
+            }
+        )
 
     return pd.DataFrame(data)
 
@@ -895,13 +872,13 @@ def test_fvg_bullish_detection(fvg_pattern_df):
 
     # First gap should be bullish at index 11
     bullish_gap = gaps[0]
-    assert bullish_gap['index'] == 11
-    assert bullish_gap['direction'] == 'bullish'
-    assert bullish_gap['gap_bottom'] == 100.0
-    assert bullish_gap['gap_top'] == 101.0
-    assert bullish_gap['timestamp'] == 11 * 60000
+    assert bullish_gap["index"] == 11
+    assert bullish_gap["direction"] == "bullish"
+    assert bullish_gap["gap_bottom"] == 100.0
+    assert bullish_gap["gap_top"] == 101.0
+    assert bullish_gap["timestamp"] == 11 * 60000
     # Gap size = (101.0 - 100.0) / 100.0 * 100 = 1.0%
-    assert abs(bullish_gap['gap_size_pct'] - 1.0) < 0.01
+    assert abs(bullish_gap["gap_size_pct"] - 1.0) < 0.01
 
 
 def test_fvg_min_gap_filter(fvg_pattern_df):
@@ -919,18 +896,20 @@ def test_fvg_filled_gaps_excluded():
     from data.indicators import fair_value_gaps
 
     # Create data with a bearish FVG that gets filled
-    df = pd.DataFrame({
-        'timestamp': [
-            1704067200000,  # 0: High bar before bearish gap
-            1704070800000,  # 1: Bearish FVG gap candle (middle)
-            1704074400000,  # 2: Completes bearish FVG (low bar, creates gap)
-            1704078000000,  # 3: Fills the gap (high goes above gap_bottom)
-        ],
-        'open': [110.0, 109.0, 105.0, 104.0],
-        'high': [111.0, 110.0, 106.0, 108.0],
-        'low': [109.0, 105.0, 103.0, 103.0],
-        'close': [110.5, 106.0, 104.0, 105.0],
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": [
+                1704067200000,  # 0: High bar before bearish gap
+                1704070800000,  # 1: Bearish FVG gap candle (middle)
+                1704074400000,  # 2: Completes bearish FVG (low bar, creates gap)
+                1704078000000,  # 3: Fills the gap (high goes above gap_bottom)
+            ],
+            "open": [110.0, 109.0, 105.0, 104.0],
+            "high": [111.0, 110.0, 106.0, 108.0],
+            "low": [109.0, 105.0, 103.0, 103.0],
+            "close": [110.5, 106.0, 104.0, 105.0],
+        }
+    )
 
     # Bearish FVG at index 1:
     # - Bar 0 low=109.0 > Bar 2 high=106.0 (gap exists)
@@ -948,28 +927,59 @@ def swing_pattern_df():
     # Swing high at index 10 (high=110.0)
     # Swing low at index 5 (low=95.0)
     highs = [
-        100.0, 101.0, 102.0, 103.0, 104.0,  # 0-4: rising
-        103.0, 102.0, 103.0, 104.0, 105.0,  # 5-9: rising (low at 5)
+        100.0,
+        101.0,
+        102.0,
+        103.0,
+        104.0,  # 0-4: rising
+        103.0,
+        102.0,
+        103.0,
+        104.0,
+        105.0,  # 5-9: rising (low at 5)
         110.0,  # 10: swing high peak
-        105.0, 104.0, 103.0, 102.0,  # 11-14: falling
-        103.0, 104.0, 105.0, 106.0, 107.0,  # 15-19: rising
+        105.0,
+        104.0,
+        103.0,
+        102.0,  # 11-14: falling
+        103.0,
+        104.0,
+        105.0,
+        106.0,
+        107.0,  # 15-19: rising
     ]
     lows = [
-        98.0, 99.0, 100.0, 101.0, 102.0,  # 0-4: rising
+        98.0,
+        99.0,
+        100.0,
+        101.0,
+        102.0,  # 0-4: rising
         95.0,  # 5: swing low trough
-        100.0, 101.0, 102.0, 103.0,  # 6-9: rising
+        100.0,
+        101.0,
+        102.0,
+        103.0,  # 6-9: rising
         108.0,  # 10: swing high
-        103.0, 102.0, 101.0, 100.0,  # 11-14: falling
-        101.0, 102.0, 103.0, 104.0, 105.0,  # 15-19: rising
+        103.0,
+        102.0,
+        101.0,
+        100.0,  # 11-14: falling
+        101.0,
+        102.0,
+        103.0,
+        104.0,
+        105.0,  # 15-19: rising
     ]
 
-    return pd.DataFrame({
-        'timestamp': [i * 60000 for i in range(20)],
-        'open': [99.0] * 20,
-        'high': highs,
-        'low': lows,
-        'close': [99.5] * 20,
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": [i * 60000 for i in range(20)],
+            "open": [99.0] * 20,
+            "high": highs,
+            "low": lows,
+            "close": [99.5] * 20,
+        }
+    )
 
 
 def test_swing_points_detection(swing_pattern_df):
@@ -980,24 +990,24 @@ def test_swing_points_detection(swing_pattern_df):
 
     # Verify return structure
     assert isinstance(result, dict)
-    assert 'highs' in result
-    assert 'lows' in result
-    assert isinstance(result['highs'], list)
-    assert isinstance(result['lows'], list)
+    assert "highs" in result
+    assert "lows" in result
+    assert isinstance(result["highs"], list)
+    assert isinstance(result["lows"], list)
 
     # Should detect swing high at index 10 (high=110.0)
-    assert len(result['highs']) >= 1
-    swing_high = result['highs'][0]
-    assert swing_high['index'] == 10
-    assert swing_high['price'] == 110.0
-    assert swing_high['timestamp'] == 10 * 60000
+    assert len(result["highs"]) >= 1
+    swing_high = result["highs"][0]
+    assert swing_high["index"] == 10
+    assert swing_high["price"] == 110.0
+    assert swing_high["timestamp"] == 10 * 60000
 
     # Should detect swing low at index 5 (low=95.0)
-    assert len(result['lows']) >= 1
-    swing_low = result['lows'][0]
-    assert swing_low['index'] == 5
-    assert swing_low['price'] == 95.0
-    assert swing_low['timestamp'] == 5 * 60000
+    assert len(result["lows"]) >= 1
+    swing_low = result["lows"][0]
+    assert swing_low["index"] == 5
+    assert swing_low["price"] == 95.0
+    assert swing_low["timestamp"] == 5 * 60000
 
 
 def test_swing_points_insufficient_data():
@@ -1005,18 +1015,20 @@ def test_swing_points_insufficient_data():
     from data.indicators import swing_points
 
     # Only 3 bars - need at least window*2+1 bars for any swing points
-    df = pd.DataFrame({
-        'timestamp': [0, 60000, 120000],
-        'open': [100.0, 101.0, 102.0],
-        'high': [102.0, 103.0, 104.0],
-        'low': [98.0, 99.0, 100.0],
-        'close': [101.0, 102.0, 103.0],
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": [0, 60000, 120000],
+            "open": [100.0, 101.0, 102.0],
+            "high": [102.0, 103.0, 104.0],
+            "low": [98.0, 99.0, 100.0],
+            "close": [101.0, 102.0, 103.0],
+        }
+    )
 
     result = swing_points(df, window=5)
 
-    assert result['highs'] == []
-    assert result['lows'] == []
+    assert result["highs"] == []
+    assert result["lows"] == []
 
 
 def test_swing_points_flat_price():
@@ -1024,18 +1036,20 @@ def test_swing_points_flat_price():
     from data.indicators import swing_points
 
     # All highs and lows are identical - no local extrema
-    df = pd.DataFrame({
-        'timestamp': [i * 60000 for i in range(20)],
-        'open': [100.0] * 20,
-        'high': [100.0] * 20,
-        'low': [100.0] * 20,
-        'close': [100.0] * 20,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": [i * 60000 for i in range(20)],
+            "open": [100.0] * 20,
+            "high": [100.0] * 20,
+            "low": [100.0] * 20,
+            "close": [100.0] * 20,
+        }
+    )
 
     result = swing_points(df, window=5)
 
-    assert result['highs'] == []
-    assert result['lows'] == []
+    assert result["highs"] == []
+    assert result["lows"] == []
 
 
 def test_compute_all_indicators_full(sample_ohlcv):
@@ -1049,48 +1063,48 @@ def test_compute_all_indicators_full(sample_ohlcv):
 
     # Verify all scalar keys are present (17 indicators total)
     # Price/Trend (existing 3): rsi, macd_line, macd_signal
-    assert 'rsi' in result
-    assert 'macd_line' in result
-    assert 'macd_signal' in result
+    assert "rsi" in result
+    assert "macd_line" in result
+    assert "macd_signal" in result
 
     # Price/Trend (new 4): donchian_upper, donchian_middle, donchian_lower, kama
-    assert 'donchian_upper' in result
-    assert 'donchian_middle' in result
-    assert 'donchian_lower' in result
-    assert 'kama' in result
+    assert "donchian_upper" in result
+    assert "donchian_middle" in result
+    assert "donchian_lower" in result
+    assert "kama" in result
 
     # Volume (new 4): obv, cmf, mfi, vwap
-    assert 'obv' in result
-    assert 'cmf' in result
-    assert 'mfi' in result
-    assert 'vwap' in result
+    assert "obv" in result
+    assert "cmf" in result
+    assert "mfi" in result
+    assert "vwap" in result
 
     # Volatility (new 4): atr_normalized, bb_width, keltner_width, donchian_width
-    assert 'atr_normalized' in result
-    assert 'bb_width' in result
-    assert 'keltner_width' in result
-    assert 'donchian_width' in result
+    assert "atr_normalized" in result
+    assert "bb_width" in result
+    assert "keltner_width" in result
+    assert "donchian_width" in result
 
     # Market structure (new 2): nearest_bullish_fvg_pct, nearest_bearish_fvg_pct, open_fvg_count, nearest_swing_high_pct, nearest_swing_low_pct
-    assert 'nearest_bullish_fvg_pct' in result
-    assert 'nearest_bearish_fvg_pct' in result
-    assert 'open_fvg_count' in result
-    assert 'nearest_swing_high_pct' in result
-    assert 'nearest_swing_low_pct' in result
+    assert "nearest_bullish_fvg_pct" in result
+    assert "nearest_bearish_fvg_pct" in result
+    assert "open_fvg_count" in result
+    assert "nearest_swing_high_pct" in result
+    assert "nearest_swing_low_pct" in result
 
     # Verify 'series' dict is present
-    assert 'series' in result
-    assert isinstance(result['series'], dict)
+    assert "series" in result
+    assert isinstance(result["series"], dict)
     # Check a few series keys
-    assert 'rsi' in result['series']
-    assert 'macd_line' in result['series']
-    assert 'kama' in result['series']
+    assert "rsi" in result["series"]
+    assert "macd_line" in result["series"]
+    assert "kama" in result["series"]
 
     # Verify 'raw_fvgs' and 'raw_swing_points' are present
-    assert 'raw_fvgs' in result
-    assert 'raw_swing_points' in result
-    assert isinstance(result['raw_fvgs'], list)
-    assert isinstance(result['raw_swing_points'], dict)
+    assert "raw_fvgs" in result
+    assert "raw_swing_points" in result
+    assert isinstance(result["raw_fvgs"], list)
+    assert isinstance(result["raw_swing_points"], dict)
 
 
 def test_compute_all_indicators_scalar_summaries():
@@ -1117,51 +1131,53 @@ def test_compute_all_indicators_scalar_summaries():
         if 5 <= i <= 7:
             # Bullish FVG pattern at index 6
             if i == 5:
-                bar = {'high': 100.0, 'low': 99.0}
+                bar = {"high": 100.0, "low": 99.0}
             elif i == 6:
-                bar = {'high': 103.0, 'low': 102.0}  # Gap candle
+                bar = {"high": 103.0, "low": 102.0}  # Gap candle
             else:  # i == 7
-                bar = {'high': 105.0, 'low': 101.0}  # low > bar[5].high -> bullish FVG
+                bar = {"high": 105.0, "low": 101.0}  # low > bar[5].high -> bullish FVG
         elif 10 <= i <= 12:
             # Bearish FVG pattern at index 11
             if i == 10:
-                bar = {'high': 105.0, 'low': 104.0}
+                bar = {"high": 105.0, "low": 104.0}
             elif i == 11:
-                bar = {'high': 102.0, 'low': 101.5}  # Gap candle
+                bar = {"high": 102.0, "low": 101.5}  # Gap candle
             else:  # i == 12
-                bar = {'high': 103.0, 'low': 101.5}  # high < bar[10].low -> bearish FVG
+                bar = {"high": 103.0, "low": 101.5}  # high < bar[10].low -> bearish FVG
         else:
             # Default bars between gaps: [101.5, 102.5]
-            bar = {'high': 102.5, 'low': 101.5}
+            bar = {"high": 102.5, "low": 101.5}
 
-        data.append({
-            'timestamp': i * 60000,
-            'high': bar['high'],
-            'low': bar['low'],
-            'open': bar['low'],
-            'close': 105.0 if i == 14 else bar['high'],  # Last bar close at 105.0
-            'volume': 1000.0,
-        })
+        data.append(
+            {
+                "timestamp": i * 60000,
+                "high": bar["high"],
+                "low": bar["low"],
+                "open": bar["low"],
+                "close": 105.0 if i == 14 else bar["high"],  # Last bar close at 105.0
+                "volume": 1000.0,
+            }
+        )
 
     df = pd.DataFrame(data)
     result = compute_all_indicators(df, include_structure=True)
 
     # Should detect both FVGs
-    assert len(result['raw_fvgs']) == 2
-    bullish_fvgs = [g for g in result['raw_fvgs'] if g['direction'] == 'bullish']
-    bearish_fvgs = [g for g in result['raw_fvgs'] if g['direction'] == 'bearish']
+    assert len(result["raw_fvgs"]) == 2
+    bullish_fvgs = [g for g in result["raw_fvgs"] if g["direction"] == "bullish"]
+    bearish_fvgs = [g for g in result["raw_fvgs"] if g["direction"] == "bearish"]
     assert len(bullish_fvgs) == 1
     assert len(bearish_fvgs) == 1
 
     # Current price is 105.0
     # Bearish gap: [103.0, 104.0], gap_top is 104.0 (below current price 105.0)
     # Distance: (105.0 - 104.0) / 105.0 * 100 = 0.95%
-    assert result['nearest_bearish_fvg_pct'] is not None
-    assert abs(result['nearest_bearish_fvg_pct'] - 0.95) < 0.01
+    assert result["nearest_bearish_fvg_pct"] is not None
+    assert abs(result["nearest_bearish_fvg_pct"] - 0.95) < 0.01
 
     # Bullish gap bottom is 100.0 (below current price 105.0, not above)
     # So no bullish FVG above current price
-    assert result['nearest_bullish_fvg_pct'] is None
+    assert result["nearest_bullish_fvg_pct"] is None
 
 
 def test_compute_all_indicators_atr_normalized():
@@ -1169,21 +1185,23 @@ def test_compute_all_indicators_atr_normalized():
     from data.indicators import compute_all_indicators
 
     # Simple data with predictable ATR
-    df = pd.DataFrame({
-        'timestamp': [i * 60000 for i in range(30)],
-        'open': [100.0] * 30,
-        'high': [102.0] * 30,  # Range of 4.0 every bar
-        'low': [98.0] * 30,
-        'close': [100.0] * 30,
-        'volume': [1000.0] * 30,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": [i * 60000 for i in range(30)],
+            "open": [100.0] * 30,
+            "high": [102.0] * 30,  # Range of 4.0 every bar
+            "low": [98.0] * 30,
+            "close": [100.0] * 30,
+            "volume": [1000.0] * 30,
+        }
+    )
 
     result = compute_all_indicators(df)
 
     # ATR should be ~4.0 (constant range), close is 100.0
     # atr_normalized = 4.0 / 100.0 * 100 = 4.0%
-    assert result['atr_normalized'] is not None
-    assert 3.5 < result['atr_normalized'] < 4.5
+    assert result["atr_normalized"] is not None
+    assert 3.5 < result["atr_normalized"] < 4.5
 
 
 def test_compute_all_indicators_volume_flag(sample_ohlcv):
@@ -1193,16 +1211,16 @@ def test_compute_all_indicators_volume_flag(sample_ohlcv):
     result = compute_all_indicators(sample_ohlcv, include_volume=False, include_structure=False)
 
     # Volume indicators should be None
-    assert result['obv'] is None
-    assert result['cmf'] is None
-    assert result['mfi'] is None
-    assert result['vwap'] is None
+    assert result["obv"] is None
+    assert result["cmf"] is None
+    assert result["mfi"] is None
+    assert result["vwap"] is None
 
     # Non-volume indicators should still be present
-    assert result['rsi'] is not None
-    assert result['macd_line'] is not None
-    assert result['kama'] is not None
-    assert result['atr_normalized'] is not None
+    assert result["rsi"] is not None
+    assert result["macd_line"] is not None
+    assert result["kama"] is not None
+    assert result["atr_normalized"] is not None
 
 
 def test_compute_all_indicators_structure_flag(sample_ohlcv):
@@ -1212,19 +1230,19 @@ def test_compute_all_indicators_structure_flag(sample_ohlcv):
     result = compute_all_indicators(sample_ohlcv, include_volume=False, include_structure=False)
 
     # Structure scalars should be None (except open_fvg_count which is 0)
-    assert result['nearest_bullish_fvg_pct'] is None
-    assert result['nearest_bearish_fvg_pct'] is None
-    assert result['open_fvg_count'] == 0
-    assert result['nearest_swing_high_pct'] is None
-    assert result['nearest_swing_low_pct'] is None
+    assert result["nearest_bullish_fvg_pct"] is None
+    assert result["nearest_bearish_fvg_pct"] is None
+    assert result["open_fvg_count"] == 0
+    assert result["nearest_swing_high_pct"] is None
+    assert result["nearest_swing_low_pct"] is None
 
     # Structure raw data should be empty
-    assert result['raw_fvgs'] == []
-    assert result['raw_swing_points'] == {'highs': [], 'lows': []}
+    assert result["raw_fvgs"] == []
+    assert result["raw_swing_points"] == {"highs": [], "lows": []}
 
     # Non-structure indicators should still be present
-    assert result['rsi'] is not None
-    assert result['donchian_upper'] is not None
+    assert result["rsi"] is not None
+    assert result["donchian_upper"] is not None
 
 
 def test_compute_all_indicators_empty_dataframe():
@@ -1242,13 +1260,15 @@ def test_compute_all_indicators_missing_columns():
     from data.indicators import compute_all_indicators
 
     # Missing 'high' column
-    df = pd.DataFrame({
-        'timestamp': [0, 60000],
-        'open': [100.0, 101.0],
-        'low': [98.0, 99.0],
-        'close': [101.0, 102.0],
-        'volume': [1000.0, 1100.0],
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": [0, 60000],
+            "open": [100.0, 101.0],
+            "low": [98.0, 99.0],
+            "close": [101.0, 102.0],
+            "volume": [1000.0, 1100.0],
+        }
+    )
 
     with pytest.raises(KeyError):
         compute_all_indicators(df)

@@ -17,13 +17,11 @@ from data.prompt_builder import (
     TaskConfig,
     get_higher_timeframes,
     summarize_timeframe,
-    compute_confluence
+    compute_confluence,
 )
-from tests.fixtures.timeframe_fixtures import (
-    create_test_df_bullish,
-    create_test_df_bearish
-)
+from tests.fixtures.timeframe_fixtures import create_test_df_bullish, create_test_df_bearish
 from data.regime_filter import MarketRegime
+
 
 def main():
     print("=" * 80)
@@ -72,10 +70,7 @@ def main():
     print("Step 5: Building prompt with multi-timeframe context...")
     builder = PromptBuilder()
     task = TaskConfig(
-        task_type=TaskType.PREDICT_DIRECTION,
-        weight=1.0,
-        difficulty=2,
-        min_bars_required=50
+        task_type=TaskType.PREDICT_DIRECTION, weight=1.0, difficulty=2, min_bars_required=50
     )
 
     prompt = builder.build_prompt(
@@ -84,10 +79,7 @@ def main():
         symbol="BTC/USDT",
         timeframe="1h",
         market_regime=MarketRegime.NEUTRAL,
-        higher_tf_data={
-            "4h": df_4h,
-            "1d": df_1d
-        }
+        higher_tf_data={"4h": df_4h, "1d": df_1d},
     )
     print(f"  ✓ Prompt built (length: {len(prompt)} chars)")
     print()
@@ -120,7 +112,7 @@ def main():
         df=df_1h,
         symbol="BTC/USDT",
         timeframe="1h",
-        market_regime=MarketRegime.NEUTRAL
+        market_regime=MarketRegime.NEUTRAL,
         # No higher_tf_data parameter
     )
 
@@ -148,6 +140,7 @@ def main():
     print()
 
     return True
+
 
 if __name__ == "__main__":
     success = main()

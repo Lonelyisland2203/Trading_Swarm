@@ -18,10 +18,10 @@ class SampleSizeRequirements:
     - robust: Above adequate (high confidence)
     """
 
-    minimum: int = 30      # CLT threshold, below this return None
-    marginal: int = 60     # Low confidence region
-    adequate: int = 100    # Moderate confidence threshold
-    robust: int = 250      # High confidence threshold
+    minimum: int = 30  # CLT threshold, below this return None
+    marginal: int = 60  # Low confidence region
+    adequate: int = 100  # Moderate confidence threshold
+    robust: int = 250  # High confidence threshold
 
     def get_confidence_level(self, sample_size: int) -> str | None:
         """
@@ -36,10 +36,10 @@ class SampleSizeRequirements:
         if sample_size < self.minimum:
             return None
         if sample_size < self.marginal:
-            return 'low'
+            return "low"
         if sample_size < self.adequate:
-            return 'moderate'
-        return 'high'
+            return "moderate"
+        return "high"
 
 
 @dataclass(slots=True, frozen=True)
@@ -59,7 +59,9 @@ class EvaluationConfig:
     def __post_init__(self):
         """Validate configuration parameters."""
         if self.annualization_factor <= 0:
-            raise ValueError(f"annualization_factor must be positive, got {self.annualization_factor}")
+            raise ValueError(
+                f"annualization_factor must be positive, got {self.annualization_factor}"
+            )
         if self.min_sample_size < 2:
             raise ValueError(f"min_sample_size must be >= 2, got {self.min_sample_size}")
         if not 0 < self.fdr_alpha < 1:

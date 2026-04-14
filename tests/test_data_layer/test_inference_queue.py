@@ -18,14 +18,16 @@ from swarm.training_capture import TrainingExample
 @pytest.fixture
 def sample_job():
     """Create sample inference job."""
-    df = pd.DataFrame({
-        "timestamp": [1704067200000 + i * 3_600_000 for i in range(100)],
-        "open": [50000.0] * 100,
-        "high": [50100.0] * 100,
-        "low": [49900.0] * 100,
-        "close": [50000.0 + i * 10 for i in range(100)],
-        "volume": [100.0] * 100,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": [1704067200000 + i * 3_600_000 for i in range(100)],
+            "open": [50000.0] * 100,
+            "high": [50100.0] * 100,
+            "low": [49900.0] * 100,
+            "close": [50000.0 + i * 10 for i in range(100)],
+            "volume": [100.0] * 100,
+        }
+    )
 
     return InferenceJob(
         job_id="job-001",
@@ -173,7 +175,7 @@ class TestResumeState:
 
         with open(output_file, "w") as f:
             f.write('{"valid": "json"}\n')
-            f.write('invalid json line\n')
+            f.write("invalid json line\n")
             f.write('{"another": "valid"}\n')
 
         # Should not crash
@@ -206,6 +208,7 @@ class TestProcessing:
         self, tmp_path, sample_job, sample_examples, monkeypatch
     ):
         """Test successful single job processing."""
+
         # Mock run_multi_persona_workflow
         async def mock_workflow(*args, **kwargs):
             summary = {
@@ -228,6 +231,7 @@ class TestProcessing:
 
     async def test_process_single_job_failure(self, tmp_path, sample_job, monkeypatch):
         """Test failed job processing."""
+
         # Mock workflow that fails
         async def mock_workflow(*args, **kwargs):
             summary = {
@@ -279,6 +283,7 @@ class TestProcessing:
         self, tmp_path, sample_job, sample_examples, monkeypatch
     ):
         """Test process_all invokes progress callback."""
+
         # Mock successful workflow
         async def mock_workflow(*args, **kwargs):
             summary = {"workflow_status": "success", "signals_generated": 5, "signals_accepted": 3}
@@ -318,7 +323,11 @@ class TestProcessing:
                 summary = {"workflow_status": "all_failed"}
                 return summary, []
             else:
-                summary = {"workflow_status": "success", "signals_generated": 5, "signals_accepted": 3}
+                summary = {
+                    "workflow_status": "success",
+                    "signals_generated": 5,
+                    "signals_accepted": 3,
+                }
                 return summary, sample_examples
 
         monkeypatch.setattr(

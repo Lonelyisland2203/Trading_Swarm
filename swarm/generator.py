@@ -48,10 +48,10 @@ BASE_PERSONA_WEIGHTS = {
 REGIME_MODIFIERS = {
     MarketRegime.RISK_OFF: {
         TradingPersona.CONSERVATIVE: 1.5,  # Boost conservative in risk-off
-        TradingPersona.BREAKOUT: 0.5,      # Reduce breakout
+        TradingPersona.BREAKOUT: 0.5,  # Reduce breakout
     },
     MarketRegime.RISK_ON: {
-        TradingPersona.MOMENTUM: 1.3,      # Boost momentum in risk-on
+        TradingPersona.MOMENTUM: 1.3,  # Boost momentum in risk-on
         TradingPersona.MEAN_REVERSION: 0.7,
     },
     # NEUTRAL: no modifier (use base weights)
@@ -69,7 +69,6 @@ Your philosophy:
 - When everyone is bullish, be cautious. When everyone is bearish, look for value.
 
 Focus on identifying when sentiment has gone too far and a reversal is likely.""",
-
     TradingPersona.MOMENTUM: """You are a momentum trader who rides established trends.
 
 Your philosophy:
@@ -80,7 +79,6 @@ Your philosophy:
 - Let winners run, cut losers quickly
 
 Focus on identifying when trends are strong and likely to continue.""",
-
     TradingPersona.MEAN_REVERSION: """You are a mean-reversion trader who profits from price returning to average.
 
 Your philosophy:
@@ -91,7 +89,6 @@ Your philosophy:
 - Markets oscillate around equilibrium
 
 Focus on identifying when price has deviated significantly from average and is likely to revert.""",
-
     TradingPersona.BREAKOUT: """You are a breakout trader who captures explosive moves after consolidation.
 
 Your philosophy:
@@ -102,7 +99,6 @@ Your philosophy:
 - Early entry in new trends yields best returns
 
 Focus on identifying when markets are compressed and ready to explode in one direction.""",
-
     TradingPersona.CONSERVATIVE: """You are a conservative trader who prioritizes capital preservation.
 
 Your philosophy:
@@ -215,7 +211,9 @@ def _validate_signal_schema(data: dict, task_type: TaskType) -> bool:
         return required.issubset(data.keys())
 
 
-def extract_signal(raw_response: str, persona: TradingPersona, task_type: TaskType) -> GeneratorSignal:
+def extract_signal(
+    raw_response: str, persona: TradingPersona, task_type: TaskType
+) -> GeneratorSignal:
     """
     Extract signal from LLM response with multi-stage fallback.
 
@@ -246,7 +244,7 @@ def extract_signal(raw_response: str, persona: TradingPersona, task_type: TaskTy
         pass
 
     # Attempt 2: Strip markdown fences
-    fence_pattern = r'```(?:json)?\s*(.*?)\s*```'
+    fence_pattern = r"```(?:json)?\s*(.*?)\s*```"
     match = re.search(fence_pattern, text, re.DOTALL)
     if match:
         try:
@@ -256,7 +254,7 @@ def extract_signal(raw_response: str, persona: TradingPersona, task_type: TaskTy
             pass
 
     # Attempt 3: Extract from thinking tags (DeepSeek artifact)
-    think_pattern = r'</think>\s*(.*?)$'
+    think_pattern = r"</think>\s*(.*?)$"
     match = re.search(think_pattern, text, re.DOTALL)
     if match:
         # Recursive call on post-think content
@@ -264,11 +262,15 @@ def extract_signal(raw_response: str, persona: TradingPersona, task_type: TaskTy
 
     # Attempt 4: Regex extraction (last resort, only for direction-based tasks)
     if task_type in (TaskType.PREDICT_DIRECTION, TaskType.ASSESS_MOMENTUM):
-        direction_match = re.search(r'"direction"\s*:\s*"(INCREASING|DECREASING|HIGHER|LOWER)"', text, re.IGNORECASE)
+        direction_match = re.search(
+            r'"direction"\s*:\s*"(INCREASING|DECREASING|HIGHER|LOWER)"', text, re.IGNORECASE
+        )
         confidence_match = re.search(r'"confidence"\s*:\s*([\d.]+)', text)
 
         if direction_match and confidence_match:
-            logger.warning("Using regex fallback extraction", persona=persona.value, task_type=task_type.value)
+            logger.warning(
+                "Using regex fallback extraction", persona=persona.value, task_type=task_type.value
+            )
             return GeneratorSignal(
                 task_type=task_type,
                 signal_data={
@@ -326,7 +328,9 @@ def _validate_and_build_signal(
 
         # Validate prices are positive
         if support_price <= 0 or resistance_price <= 0:
-            raise ValueError(f"Invalid prices: support={support_price}, resistance={resistance_price}")
+            raise ValueError(
+                f"Invalid prices: support={support_price}, resistance={resistance_price}"
+            )
 
         signal_data = {
             "support_price": support_price,
@@ -398,7 +402,9 @@ async def generate_signal(
                 print(f"Direction: {signal.direction}, Confidence: {signal.confidence}")
     """
     # Sample persona or use override for cross-persona generation
-    persona = persona_override if persona_override is not None else sample_persona(regime, seed=seed)
+    persona = (
+        persona_override if persona_override is not None else sample_persona(regime, seed=seed)
+    )
 
     # Build persona-enhanced prompt
     persona_prompt = PERSONA_PROMPTS[persona]

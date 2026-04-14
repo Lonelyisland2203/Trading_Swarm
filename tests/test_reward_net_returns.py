@@ -37,9 +37,9 @@ class TestRewardUsesNetReturn:
         outcome = VerifiedOutcome(
             example_id="test-net-return",
             actual_direction="HIGHER",
-            realized_return=0.050,      # 5.0% GROSS
+            realized_return=0.050,  # 5.0% GROSS
             max_adverse_excursion=-0.01,
-            net_return=0.047,           # 4.7% NET (after ~0.3% fees)
+            net_return=0.047,  # 4.7% NET (after ~0.3% fees)
             entry_price=100.0,
             exit_price=105.0,
             bars_held=24,
@@ -88,9 +88,9 @@ class TestRewardUsesNetReturn:
         outcome = VerifiedOutcome(
             example_id="test-small-margin",
             actual_direction="HIGHER",
-            realized_return=0.0015,     # +0.15% GROSS (looks good)
+            realized_return=0.0015,  # +0.15% GROSS (looks good)
             max_adverse_excursion=-0.005,
-            net_return=-0.00065,        # -0.065% NET (fees killed profit!)
+            net_return=-0.00065,  # -0.065% NET (fees killed profit!)
             entry_price=200.0,
             exit_price=200.30,
             bars_held=1,
@@ -134,9 +134,9 @@ class TestRewardUsesNetReturn:
         low_fee_outcome = VerifiedOutcome(
             example_id="test-fee-impact-low",
             actual_direction="HIGHER",
-            realized_return=0.10,       # 10% GROSS
+            realized_return=0.10,  # 10% GROSS
             max_adverse_excursion=-0.02,
-            net_return=0.098,           # 9.8% NET (small 0.2% fee)
+            net_return=0.098,  # 9.8% NET (small 0.2% fee)
             entry_price=100.0,
             exit_price=110.0,
             bars_held=24,
@@ -146,9 +146,9 @@ class TestRewardUsesNetReturn:
         high_fee_outcome = VerifiedOutcome(
             example_id="test-fee-impact-high",
             actual_direction="HIGHER",
-            realized_return=0.10,       # 10% GROSS (same as Scenario 1)
+            realized_return=0.10,  # 10% GROSS (same as Scenario 1)
             max_adverse_excursion=-0.02,  # Same MAE
-            net_return=0.085,           # 8.5% NET (1.5% fee)
+            net_return=0.085,  # 8.5% NET (1.5% fee)
             entry_price=100.0,
             exit_price=110.0,
             bars_held=24,

@@ -56,14 +56,16 @@ def sample_ohlcv():
     dates = pd.date_range(start="2024-01-01", periods=100, freq="1h")
     prices = [100.0 + i * 0.5 for i in range(100)]  # Uptrend
 
-    df = pd.DataFrame({
-        "timestamp": dates,
-        "open": prices,
-        "high": [p * 1.01 for p in prices],
-        "low": [p * 0.99 for p in prices],
-        "close": prices,
-        "volume": [1000.0] * 100,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": dates,
+            "open": prices,
+            "high": [p * 1.01 for p in prices],
+            "low": [p * 0.99 for p in prices],
+            "close": prices,
+            "volume": [1000.0] * 100,
+        }
+    )
 
     return df
 
@@ -129,8 +131,14 @@ def test_prompt_no_execution_context_without_fee_model(
 
     # Execution context should NOT be present
     assert "## Execution Context" not in prompt_without_fees
-    assert "Round-trip cost" not in prompt_without_fees and "round-trip cost" not in prompt_without_fees
-    assert "Minimum profitable" not in prompt_without_fees and "minimum profitable" not in prompt_without_fees
+    assert (
+        "Round-trip cost" not in prompt_without_fees
+        and "round-trip cost" not in prompt_without_fees
+    )
+    assert (
+        "Minimum profitable" not in prompt_without_fees
+        and "minimum profitable" not in prompt_without_fees
+    )
 
 
 def test_execution_context_varies_by_timeframe(
@@ -156,14 +164,16 @@ def test_execution_context_varies_by_timeframe(
     # Create sufficient data for 1d (need 50+ bars)
     dates_1d = pd.date_range(start="2024-01-01", periods=100, freq="1D")
     prices_1d = [100.0 + i * 0.5 for i in range(100)]
-    sample_1d = pd.DataFrame({
-        "timestamp": dates_1d,
-        "open": prices_1d,
-        "high": [p * 1.01 for p in prices_1d],
-        "low": [p * 0.99 for p in prices_1d],
-        "close": prices_1d,
-        "volume": [1000.0] * 100,
-    })
+    sample_1d = pd.DataFrame(
+        {
+            "timestamp": dates_1d,
+            "open": prices_1d,
+            "high": [p * 1.01 for p in prices_1d],
+            "low": [p * 0.99 for p in prices_1d],
+            "close": prices_1d,
+            "volume": [1000.0] * 100,
+        }
+    )
 
     prompt_1d = builder.build_prompt(
         task=task_direction,
@@ -256,8 +266,9 @@ def test_reward_uses_net_return_not_gross(fee_model_futures):
     # Return component should be based on net_return
     # With default scaling (return_scale=10.0), a small negative net return
     # should produce a negative return_reward
-    assert reward.return_reward < 0, \
+    assert reward.return_reward < 0, (
         f"Return reward should be negative for net loss, got {reward.return_reward:.3f}"
+    )
 
     # Note: Final reward may still be positive due to directional component (0.3 weight)
     # The key test is that return_reward uses net_return (negative) not realized_return (positive)
@@ -354,14 +365,17 @@ def test_reward_comparison_gross_vs_net(fee_model_futures):
     reward_b = compute_reward(outcome_b, example_b)
 
     # A should have positive return component, B should have negative return component
-    assert reward_a.return_reward > 0, \
+    assert reward_a.return_reward > 0, (
         f"Signal A should have positive return component, got {reward_a.return_reward:.3f}"
-    assert reward_b.return_reward < 0, \
+    )
+    assert reward_b.return_reward < 0, (
         f"Signal B should have negative return component, got {reward_b.return_reward:.3f}"
+    )
 
     # A's reward should be higher than B's
-    assert reward_a.final_reward > reward_b.final_reward, \
+    assert reward_a.final_reward > reward_b.final_reward, (
         f"A ({reward_a.final_reward:.3f}) should outrank B ({reward_b.final_reward:.3f})"
+    )
 
     # Verify net returns are being used
     assert reward_a.net_return == net_log_a
@@ -389,11 +403,11 @@ def test_preference_pairs_rank_by_net_return(fee_model_futures):
     # Create 5 signals with varying returns to create clear reward differences
     # Include wrong directional predictions to create larger reward gaps
     signals = [
-        ("signal-1", "MOMENTUM", "HIGHER", 0.50),    # Correct, profitable
+        ("signal-1", "MOMENTUM", "HIGHER", 0.50),  # Correct, profitable
         ("signal-2", "CONTRARIAN", "HIGHER", 0.20),  # Correct, marginally profitable
-        ("signal-3", "SCALPER", "HIGHER", 0.05),     # Correct, unprofitable
-        ("signal-4", "SWING", "LOWER", 0.50),        # Wrong direction
-        ("signal-5", "MACRO", "LOWER", 0.20),        # Wrong direction
+        ("signal-3", "SCALPER", "HIGHER", 0.05),  # Correct, unprofitable
+        ("signal-4", "SWING", "LOWER", 0.50),  # Wrong direction
+        ("signal-5", "MACRO", "LOWER", 0.20),  # Wrong direction
     ]
 
     examples_with_rewards = []
@@ -450,12 +464,14 @@ def test_preference_pairs_rank_by_net_return(fee_model_futures):
     # Verify pairs are properly ranked
     for pair in pairs:
         # Chosen should have higher reward than rejected
-        assert pair.chosen_reward > pair.rejected_reward, \
+        assert pair.chosen_reward > pair.rejected_reward, (
             f"Chosen reward ({pair.chosen_reward:.3f}) should exceed rejected ({pair.rejected_reward:.3f})"
+        )
 
         # Reward delta should be positive
-        assert pair.reward_delta > 0, \
+        assert pair.reward_delta > 0, (
             f"Reward delta should be positive, got {pair.reward_delta:.3f}"
+        )
 
         # Verify metadata
         assert pair.context_id == "ctx-multi"
@@ -547,8 +563,9 @@ def test_preference_pair_validation_with_net_returns(fee_model_futures):
     assert "Valid pair" in reason
 
     # Verify ranking is correct
-    assert reward_chosen.final_reward > reward_rejected.final_reward, \
+    assert reward_chosen.final_reward > reward_rejected.final_reward, (
         "Chosen reward should exceed rejected reward"
+    )
 
 
 # ============================================================================
@@ -706,7 +723,9 @@ def test_fee_aware_end_to_end(sample_ohlcv, task_direction, fee_model_futures):
 
     # Verify execution context is included
     assert "## Execution Context" in prompt, "Prompt should include execution context"
-    assert "Round-trip cost" in prompt or "round-trip cost" in prompt, "Should mention round-trip cost"
+    assert "Round-trip cost" in prompt or "round-trip cost" in prompt, (
+        "Should mention round-trip cost"
+    )
 
     # -----------------------------------------------------------------------
     # Stage 2: Simulate Multi-Persona Signal Generation
@@ -714,11 +733,11 @@ def test_fee_aware_end_to_end(sample_ohlcv, task_direction, fee_model_futures):
 
     # Create 5 signals with varying quality (simulating generator output)
     signals = [
-        ("MOMENTUM", "HIGHER", 0.9, 0.50),    # +0.50% gross → profitable
+        ("MOMENTUM", "HIGHER", 0.9, 0.50),  # +0.50% gross → profitable
         ("CONTRARIAN", "HIGHER", 0.7, 0.25),  # +0.25% gross → profitable
-        ("SCALPER", "HIGHER", 0.6, 0.12),     # +0.12% gross → unprofitable
-        ("SWING", "HIGHER", 0.5, 0.08),       # +0.08% gross → unprofitable
-        ("MACRO", "LOWER", 0.4, -0.15),       # -0.15% gross → more unprofitable
+        ("SCALPER", "HIGHER", 0.6, 0.12),  # +0.12% gross → unprofitable
+        ("SWING", "HIGHER", 0.5, 0.08),  # +0.08% gross → unprofitable
+        ("MACRO", "LOWER", 0.4, -0.15),  # -0.15% gross → more unprofitable
     ]
 
     examples_with_rewards = []
@@ -797,8 +816,9 @@ def test_fee_aware_end_to_end(sample_ohlcv, task_direction, fee_model_futures):
     # Verify all pairs are properly ranked
     for pair in pairs:
         # Chosen should have higher net reward
-        assert pair.chosen_reward > pair.rejected_reward, \
+        assert pair.chosen_reward > pair.rejected_reward, (
             f"Chosen ({pair.chosen_reward:.3f}) should exceed rejected ({pair.rejected_reward:.3f})"
+        )
 
         # Verify shared context
         assert pair.context_id == "ctx-e2e"
@@ -808,35 +828,29 @@ def test_fee_aware_end_to_end(sample_ohlcv, task_direction, fee_model_futures):
 
     # Verify that the highest net return signal is ranked highest
     # (MOMENTUM with +0.50% gross should be the most profitable after fees)
-    momentum_reward = next(
-        r for e, o, r in examples_with_rewards if e.persona == "MOMENTUM"
-    )
+    momentum_reward = next(r for e, o, r in examples_with_rewards if e.persona == "MOMENTUM")
 
     # MOMENTUM should have positive final reward
-    assert momentum_reward.final_reward > 0, \
-        "Most profitable signal should have positive reward"
+    assert momentum_reward.final_reward > 0, "Most profitable signal should have positive reward"
 
     # Check return components (directional may dominate final reward)
-    scalper_reward = next(
-        r for e, o, r in examples_with_rewards if e.persona == "SCALPER"
-    )
-    swing_reward = next(
-        r for e, o, r in examples_with_rewards if e.persona == "SWING"
-    )
-    contrarian_reward = next(
-        r for e, o, r in examples_with_rewards if e.persona == "CONTRARIAN"
-    )
+    scalper_reward = next(r for e, o, r in examples_with_rewards if e.persona == "SCALPER")
+    swing_reward = next(r for e, o, r in examples_with_rewards if e.persona == "SWING")
+    contrarian_reward = next(r for e, o, r in examples_with_rewards if e.persona == "CONTRARIAN")
 
     # SCALPER predicted correctly but net return is slightly positive (+0.007%)
     # SWING predicted incorrectly (LOWER when actual was HIGHER)
     # So SCALPER should rank higher than SWING despite both having similar net returns
 
     # Verify ranking: MOMENTUM > CONTRARIAN (both correct) > SCALPER (correct but low net) > SWING/MACRO (wrong direction)
-    assert momentum_reward.final_reward > contrarian_reward.final_reward, \
+    assert momentum_reward.final_reward > contrarian_reward.final_reward, (
         "Higher net return with correct direction should rank higher"
-    assert contrarian_reward.final_reward > scalper_reward.final_reward, \
+    )
+    assert contrarian_reward.final_reward > scalper_reward.final_reward, (
         "Higher net return should rank higher when both correct"
+    )
 
     # Wrong direction signals should rank lowest
-    assert scalper_reward.final_reward > swing_reward.final_reward, \
+    assert scalper_reward.final_reward > swing_reward.final_reward, (
         "Correct direction should rank higher than wrong direction"
+    )

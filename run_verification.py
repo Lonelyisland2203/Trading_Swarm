@@ -126,9 +126,7 @@ async def run_verification_loop(
             # Check training trigger
             trigger_status = check_training_trigger()
             if trigger_status["ready"]:
-                logger.warning(
-                    f"TRAINING TRIGGER: {trigger_status['message']}"
-                )
+                logger.warning(f"TRAINING TRIGGER: {trigger_status['message']}")
 
             if once:
                 logger.info("Once mode - exiting")

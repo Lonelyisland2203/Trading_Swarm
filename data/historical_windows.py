@@ -60,8 +60,7 @@ def timeframe_to_milliseconds(timeframe: str) -> int:
     """
     if timeframe not in TIMEFRAME_TO_MS:
         raise ValueError(
-            f"Unsupported timeframe: {timeframe}. "
-            f"Supported: {list(TIMEFRAME_TO_MS.keys())}"
+            f"Unsupported timeframe: {timeframe}. Supported: {list(TIMEFRAME_TO_MS.keys())}"
         )
 
     return TIMEFRAME_TO_MS[timeframe]

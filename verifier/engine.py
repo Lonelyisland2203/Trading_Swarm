@@ -26,17 +26,15 @@ from .validator import validate_forward_data_completeness, validate_no_lookahead
 
 class MarketDataProvider(Protocol):
     """Protocol for market data access (allows mocking in tests)."""
-    
+
     async def fetch_ohlcv(
         self,
         symbol: str,
         timeframe: str,
         lookback_bars: int,
-    ) -> pd.DataFrame:
-        ...
-    
-    def _timeframe_to_ms(self, timeframe: str) -> int:
-        ...
+    ) -> pd.DataFrame: ...
+
+    def _timeframe_to_ms(self, timeframe: str) -> int: ...
 
 
 async def verify_example(
@@ -77,29 +75,29 @@ async def verify_example(
     symbol = example.symbol
     timeframe = example.timeframe
     signal_timestamp_ms = example.timestamp_ms
-    
+
     # Get horizon for this timeframe
     try:
         horizon_bars = get_horizon_bars(timeframe)
     except ValueError as e:
         logger.error("Unknown timeframe", timeframe=timeframe, error=str(e))
         return None
-    
+
     # Calculate bar duration
     bar_duration_ms = market_data._timeframe_to_ms(timeframe)
-    
+
     # Determine entry time
     if config.entry_on == "next_open":
         # Realistic: next bar open (first ms after signal bar closes)
         entry_timestamp_ms = signal_timestamp_ms + 1
     else:  # "close" - for testing only
         entry_timestamp_ms = signal_timestamp_ms
-    
+
     # Fetch forward data
     # Need enough bars: entry bar + horizon bars
     # Add buffer of 2 extra bars for safety
     total_bars_needed = horizon_bars + 3
-    
+
     try:
         # Fetch OHLCV starting from just before entry time
         # We need to get bars that include the entry bar
@@ -108,10 +106,10 @@ async def verify_example(
             timeframe=timeframe,
             lookback_bars=total_bars_needed,
         )
-        
+
         # Filter to forward data only (after signal)
         forward_data = all_data[all_data["timestamp"] > signal_timestamp_ms].copy()
-        
+
         if forward_data.empty:
             logger.warning(
                 "No forward data available",
@@ -120,7 +118,7 @@ async def verify_example(
                 signal_ts=signal_timestamp_ms,
             )
             return None
-        
+
         # Validate we have enough data
         if len(forward_data) < horizon_bars:
             logger.warning(
@@ -130,10 +128,10 @@ async def verify_example(
                 actual=len(forward_data),
             )
             return None
-        
+
         # Take exactly horizon_bars for measurement window
         holding_period = forward_data.iloc[:horizon_bars].copy()
-        
+
         # Get entry price
         entry_bar = holding_period.iloc[0]
         if config.entry_on == "next_open":
@@ -145,10 +143,10 @@ async def verify_example(
                 logger.error("Signal bar not found", timestamp=signal_timestamp_ms)
                 return None
             entry_price = signal_bar.iloc[0]["close"]
-        
+
         # Get exit price (close of last bar in holding period)
         exit_price = holding_period.iloc[-1]["close"]
-        
+
         # Point-in-time validation
         validate_no_lookahead(
             signal_timestamp_ms=signal_timestamp_ms,
@@ -156,21 +154,23 @@ async def verify_example(
             forward_data_start_ms=int(holding_period["timestamp"].iloc[0]),
             forward_data_end_ms=int(holding_period["timestamp"].iloc[-1]),
         )
-        
+
         # Validate data completeness
         validate_forward_data_completeness(
             expected_bars=horizon_bars,
             actual_bars=len(holding_period),
             tolerance=1,
         )
-        
+
         # Compute log return
         log_return = compute_log_return(entry_price, exit_price)
 
         # Compute MAE
         # Direction may be at top level or nested under signal_data
         _sig = example.generator_signal
-        predicted_direction = _sig.get("direction") or _sig.get("signal_data", {}).get("direction", "UNKNOWN")
+        predicted_direction = _sig.get("direction") or _sig.get("signal_data", {}).get(
+            "direction", "UNKNOWN"
+        )
         if predicted_direction in ("HIGHER", "LOWER"):
             mae = compute_mae(holding_period, predicted_direction, entry_price)
         else:
@@ -189,10 +189,10 @@ async def verify_example(
             fee_model,
             holding_periods_8h,
         )
-        
+
         # Determine actual direction
         actual_direction = determine_direction(log_return)
-        
+
         logger.debug(
             "Outcome computed",
             symbol=symbol,
@@ -201,7 +201,7 @@ async def verify_example(
             mae=mae,
             net_return=net_return,
         )
-        
+
         return VerifiedOutcome(
             example_id=example.example_id,
             actual_direction=actual_direction,
@@ -212,7 +212,7 @@ async def verify_example(
             exit_price=exit_price,
             bars_held=len(holding_period),
         )
-        
+
     except Exception as e:
         logger.error(
             "Verification failed",
@@ -255,19 +255,19 @@ async def verify_batch(
     if not examples:
         logger.info("No examples to verify")
         return []
-    
+
     logger.info(
         "Starting batch verification",
         total_examples=len(examples),
         batch_size=batch_size,
     )
-    
+
     results: list[VerifiedOutcome] = []
     failed = 0
-    
+
     # Group by (symbol, timeframe) for efficient processing
     sorted_examples = sorted(examples, key=lambda e: (e.symbol, e.timeframe))
-    
+
     for (symbol, timeframe), group in groupby(
         sorted_examples, key=lambda e: (e.symbol, e.timeframe)
     ):
@@ -278,7 +278,7 @@ async def verify_batch(
             timeframe=timeframe,
             count=len(group_list),
         )
-        
+
         # Process in batches to control memory
         for i in range(0, len(group_list), batch_size):
             batch = group_list[i : i + batch_size]
@@ -290,7 +290,7 @@ async def verify_batch(
                     results.append(outcome)
                 else:
                     failed += 1
-    
+
     logger.info(
         "Batch verification complete",
         verified=len(results),
@@ -298,5 +298,5 @@ async def verify_batch(
         total=len(examples),
         success_rate=f"{len(results) / len(examples) * 100:.1f}%",
     )
-    
+
     return results

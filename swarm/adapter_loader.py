@@ -204,9 +204,7 @@ def should_use_adapter(persona: str | None = None) -> tuple[bool, str]:
         # This prevents using stale adapters
         import time
 
-        adapter_age_days = (time.time() * 1000 - metadata["timestamp_ms"]) / (
-            1000 * 60 * 60 * 24
-        )
+        adapter_age_days = (time.time() * 1000 - metadata["timestamp_ms"]) / (1000 * 60 * 60 * 24)
 
         if adapter_age_days > 30:
             return False, f"Adapter too old: {adapter_age_days:.1f} days"

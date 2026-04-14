@@ -189,7 +189,7 @@ def extract_critique(raw_response: str) -> CritiqueResult:
         pass
 
     # Attempt 2: Strip markdown fences
-    fence_pattern = r'```(?:json)?\s*(.*?)\s*```'
+    fence_pattern = r"```(?:json)?\s*(.*?)\s*```"
     match = re.search(fence_pattern, text, re.DOTALL)
     if match:
         try:
@@ -208,12 +208,14 @@ def extract_critique(raw_response: str) -> CritiqueResult:
         re.IGNORECASE,
     )
 
-    if all([
-        reasoning_quality_match,
-        technical_alignment_match,
-        confidence_calibration_match,
-        recommendation_match,
-    ]):
+    if all(
+        [
+            reasoning_quality_match,
+            technical_alignment_match,
+            confidence_calibration_match,
+            recommendation_match,
+        ]
+    ):
         logger.warning("Using regex fallback extraction for critique")
         return CritiqueResult(
             reasoning_quality=float(reasoning_quality_match.group(1)),
@@ -225,9 +227,7 @@ def extract_critique(raw_response: str) -> CritiqueResult:
         )
 
     # All attempts failed
-    raise ResponseValidationError(
-        f"Could not extract critique from response: {text[:200]}..."
-    )
+    raise ResponseValidationError(f"Could not extract critique from response: {text[:200]}...")
 
 
 def _validate_and_build_critique(data: dict, raw: str) -> CritiqueResult:

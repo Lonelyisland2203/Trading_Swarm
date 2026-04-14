@@ -9,6 +9,7 @@ from data.regime_filter import RegimeClassifier
 from data.prompt_builder import PromptBuilder, TaskType, TASK_CONFIGS
 from config.settings import settings
 
+
 async def main():
     # 1. Fetch market data
     print("Fetching BTC/USDT 1h data...")
@@ -51,9 +52,9 @@ async def main():
     print("=" * 60)
     if signal:
         print(f"Direction:  {signal.signal_data.get('direction', 'N/A')}")
-        conf = signal.signal_data.get('confidence', 0)
+        conf = signal.signal_data.get("confidence", 0)
         print(f"Confidence: {conf:.2%}")
-        reasoning = signal.signal_data.get('reasoning') or signal.signal_data.get('rationale', '')
+        reasoning = signal.signal_data.get("reasoning") or signal.signal_data.get("rationale", "")
         print(f"Reasoning:  {reasoning[:300]}")
         print(f"Persona:    {signal.persona}")
         print(f"Task:       {signal.task_type}")
@@ -61,6 +62,7 @@ async def main():
     else:
         print("No signal generated.")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

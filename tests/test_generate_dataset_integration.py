@@ -49,14 +49,16 @@ def create_ohlcv_dataframe(num_bars: int = 150, base_price: float = 50000.0) -> 
     # Generate volume
     volume = np.random.lognormal(10, 1, num_bars)
 
-    return pd.DataFrame({
-        "timestamp": timestamps.astype(np.int64),
-        "open": open_prices,
-        "high": high,
-        "low": low,
-        "close": close,
-        "volume": volume,
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": timestamps.astype(np.int64),
+            "open": open_prices,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+        }
+    )
 
 
 @pytest.fixture
@@ -202,9 +204,10 @@ class TestPhase1DataPreparation:
         async def mock_fetch_window(*args, **kwargs):
             return ohlcv_df.copy()
 
-        with patch("generate_training_dataset.MarketDataService") as MockService, \
-             patch("generate_training_dataset.fetch_window_data", side_effect=mock_fetch_window):
-
+        with (
+            patch("generate_training_dataset.MarketDataService") as MockService,
+            patch("generate_training_dataset.fetch_window_data", side_effect=mock_fetch_window),
+        ):
             # Configure mock service
             mock_service_instance = MockService.return_value.__aenter__.return_value
             mock_service_instance.fetch_ohlcv = mock_fetch_ohlcv
@@ -237,9 +240,10 @@ class TestPhase1DataPreparation:
         async def mock_fetch_ohlcv(*args, **kwargs):
             return ohlcv_df.tail(10).copy()
 
-        with patch("generate_training_dataset.MarketDataService") as MockService, \
-             patch("generate_training_dataset.fetch_window_data", side_effect=mock_fetch_window):
-
+        with (
+            patch("generate_training_dataset.MarketDataService") as MockService,
+            patch("generate_training_dataset.fetch_window_data", side_effect=mock_fetch_window),
+        ):
             mock_service_instance = MockService.return_value.__aenter__.return_value
             mock_service_instance.fetch_ohlcv = mock_fetch_ohlcv
 

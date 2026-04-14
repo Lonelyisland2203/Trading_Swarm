@@ -34,55 +34,51 @@ class FeeModelSettings(BaseModel):
         default=0.02,
         ge=0.0,
         le=0.5,
-        description="Maker fee as % of notional (limit orders, typically 0.02%)"
+        description="Maker fee as % of notional (limit orders, typically 0.02%)",
     )
     taker_fee_pct: float = Field(
         default=0.05,
         ge=0.0,
         le=0.5,
-        description="Taker fee as % of notional (market orders, typically 0.05%)"
+        description="Taker fee as % of notional (market orders, typically 0.05%)",
     )
     entry_order_type: str = Field(
         default="maker",
         pattern="^(maker|taker)$",
-        description="Entry order type: 'maker' (limit) or 'taker' (market)"
+        description="Entry order type: 'maker' (limit) or 'taker' (market)",
     )
     exit_order_type: str = Field(
         default="taker",
         pattern="^(maker|taker)$",
-        description="Exit order type: 'maker' (limit) or 'taker' (market)"
+        description="Exit order type: 'maker' (limit) or 'taker' (market)",
     )
     bnb_discount_enabled: bool = Field(
         default=True,
-        description="Apply 10% BNB discount to maker and taker fees (Binance Futures only)"
+        description="Apply 10% BNB discount to maker and taker fees (Binance Futures only)",
     )
     bnb_discount_pct: float = Field(
         default=10.0,
         ge=0.0,
         le=100.0,
-        description="BNB discount percentage (10% = 10.0, not 25% which is Spot-only)"
+        description="BNB discount percentage (10% = 10.0, not 25% which is Spot-only)",
     )
     funding_rate_pct: float = Field(
         default=0.01,
         ge=0.0,
         le=1.0,
-        description="Hourly funding rate as % of notional (default: 0.01% per hour)"
+        description="Hourly funding rate as % of notional (default: 0.01% per hour)",
     )
     funding_interval_hours: int = Field(
-        default=8,
-        ge=1,
-        le=24,
-        description="Funding payment interval in hours (default: 8)"
+        default=8, ge=1, le=24, description="Funding payment interval in hours (default: 8)"
     )
     slippage_pct: float = Field(
         default=0.02,
         ge=0.0,
         le=1.0,
-        description="Market impact/slippage estimate as % (default: 0.02%)"
+        description="Market impact/slippage estimate as % (default: 0.02%)",
     )
     include_funding: bool = Field(
-        default=True,
-        description="Include funding costs in round_trip calculation"
+        default=True, description="Include funding costs in round_trip calculation"
     )
 
     @model_validator(mode="before")
@@ -119,14 +115,20 @@ class FeeModelSettings(BaseModel):
             raise ValueError("holding_periods_8h must be non-negative")
 
         # Apply BNB discount if enabled
-        discount_multiplier = (100.0 - self.bnb_discount_pct) / 100.0 if self.bnb_discount_enabled else 1.0
+        discount_multiplier = (
+            (100.0 - self.bnb_discount_pct) / 100.0 if self.bnb_discount_enabled else 1.0
+        )
 
         # Entry fee based on order type
-        entry_fee_rate = self.maker_fee_pct if self.entry_order_type == "maker" else self.taker_fee_pct
+        entry_fee_rate = (
+            self.maker_fee_pct if self.entry_order_type == "maker" else self.taker_fee_pct
+        )
         entry_fee = entry_fee_rate * discount_multiplier
 
         # Exit fee based on order type
-        exit_fee_rate = self.maker_fee_pct if self.exit_order_type == "maker" else self.taker_fee_pct
+        exit_fee_rate = (
+            self.maker_fee_pct if self.exit_order_type == "maker" else self.taker_fee_pct
+        )
         exit_fee = exit_fee_rate * discount_multiplier
 
         # Funding cost (proportional to holding periods)

@@ -4,6 +4,7 @@ End-to-end integration test for realistic fee model.
 Tests that the fee model flows correctly through the entire pipeline:
 Config → Verifier → DPO Training
 """
+
 import math
 import pytest
 from config.settings import AppSettings
@@ -14,6 +15,7 @@ from verifier.outcome import apply_fee_model
 # Import create_fee_model from both scripts
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from run_dpo_training import create_fee_model as create_fee_model_dpo
 from generate_training_dataset import create_fee_model as create_fee_model_dataset
@@ -23,7 +25,7 @@ def test_fee_model_in_app_settings():
     """Test fee model is properly integrated into AppSettings."""
     settings = AppSettings()
 
-    assert hasattr(settings, 'fee_model')
+    assert hasattr(settings, "fee_model")
     assert isinstance(settings.fee_model, FeeModelSettings)
 
     # Verify defaults
@@ -35,18 +37,19 @@ def test_fee_model_in_app_settings():
 def test_holding_period_calculation_all_timeframes():
     """Test holding period calculation for all supported timeframes."""
     timeframes_and_expected = [
-        ("1m", 60, 0.125),   # 60 bars at 1m = 1 hour = 1/8 funding period
-        ("5m", 96, 1.0),     # 96 bars at 5m = 8 hours = 1 funding period
-        ("15m", 32, 1.0),    # 32 bars at 15m = 8 hours = 1 funding period
-        ("1h", 24, 3.0),     # 24 bars at 1h = 24 hours = 3 funding periods
-        ("4h", 2, 1.0),      # 2 bars at 4h = 8 hours = 1 funding period
-        ("1d", 5, 15.0),     # 5 bars at 1d = 5 days = 15 funding periods
+        ("1m", 60, 0.125),  # 60 bars at 1m = 1 hour = 1/8 funding period
+        ("5m", 96, 1.0),  # 96 bars at 5m = 8 hours = 1 funding period
+        ("15m", 32, 1.0),  # 32 bars at 15m = 8 hours = 1 funding period
+        ("1h", 24, 3.0),  # 24 bars at 1h = 24 hours = 3 funding periods
+        ("4h", 2, 1.0),  # 2 bars at 4h = 8 hours = 1 funding period
+        ("1d", 5, 15.0),  # 5 bars at 1d = 5 days = 15 funding periods
     ]
 
     for timeframe, horizon_bars, expected_periods in timeframes_and_expected:
         periods = compute_holding_periods_8h(timeframe, horizon_bars)
-        assert abs(periods - expected_periods) < 1e-9, \
+        assert abs(periods - expected_periods) < 1e-9, (
             f"Failed for {timeframe}: expected {expected_periods}, got {periods}"
+        )
 
 
 def test_apply_fee_model_reduces_returns():
@@ -54,9 +57,9 @@ def test_apply_fee_model_reduces_returns():
     fee_model = FeeModelSettings()
 
     test_cases = [
-        (0.15, 0, True),    # +0.15% gross, 0 funding → should be positive but reduced
-        (0.08, 0, False),   # +0.08% gross, 0 funding → should flip negative
-        (0.20, 3, True),    # +0.20% gross, 3 funding periods → should be positive
+        (0.15, 0, True),  # +0.15% gross, 0 funding → should be positive but reduced
+        (0.08, 0, False),  # +0.08% gross, 0 funding → should flip negative
+        (0.20, 3, True),  # +0.20% gross, 3 funding periods → should be positive
         (-0.10, 0, False),  # -0.10% gross → should be more negative
     ]
 
@@ -66,8 +69,7 @@ def test_apply_fee_model_reduces_returns():
         net_pct = (math.exp(net_log) - 1) * 100
 
         # Net should always be less than gross (fees reduce returns)
-        assert net_pct < gross_pct, \
-            f"Fees should reduce returns: gross={gross_pct}, net={net_pct}"
+        assert net_pct < gross_pct, f"Fees should reduce returns: gross={gross_pct}, net={net_pct}"
 
         if should_be_positive:
             assert net_pct > 0, f"Expected positive net for gross={gross_pct}"
@@ -90,8 +92,9 @@ def test_fee_model_exact_conversions():
     expected_exact = 4.917
 
     # Verify we match exact calculation (tolerance for floating point)
-    assert abs(net_pct - expected_exact) < 1e-3, \
+    assert abs(net_pct - expected_exact) < 1e-3, (
         f"Expected exact conversion: {expected_exact}%, got {net_pct}%"
+    )
 
 
 def test_fee_model_env_var_override():
@@ -140,17 +143,18 @@ def test_end_to_end_fee_impact():
 
     # Under flat 0.1% fees, this would be profitable: 0.10% - 0.10% = 0%
     # Under realistic fees, it should be a loss
-    assert net_pct < 0, \
+    assert net_pct < 0, (
         f"Signal with +0.10% gross should be unprofitable after realistic fees, got {net_pct:.3f}%"
+    )
 
     # Verify the loss is meaningful
-    assert net_pct < -0.01, \
-        f"Expected meaningful loss after fees, got {net_pct:.3f}%"
+    assert net_pct < -0.01, f"Expected meaningful loss after fees, got {net_pct:.3f}%"
 
 
 # ============================================================================
 # CLI Fee Mode Tests
 # ============================================================================
+
 
 def test_create_fee_model_futures_usdt():
     """Test create_fee_model with futures_usdt mode (both scripts)."""
@@ -220,21 +224,21 @@ def test_spot_vs_futures_fee_difference():
     # Verify spot doesn't include funding (cost is constant)
     cost_spot_0 = fm_spot.round_trip_cost_pct(0)
     cost_spot_10 = fm_spot.round_trip_cost_pct(10)
-    assert cost_spot_0 == cost_spot_10, \
-        "Spot cost should not vary with holding period"
+    assert cost_spot_0 == cost_spot_10, "Spot cost should not vary with holding period"
 
     # Verify futures cost increases with holding period
     cost_futures_0 = fm_futures.round_trip_cost_pct(0)
     cost_futures_10 = fm_futures.round_trip_cost_pct(10)
-    assert cost_futures_10 > cost_futures_0, \
-        "Futures cost should increase with holding period"
+    assert cost_futures_10 > cost_futures_0, "Futures cost should increase with holding period"
 
     # For very short holding periods (0 funding), futures is cheaper than spot
     # because futures has lower base fees (0.02+0.05=0.07 vs 0.10+0.10=0.20)
-    assert cost_futures_0 < cost_spot_0, \
+    assert cost_futures_0 < cost_spot_0, (
         f"Futures with no funding ({cost_futures_0}%) should be cheaper than Spot ({cost_spot_0}%)"
+    )
 
     # For very long holding periods, futures becomes more expensive due to funding
     cost_futures_100 = fm_futures.round_trip_cost_pct(100)
-    assert cost_futures_100 > cost_spot_0, \
+    assert cost_futures_100 > cost_spot_0, (
         f"Futures with 100 periods ({cost_futures_100}%) should be more expensive than Spot ({cost_spot_0}%)"
+    )

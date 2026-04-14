@@ -1,1 +1,3 @@
 experiment_id	timestamp	change_description	sharpe_net	ic	brier	accuracy	false_bullish_rate	kept_or_reverted
+1	2026-04-14 10:54:59	max_depth: 6→7	0.963703	0.035143	0.217729	0.5526	0.2936	kept
+2	2026-04-14 10:55:03	max_depth: 7→8	0.961501	0.085579	0.220952	0.5242	0.2712	reverted

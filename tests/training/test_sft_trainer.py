@@ -68,7 +68,9 @@ def _import_sft_trainer():
     mock_vram_status = MagicMock()
     mock_vram_status.can_train = True
     mock_vram_status.free_mb = 12000
-    mock_modules["training.vram_check"].check_vram_availability = MagicMock(return_value=mock_vram_status)
+    mock_modules["training.vram_check"].check_vram_availability = MagicMock(
+        return_value=mock_vram_status
+    )
     mock_modules["training.vram_check"].VRAMStatus = MagicMock()
 
     with patch.dict(sys.modules, mock_modules):
@@ -142,8 +144,13 @@ def dpo_lora_config() -> LoraConfig:
         lora_alpha=64,
         lora_dropout=0.05,
         target_modules=[
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
         ],
         bias="none",
         task_type=TaskType.CAUSAL_LM,
@@ -173,8 +180,13 @@ class TestLoRAConfigMatchesDPO:
     def test_target_modules_match_dpo(self, sft_module) -> None:
         """SFT target modules must match DPO (7 modules)."""
         expected_modules = [
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
         ]
 
         config = sft_module.SFTTrainingConfig()
@@ -185,7 +197,9 @@ class TestLoRAConfigMatchesDPO:
     def test_lora_dropout_matches_dpo(self, sft_module) -> None:
         """SFT LoRA dropout must match DPO (0.05)."""
         config = sft_module.SFTTrainingConfig()
-        assert config.lora_dropout == 0.05, f"LoRA dropout should be 0.05, got {config.lora_dropout}"
+        assert config.lora_dropout == 0.05, (
+            f"LoRA dropout should be 0.05, got {config.lora_dropout}"
+        )
 
     def test_task_type_is_causal_lm(self, sft_module) -> None:
         """Task type must be CAUSAL_LM for decoder-only model."""
@@ -235,7 +249,9 @@ class TestDataLoading:
 class TestInstructionFormat:
     """Tests for instruction-following format conversion."""
 
-    def test_format_for_sft_creates_instruction_format(self, sft_module, sample_sft_jsonl: Path) -> None:
+    def test_format_for_sft_creates_instruction_format(
+        self, sft_module, sample_sft_jsonl: Path
+    ) -> None:
         """Examples are formatted as instruction-following pairs."""
         examples = sft_module.load_sft_data(sample_sft_jsonl)
         formatted = sft_module.format_for_sft(examples)
@@ -247,7 +263,9 @@ class TestInstructionFormat:
                 "Missing output/response/completion field"
             )
 
-    def test_format_input_contains_market_snapshot(self, sft_module, sample_sft_jsonl: Path) -> None:
+    def test_format_input_contains_market_snapshot(
+        self, sft_module, sample_sft_jsonl: Path
+    ) -> None:
         """Input contains the market snapshot."""
         examples = sft_module.load_sft_data(sample_sft_jsonl)
         formatted = sft_module.format_for_sft(examples)
@@ -256,15 +274,15 @@ class TestInstructionFormat:
             input_text = item.get("input") or item.get("prompt", "")
             assert "Market Data" in input_text or examples[i]["market_snapshot"] in input_text
 
-    def test_format_output_contains_reasoning_trace(self, sft_module, sample_sft_jsonl: Path) -> None:
+    def test_format_output_contains_reasoning_trace(
+        self, sft_module, sample_sft_jsonl: Path
+    ) -> None:
         """Output contains the structured reasoning trace."""
         examples = sft_module.load_sft_data(sample_sft_jsonl)
         formatted = sft_module.format_for_sft(examples)
 
         for i, item in enumerate(formatted):
-            output_text = (
-                item.get("output") or item.get("response") or item.get("completion", "")
-            )
+            output_text = item.get("output") or item.get("response") or item.get("completion", "")
             assert "THESIS:" in output_text or examples[i]["reasoning_trace"] in output_text
 
 
@@ -306,16 +324,22 @@ class TestValidationSplit:
     def test_validation_ratio_is_10_percent(self, sft_module) -> None:
         """Validation split ratio is 10%."""
         config = sft_module.SFTTrainingConfig()
-        assert config.validation_ratio == 0.1, f"Val ratio should be 0.1, got {config.validation_ratio}"
+        assert config.validation_ratio == 0.1, (
+            f"Val ratio should be 0.1, got {config.validation_ratio}"
+        )
 
-    def test_create_train_val_split_preserves_total(self, sft_module, sample_sft_jsonl: Path) -> None:
+    def test_create_train_val_split_preserves_total(
+        self, sft_module, sample_sft_jsonl: Path
+    ) -> None:
         """Train + val = total examples."""
         examples = sft_module.load_sft_data(sample_sft_jsonl)
         train, val = sft_module.create_train_val_split(examples, val_ratio=0.1)
 
         assert len(train) + len(val) == len(examples)
 
-    def test_create_train_val_split_correct_proportions(self, sft_module, sample_sft_jsonl: Path) -> None:
+    def test_create_train_val_split_correct_proportions(
+        self, sft_module, sample_sft_jsonl: Path
+    ) -> None:
         """Validation set is approximately 10% of data."""
         examples = sft_module.load_sft_data(sample_sft_jsonl)
         train, val = sft_module.create_train_val_split(examples, val_ratio=0.1)
@@ -379,8 +403,9 @@ class TestProcessIsolation:
         """Preflight verifies training lock is available."""
         # The sft_module has mocked check_can_train - override it for this test
         with patch.object(
-            sft_module, "check_can_train",
-            return_value=(False, "Another training process is running")
+            sft_module,
+            "check_can_train",
+            return_value=(False, "Another training process is running"),
         ):
             can_train, reason = sft_module.run_preflight_checks()
 
@@ -406,10 +431,7 @@ class TestProcessIsolation:
         mock_vram_status.free_mb = 5000
         mock_vram_status.reason = "Low VRAM"
 
-        with patch.object(
-            sft_module, "check_vram_availability",
-            return_value=mock_vram_status
-        ):
+        with patch.object(sft_module, "check_vram_availability", return_value=mock_vram_status):
             can_train, reason = sft_module.run_preflight_checks()
 
         assert can_train is False
@@ -509,8 +531,7 @@ class TestTrainSFTFunction:
         """train_sft returns failure result on preflight failure."""
         # Override preflight to fail
         with patch.object(
-            sft_module, "run_preflight_checks",
-            return_value=(False, "VRAM insufficient")
+            sft_module, "run_preflight_checks", return_value=(False, "VRAM insufficient")
         ):
             result = sft_module.train_sft(
                 data_path=sample_sft_jsonl,
@@ -534,8 +555,9 @@ class TestTrainSFTFunction:
         # Make the train_sft function fail early but after lock acquisition
         with patch.object(sft_module, "acquire_training_lock", return_value=mock_lock) as mock_acq:
             with patch.object(
-                sft_module, "_load_model_and_tokenizer",
-                side_effect=Exception("Early stop for test")
+                sft_module,
+                "_load_model_and_tokenizer",
+                side_effect=Exception("Early stop for test"),
             ):
                 result = sft_module.train_sft(
                     data_path=sample_sft_jsonl,
@@ -570,11 +592,17 @@ class TestTrainSFTFunction:
         mock_dataset.__len__ = MagicMock(return_value=90)
 
         with patch.object(sft_module, "acquire_training_lock", return_value=mock_lock):
-            with patch.object(sft_module, "_load_model_and_tokenizer", return_value=(mock_model, mock_tokenizer)):
+            with patch.object(
+                sft_module, "_load_model_and_tokenizer", return_value=(mock_model, mock_tokenizer)
+            ):
                 with patch.object(sft_module, "get_peft_model", return_value=mock_model):
                     with patch.object(sft_module, "_prepare_dataset", return_value=mock_dataset):
                         with patch.object(sft_module, "Trainer", return_value=mock_trainer):
-                            with patch.object(sft_module, "_save_adapter_with_metadata", return_value=tmp_path / "adapter"):
+                            with patch.object(
+                                sft_module,
+                                "_save_adapter_with_metadata",
+                                return_value=tmp_path / "adapter",
+                            ):
                                 result = sft_module.train_sft(
                                     data_path=sample_sft_jsonl,
                                     output_dir=tmp_path / "adapters",
@@ -620,13 +648,26 @@ class TestEvaluationAfterTraining:
         mock_evaluate = MagicMock(return_value=mock_eval_result)
 
         with patch.object(sft_module, "acquire_training_lock", return_value=mock_lock):
-            with patch.object(sft_module, "_load_model_and_tokenizer", return_value=(mock_model, mock_tokenizer)):
+            with patch.object(
+                sft_module, "_load_model_and_tokenizer", return_value=(mock_model, mock_tokenizer)
+            ):
                 with patch.object(sft_module, "get_peft_model", return_value=mock_model):
                     with patch.object(sft_module, "_prepare_dataset", return_value=MagicMock()):
                         with patch.object(sft_module, "Trainer", return_value=mock_trainer):
-                            with patch.object(sft_module, "_save_adapter_with_metadata", return_value=tmp_path / "adapter"):
+                            with patch.object(
+                                sft_module,
+                                "_save_adapter_with_metadata",
+                                return_value=tmp_path / "adapter",
+                            ):
                                 # Mock the evaluate_adapter import
-                                with patch.dict(sys.modules, {"training.dpo_eval": MagicMock(evaluate_adapter=mock_evaluate)}):
+                                with patch.dict(
+                                    sys.modules,
+                                    {
+                                        "training.dpo_eval": MagicMock(
+                                            evaluate_adapter=mock_evaluate
+                                        )
+                                    },
+                                ):
                                     result = sft_module.train_sft(
                                         data_path=sample_sft_jsonl,
                                         output_dir=tmp_path / "adapters",

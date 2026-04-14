@@ -250,6 +250,7 @@ async def preflight_checks() -> bool:
     # 1. DATA — Check Ollama is accessible
     try:
         import aiohttp
+
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 f"{settings.ollama.base_url}/api/tags",
@@ -275,6 +276,7 @@ async def preflight_checks() -> bool:
     # 3. VRAM — Check GPU memory
     try:
         import subprocess
+
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
             capture_output=True,
@@ -453,12 +455,14 @@ async def generate_sft_dataset(
                                 )
                                 # Filter to forward period only
                                 forward_df = forward_df[
-                                    (forward_df["timestamp"] > window_end_ms) &
-                                    (forward_df["timestamp"] <= forward_end_ms)
+                                    (forward_df["timestamp"] > window_end_ms)
+                                    & (forward_df["timestamp"] <= forward_end_ms)
                                 ]
 
                                 if forward_df.empty or len(forward_df) < forward_bars * 0.8:
-                                    logger.debug(f"Insufficient forward data for window {window_idx}")
+                                    logger.debug(
+                                        f"Insufficient forward data for window {window_idx}"
+                                    )
                                     error_count += 1
                                     pbar.update(1)
                                     continue
@@ -470,7 +474,9 @@ async def generate_sft_dataset(
 
                                 # Apply fee model
                                 holding_periods = len(forward_df) * bar_ms / (8 * 3600 * 1000)
-                                net_return_pct = fee_model.net_return(gross_return_pct, holding_periods)
+                                net_return_pct = fee_model.net_return(
+                                    gross_return_pct, holding_periods
+                                )
 
                                 # Determine direction from NET return (after fees)
                                 outcome = determine_direction(net_return_pct / 100)

@@ -131,7 +131,10 @@ def should_accept_signal(
     if technical_alignment < 0.35:  # Slightly relaxed from 0.4
         return False, f"Technical alignment too low: {technical_alignment:.2f}"
 
-    return True, f"Score {score:.2f} above threshold {threshold}, alignment {technical_alignment:.2f}"
+    return (
+        True,
+        f"Score {score:.2f} above threshold {threshold}, alignment {technical_alignment:.2f}",
+    )
 
 
 def _get_task_config_by_type(task_type: TaskType) -> TaskConfig:
@@ -457,6 +460,7 @@ async def run_multi_persona_workflow(
 
     # Generate context ID (shared across all personas for DPO pairing)
     import uuid
+
     context_id = str(uuid.uuid4())
 
     # Initialize summary
@@ -594,7 +598,9 @@ async def run_multi_persona_workflow(
         if critique is None:
             # Critic returned None (extraction failed) - accept by default with flag
             training_example.was_accepted = True
-            training_example.acceptance_reason = f"Critic failed for {persona.value} - accepted by default"
+            training_example.acceptance_reason = (
+                f"Critic failed for {persona.value} - accepted by default"
+            )
             training_example.critic_error = "Critique extraction failed"
             logger.warning(
                 "Critic failed, accepting by default",

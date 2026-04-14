@@ -78,6 +78,7 @@ def binance_client(execution_settings, fee_model_settings, temp_state_dir):
 # Kill Switch Tests (3 tests)
 # ============================================================================
 
+
 class TestKillSwitch:
     """Test kill switch safety control."""
 
@@ -92,6 +93,7 @@ class TestKillSwitch:
 
         # Attempt to place limit order - should raise exception
         from execution.exceptions import KillSwitchActiveError
+
         with pytest.raises(KillSwitchActiveError):
             await binance_client.place_limit_order(
                 symbol="BTC/USDT",
@@ -111,6 +113,7 @@ class TestKillSwitch:
 
         # Attempt to place market order - should raise exception
         from execution.exceptions import KillSwitchActiveError
+
         with pytest.raises(KillSwitchActiveError):
             await binance_client.place_market_order(
                 symbol="BTC/USDT",
@@ -150,6 +153,7 @@ class TestKillSwitch:
 # ============================================================================
 # Daily Loss Limit Tests (2 tests)
 # ============================================================================
+
 
 class TestDailyLossLimit:
     """Test daily loss limit safety control."""
@@ -239,6 +243,7 @@ class TestDailyLossLimit:
 # Daily Trade Limit Test (1 test)
 # ============================================================================
 
+
 class TestDailyTradeLimit:
     """Test daily trade count limit safety control."""
 
@@ -284,6 +289,7 @@ class TestDailyTradeLimit:
 # ============================================================================
 # Position Limit Test (1 test)
 # ============================================================================
+
 
 class TestPositionLimit:
     """Test position count limit safety control."""
@@ -348,6 +354,7 @@ class TestPositionLimit:
 # Order Cooldown Test (1 test)
 # ============================================================================
 
+
 class TestOrderCooldown:
     """Test order cooldown safety control."""
 
@@ -394,6 +401,7 @@ class TestOrderCooldown:
 # Signal Confidence Test (1 test)
 # ============================================================================
 
+
 class TestSignalConfidence:
     """Test signal confidence threshold safety control."""
 
@@ -438,6 +446,7 @@ class TestSignalConfidence:
 # Fee Threshold Test (1 test)
 # ============================================================================
 
+
 class TestFeeThreshold:
     """Test fee threshold safety control."""
 
@@ -475,12 +484,16 @@ class TestFeeThreshold:
 
         # Signal should be rejected
         assert decision.execute is False
-        assert "fee threshold" in decision.reason.lower() or "expected return" in decision.reason.lower()
+        assert (
+            "fee threshold" in decision.reason.lower()
+            or "expected return" in decision.reason.lower()
+        )
 
 
 # ============================================================================
 # Successful Signal Acceptance Test (1 test)
 # ============================================================================
+
 
 class TestSuccessfulSignalAcceptance:
     """Test successful signal acceptance with all safety checks passing."""

@@ -36,20 +36,20 @@ class TestSampleSizeRequirements:
     def test_get_confidence_level_low(self):
         """Test low confidence region."""
         req = SampleSizeRequirements()
-        assert req.get_confidence_level(30) == 'low'
-        assert req.get_confidence_level(59) == 'low'
+        assert req.get_confidence_level(30) == "low"
+        assert req.get_confidence_level(59) == "low"
 
     def test_get_confidence_level_moderate(self):
         """Test moderate confidence region."""
         req = SampleSizeRequirements()
-        assert req.get_confidence_level(60) == 'moderate'
-        assert req.get_confidence_level(99) == 'moderate'
+        assert req.get_confidence_level(60) == "moderate"
+        assert req.get_confidence_level(99) == "moderate"
 
     def test_get_confidence_level_high(self):
         """Test high confidence region."""
         req = SampleSizeRequirements()
-        assert req.get_confidence_level(100) == 'high'
-        assert req.get_confidence_level(1000) == 'high'
+        assert req.get_confidence_level(100) == "high"
+        assert req.get_confidence_level(1000) == "high"
 
     def test_is_immutable(self):
         """Test that SampleSizeRequirements is frozen."""

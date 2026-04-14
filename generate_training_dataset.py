@@ -141,9 +141,7 @@ async def phase1_prepare_contexts(config: DatasetConfig) -> list[InferenceJob]:
             for symbol in config.symbols
             for timeframe in config.timeframes
         ]
-        latest_data_results = await asyncio.gather(
-            *latest_data_tasks, return_exceptions=True
-        )
+        latest_data_results = await asyncio.gather(*latest_data_tasks, return_exceptions=True)
 
         # Build (symbol, timeframe, latest_timestamp) tuples
         symbol_timeframe_pairs = []
@@ -368,10 +366,7 @@ async def phase3_postprocess(config: DatasetConfig) -> dict:
         "examples_by_regime": dict(Counter(ex["market_regime"] for ex in examples)),
         "examples_by_persona": dict(Counter(ex["persona"] for ex in examples)),
         "examples_by_task": dict(
-            Counter(
-                ex.get("generator_signal", {}).get("task_type", "unknown")
-                for ex in examples
-            )
+            Counter(ex.get("generator_signal", {}).get("task_type", "unknown") for ex in examples)
         ),
         "acceptance_rate": (
             sum(1 for ex in examples if ex.get("was_accepted", False)) / len(examples)
@@ -383,18 +378,14 @@ async def phase3_postprocess(config: DatasetConfig) -> dict:
 
     # Validate context grouping
     context_counts = Counter(ex["context_id"] for ex in examples)
-    incomplete_contexts = {
-        ctx: count for ctx, count in context_counts.items() if count != 5
-    }
+    incomplete_contexts = {ctx: count for ctx, count in context_counts.items() if count != 5}
     if incomplete_contexts:
         logger.warning(
             f"Found {len(incomplete_contexts)} incomplete contexts (not 5 personas)",
             sample=list(incomplete_contexts.items())[:5],
         )
         stats["incomplete_contexts"] = len(incomplete_contexts)
-        stats["incomplete_context_sample"] = dict(
-            list(incomplete_contexts.items())[:10]
-        )
+        stats["incomplete_context_sample"] = dict(list(incomplete_contexts.items())[:10])
 
     # Save summary
     with open(summary_file, "w") as f:

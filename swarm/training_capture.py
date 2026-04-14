@@ -295,6 +295,5 @@ def filter_complete(
         Examples with actual_direction and realized_return populated
     """
     return [
-        ex for ex in examples
-        if ex.actual_direction is not None and ex.realized_return is not None
+        ex for ex in examples if ex.actual_direction is not None and ex.realized_return is not None
     ]
