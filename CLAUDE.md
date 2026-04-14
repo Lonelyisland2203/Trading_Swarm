@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17Q.
+Completed through Session 17R.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -80,7 +80,13 @@ Completed through Session 17Q.
 - dashboard/ — FastAPI dashboard backend package (26 tests):
   - data_readers.py — centralized data access: read_signal_log, read_order_log, read_autoresearch_results, read_health_status, compute_equity_curve, compute_rolling_sharpe, compute_drawdown, compute_win_rate, compute_daily_pnl. All functions handle missing files gracefully.
   - api.py — FastAPI app (port 8420): 10 GET endpoints + 1 WebSocket, CORS for localhost:5173, NO POST/PUT/DELETE (Architecture Constraint #11). Endpoints: /api/positions (cached 5s), /api/pnl/daily, /api/signals/recent (limit 50), /api/performance (equity curve, Sharpe, drawdown, win rate), /api/xgboost/features (SHAP), /api/xgboost/metrics (IC/Brier history), /api/autoresearch/log (TSV→JSON), /api/risk/funding (cached 60s), /api/risk/oi (cached 60s), /api/health (watchdog heartbeat). WS /ws/live pushes {positions, latest_signal, daily_pnl, health} every 5s.
+- dashboard/ui/ — **NEW** React dashboard frontend (Vite + Tailwind + Recharts):
+  - Bloomberg terminal aesthetic: dark theme (#0D1117), JetBrains Mono for data, Space Grotesk for headings
+  - 6 pages: LiveOverview (WebSocket real-time), SignalPipeline (expandable rows), Performance (equity curve, Sharpe, drawdown), XGBoostModel (SHAP, IC/Brier trends), Autoresearch (experiment log, Sharpe progression), RiskMonitor (funding heatmap, OI, liquidations)
+  - Shared components: StatCard, StatusBadge, DrawdownGauge, DataTable, TabNav
+  - API client with fetch wrapper, WebSocket hook with reconnect logic
+  - No localStorage, no trade execution UI (read-only). Desktop-first (min 1280px)
 
 ## Next Session
 
-Session 17R — React dashboard frontend: Vite + Tailwind + Recharts + shadcn/ui, Bloomberg terminal aesthetic, pages for Live Overview and Signal Pipeline
+Session 17S — Dashboard polish: responsive breakpoints, loading skeletons, error boundaries, accessibility (ARIA labels), Playwright E2E tests
