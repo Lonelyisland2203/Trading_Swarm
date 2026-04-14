@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17N.
+Completed through Session 17O.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -52,9 +52,13 @@ Completed through Session 17N.
 - training/grpo_data_generator.py — generates grpo_training_data.jsonl from historical market data: fetches OHLCV with temporal safety (get_ohlcv_as_of), computes all 21 indicators, builds market snapshots, looks ahead by timeframe-adaptive horizon (1h→24 bars, 4h→12 bars), classifies direction using fee threshold (LONG/SHORT/FLAT), CLI with --symbols/--timeframes/--start-date/--end-date/--limit flags
 - training/evaluate_candidate.py — unified adapter evaluation for DPO/GRPO, metrics (IC, Brier, MACE, regime-stratified IC, structure_compliance_rate), promotion criteria (IC≥0.05, Brier≤0.25, p<0.05, structure≥0.9 for GRPO), --compare mode for side-by-side evaluation
 - run_grpo_training.py — end-to-end GRPO pipeline CLI: 5 phases (SFT data gen, SFT train, GRPO train, eval, promotion), skip logic for existing artifacts, --dry-run/--regenerate/--retrain-sft/--limit/--max-steps flags
-- run_autoresearch.py — autonomous hyperparameter search loop (karpathy/autoresearch-inspired): round-robin parameter selection, direction tracking, git commit/revert on IC improvement/regression, results.tsv logging, --max-experiments/--time-budget-hours/--dry-run flags
+- run_autoresearch.py — **REFACTORED** Karpathy-pattern XGBoost autoresearch: targets signals/xgboost_config.py (not GRPO), primary metric sharpe_net (threshold 0.02), --metric flag (sharpe_net|ic|brier), git commit/revert on improvement/regression, STOP file handling, --time-budget-hours for overnight runs
 - evaluation/xgboost_baseline.py — XGBoost/LightGBM baseline for LLM comparison: extracts same 21 indicators from market snapshots, walk-forward CV with temporal ordering, metrics (IC, Brier, Sharpe, directional accuracy), SHAP feature importance, comparison table vs GRPO/DPO adapters, CLI with --data/--compare/--n-folds flags
+- evaluation/xgboost_eval.py — **NEW** read-only eval script for autoresearch: loads data with temporal safety, walk-forward CV, computes IC/Brier/Sharpe_net/accuracy/false rates, SHAP top-5, JSON output, appends to autoresearch/results.tsv. NEVER modify during experiments.
 - evaluation/baseline_metrics.json — saved baseline metrics from xgboost_baseline.py (IC, Brier, Sharpe for XGBoost/LightGBM)
+- autoresearch/ — **NEW** Karpathy autoresearch directory:
+  - program.md — agent instructions for XGBoost optimization (setup, experiment loop, rules, anti-patterns)
+  - results.tsv — experiment log (experiment_id, timestamp, change_description, sharpe_net, ic, brier, accuracy, false_bullish_rate, kept_or_reverted)
 - signals/ — production signal loop package (187 tests):
   - signal_models.py — Signal dataclass, SignalDirection, map_generator_to_signal (HIGHER/LOWER→LONG/SHORT)
   - preflight.py — STOP file check, VRAM check (6GB min), process lock via check_can_infer()
@@ -68,8 +72,8 @@ Completed through Session 17N.
   - llm_context.py — LLM context overlay node: LLMContext dataclass (bullish_factors, bearish_factors, regime_flag, confidence), generate_market_context (async), Qwen system prompt (context only, NEVER direction), VRAM preflight, OLLAMA_KEEP_ALIVE=0 enforcement, graceful fallback on failure, forbidden words filter (LONG/SHORT/BUY/SELL)
 - run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence
 - run_verification.py — CLI: --once, --interval, --stats, --export, --check-trigger; runs on schedule (default 4h) or once mode
-- Tests: 1510+ tests (signals: 187)
+- Tests: 1520+ tests (signals: 187, autoresearch: 30+)
 
 ## Next Session
 
-Session 17O — Add funding rate / OI delta data fetching to market_data.py, integrate into signal_loop.py LLM context generation
+Session 17P — Add funding rate / OI delta data fetching to market_data.py, integrate into signal_loop.py LLM context generation
