@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17P.
+Completed through Session 17Q.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -77,7 +77,10 @@ Completed through Session 17P.
   - exchange_router.py — **NEW** multi-exchange router: dispatches to HyperliquidAdapter or BinanceExecutionClient based on EXCHANGE env var, identical interface regardless of exchange, runtime switching via switch_exchange(), logs exchange selection at startup
   - watchdog.py — **NEW** independent watchdog process: COMPLETELY SEPARATE from signal_loop (not imported, not part of LangGraph), polls positions every 30s, enforces max 2% daily loss (flatten all), position age >48h alerts, orphan position detection, STOP file triggers immediate flatten and exit, writes heartbeat to dashboard/health_status.json, CLI entry point for systemd/supervisor
 - Tests: 1560+ tests (signals: 187, execution: 43, autoresearch: 30+)
+- dashboard/ — FastAPI dashboard backend package (26 tests):
+  - data_readers.py — centralized data access: read_signal_log, read_order_log, read_autoresearch_results, read_health_status, compute_equity_curve, compute_rolling_sharpe, compute_drawdown, compute_win_rate, compute_daily_pnl. All functions handle missing files gracefully.
+  - api.py — FastAPI app (port 8420): 10 GET endpoints + 1 WebSocket, CORS for localhost:5173, NO POST/PUT/DELETE (Architecture Constraint #11). Endpoints: /api/positions (cached 5s), /api/pnl/daily, /api/signals/recent (limit 50), /api/performance (equity curve, Sharpe, drawdown, win rate), /api/xgboost/features (SHAP), /api/xgboost/metrics (IC/Brier history), /api/autoresearch/log (TSV→JSON), /api/risk/funding (cached 60s), /api/risk/oi (cached 60s), /api/health (watchdog heartbeat). WS /ws/live pushes {positions, latest_signal, daily_pnl, health} every 5s.
 
 ## Next Session
 
-Session 17Q — Add funding rate / OI delta data fetching to market_data.py, integrate into signal_loop.py LLM context generation
+Session 17R — React dashboard frontend: Vite + Tailwind + Recharts + shadcn/ui, Bloomberg terminal aesthetic, pages for Live Overview and Signal Pipeline
