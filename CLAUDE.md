@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17R.
+Completed through Session 17S.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -70,13 +70,15 @@ Completed through Session 17R.
   - xgboost_config.py — all XGBoost hyperparameters (n_estimators, max_depth, learning_rate, etc.), FEATURE_LIST (21 indicators), CLASS_WEIGHTS (asymmetric), WALK_FORWARD_CONFIG, LABEL_THRESHOLD, PROBABILITY_THRESHOLDS
   - xgboost_signal.py — production XGBoost signal generator: extract_features_from_ohlcv (21 indicators), generate_xgboost_signal (async, uses get_ohlcv_as_of for temporal safety), XGBoostSignal dataclass, walk-forward splits, retrain trigger (≥200 signals)
   - llm_context.py — LLM context overlay node: LLMContext dataclass (bullish_factors, bearish_factors, regime_flag, confidence), generate_market_context (async), Qwen system prompt (context only, NEVER direction), VRAM preflight, OLLAMA_KEEP_ALIVE=0 enforcement, graceful fallback on failure, forbidden words filter (LONG/SHORT/BUY/SELL)
-- run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence
+- run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence, --graph/--no-graph (default: --graph uses LangGraph pipeline)
+- orchestration/ — **NEW** LangGraph-based trading pipeline (Session 17S):
+  - trading_graph.py — TradingState dataclass, TradingGraph with 5 nodes: data_node (OHLCV + 17 indicators), xgboost_node (signal generation), context_node (Qwen market context), risk_filter_node (DeepSeek veto), synthesis_node (final decision), execution_node (exchange routing). Error handling per node, STOP file check at entry, state logging to signal_log.jsonl
 - run_verification.py — CLI: --once, --interval, --stats, --export, --check-trigger; runs on schedule (default 4h) or once mode
 - execution/ — execution layer package (43 tests):
   - hyperliquid_adapter.py — **NEW** Hyperliquid execution adapter: EIP-712 signing via hyperliquid-python-sdk, place_order (limit/market), cancel_order, get_positions, get_balance, flatten_all, auto exchange-side stop-loss on every position, connection retry logic (3 retries, exponential backoff), order logging to execution/order_log.jsonl
   - exchange_router.py — **NEW** multi-exchange router: dispatches to HyperliquidAdapter or BinanceExecutionClient based on EXCHANGE env var, identical interface regardless of exchange, runtime switching via switch_exchange(), logs exchange selection at startup
   - watchdog.py — **NEW** independent watchdog process: COMPLETELY SEPARATE from signal_loop (not imported, not part of LangGraph), polls positions every 30s, enforces max 2% daily loss (flatten all), position age >48h alerts, orphan position detection, STOP file triggers immediate flatten and exit, writes heartbeat to dashboard/health_status.json, CLI entry point for systemd/supervisor
-- Tests: 1560+ tests (signals: 187, execution: 43, autoresearch: 30+)
+- Tests: 1590+ tests (signals: 187, execution: 43, autoresearch: 30+, orchestration: 13)
 - dashboard/ — FastAPI dashboard backend package (26 tests):
   - data_readers.py — centralized data access: read_signal_log, read_order_log, read_autoresearch_results, read_health_status, compute_equity_curve, compute_rolling_sharpe, compute_drawdown, compute_win_rate, compute_daily_pnl. All functions handle missing files gracefully.
   - api.py — FastAPI app (port 8420): 10 GET endpoints + 1 WebSocket, CORS for localhost:5173, NO POST/PUT/DELETE (Architecture Constraint #11). Endpoints: /api/positions (cached 5s), /api/pnl/daily, /api/signals/recent (limit 50), /api/performance (equity curve, Sharpe, drawdown, win rate), /api/xgboost/features (SHAP), /api/xgboost/metrics (IC/Brier history), /api/autoresearch/log (TSV→JSON), /api/risk/funding (cached 60s), /api/risk/oi (cached 60s), /api/health (watchdog heartbeat). WS /ws/live pushes {positions, latest_signal, daily_pnl, health} every 5s.
@@ -89,4 +91,4 @@ Completed through Session 17R.
 
 ## Next Session
 
-Session 17S — Dashboard polish: responsive breakpoints, loading skeletons, error boundaries, accessibility (ARIA labels), Playwright E2E tests
+Session 17T — Dashboard polish: responsive breakpoints, loading skeletons, error boundaries, accessibility (ARIA labels), Playwright E2E tests

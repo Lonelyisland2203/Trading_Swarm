@@ -45,18 +45,23 @@ def print_banner(
     dry_run: bool,
     once: bool,
     min_confidence: float,
+    use_graph: bool = True,
 ):
     """Print startup banner."""
     mode = "LIVE" if execute else "DRY RUN" if dry_run else "SIGNAL ONLY"
     testnet = "TESTNET" if settings.execution.testnet else "MAINNET"
+    pipeline = "LANGGRAPH" if use_graph else "LEGACY"
 
     print()
     print("=" * 70)
     print("  TRADING SWARM - SIGNAL LOOP")
     print("=" * 70)
     print(f"  Mode:           {mode} ({testnet})")
+    print(f"  Pipeline:       {pipeline}")
     print(f"  Timeframe:      {timeframe}")
-    print(f"  Symbols:        {len(symbols)} ({', '.join(symbols[:3])}{'...' if len(symbols) > 3 else ''})")
+    print(
+        f"  Symbols:        {len(symbols)} ({', '.join(symbols[:3])}{'...' if len(symbols) > 3 else ''})"
+    )
     print(f"  Min Confidence: {min_confidence:.0%}")
     print(f"  Generator:      {settings.ollama.generator_model}")
     print(f"  Critic:         {settings.ollama.critic_model}")
@@ -66,7 +71,9 @@ def print_banner(
     # Print accuracy summary if available
     accuracy = get_accuracy_summary()
     if accuracy["total"] > 0:
-        print(f"  Historical Accuracy: {accuracy['correct']}/{accuracy['total']} ({accuracy['accuracy_pct']:.1f}%)")
+        print(
+            f"  Historical Accuracy: {accuracy['correct']}/{accuracy['total']} ({accuracy['accuracy_pct']:.1f}%)"
+        )
         print("=" * 70)
 
     print()
@@ -78,6 +85,105 @@ def print_banner(
 
     print(f"  Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print()
+
+
+async def run_graph_loop(
+    symbols: list[str],
+    timeframe: str,
+    dry_run: bool = True,
+    once: bool = False,
+) -> None:
+    """
+    Run trading graph loop for all symbols.
+
+    Uses LangGraph-based TradingGraph for each symbol.
+    Runs on schedule aligned to timeframe bar closes.
+
+    Args:
+        symbols: List of trading pairs
+        timeframe: Timeframe string
+        dry_run: If True, skip execution
+        once: Run single cycle and exit
+    """
+    from orchestration.trading_graph import TradingGraph
+    from signals.preflight import check_stop_file, run_preflight_checks
+    from signals.signal_models import get_timeframe_duration_ms
+
+    # Calculate bar duration
+    bar_duration_ms = get_timeframe_duration_ms(timeframe)
+    bar_duration_s = bar_duration_ms / 1000
+
+    logger.info(
+        "Starting graph loop",
+        symbols=symbols,
+        timeframe=timeframe,
+        dry_run=dry_run,
+        once=once,
+    )
+
+    graph = TradingGraph()
+
+    while True:
+        # Check STOP file first
+        if check_stop_file():
+            logger.warning("STOP file detected, halting graph loop")
+            break
+
+        cycle_start = datetime.now(timezone.utc)
+
+        # Run preflight checks
+        preflight = run_preflight_checks()
+        if not preflight.passed:
+            logger.warning(
+                "Preflight failed, waiting to retry",
+                reason=preflight.reason,
+            )
+            if once:
+                logger.error("Preflight failed in --once mode, exiting")
+                break
+            await asyncio.sleep(60)  # Wait 1 minute and retry
+            continue
+
+        # Run graph for each symbol
+        results = []
+        for symbol in symbols:
+            if check_stop_file():
+                logger.warning("STOP file detected mid-cycle, halting")
+                break
+
+            logger.info("Processing symbol", symbol=symbol, timeframe=timeframe)
+
+            result = await graph.run(
+                symbol=symbol,
+                timeframe=timeframe,
+                dry_run=dry_run,
+            )
+            results.append(result)
+
+            # Print summary
+            if result.synthesis_output:
+                direction = result.synthesis_output.direction
+                position = result.synthesis_output.position_size_fraction
+                errors = len(result.errors)
+                print(f"  {symbol}: {direction} ({position:.0%}) {'[ERRORS]' if errors else ''}")
+
+        logger.info(
+            "Cycle complete",
+            symbols_processed=len(results),
+            duration_s=(datetime.now(timezone.utc) - cycle_start).total_seconds(),
+        )
+
+        if once:
+            logger.info("Single cycle complete, exiting")
+            break
+
+        # Calculate sleep until next bar
+        cycle_duration = (datetime.now(timezone.utc) - cycle_start).total_seconds()
+        sleep_duration = max(0, bar_duration_s - cycle_duration)
+
+        if sleep_duration > 0:
+            logger.info(f"Sleeping {sleep_duration:.0f}s until next cycle")
+            await asyncio.sleep(sleep_duration)
 
 
 def parse_args():
@@ -132,6 +238,19 @@ Examples:
         default=0.6,
         help="Minimum confidence for execution (default: 0.6)",
     )
+    parser.add_argument(
+        "--graph",
+        action="store_true",
+        default=True,
+        dest="use_graph",
+        help="Use LangGraph-based pipeline (default: True)",
+    )
+    parser.add_argument(
+        "--no-graph",
+        action="store_false",
+        dest="use_graph",
+        help="Use legacy signal loop (deprecated)",
+    )
 
     return parser.parse_args()
 
@@ -183,18 +302,30 @@ async def main():
         dry_run=args.dry_run,
         once=args.once,
         min_confidence=args.min_confidence,
+        use_graph=args.use_graph,
     )
 
-    # Run the loop
+    # Run the appropriate pipeline
     try:
-        await run_loop(
-            symbols=symbols,
-            timeframe=args.timeframe,
-            execute=args.execute and not args.dry_run,
-            min_confidence=args.min_confidence,
-            once=args.once,
-            execution_client=execution_client,
-        )
+        if args.use_graph:
+            # LangGraph-based pipeline (Session 17S)
+            await run_graph_loop(
+                symbols=symbols,
+                timeframe=args.timeframe,
+                dry_run=args.dry_run or not args.execute,
+                once=args.once,
+            )
+        else:
+            # Legacy signal loop (deprecated)
+            logger.warning("Using legacy signal loop (--no-graph). Consider migrating to --graph.")
+            await run_loop(
+                symbols=symbols,
+                timeframe=args.timeframe,
+                execute=args.execute and not args.dry_run,
+                min_confidence=args.min_confidence,
+                once=args.once,
+                execution_client=execution_client,
+            )
     except KeyboardInterrupt:
         logger.info("Received interrupt, shutting down gracefully")
     except Exception as e:
