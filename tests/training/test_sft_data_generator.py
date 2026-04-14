@@ -168,7 +168,7 @@ class TestBuildMarketSnapshot:
         assert "Timeframe: 1h" in snapshot
         assert "## Technical Indicators" in snapshot
         assert "RSI(14):" in snapshot
-        assert "MACD:" in snapshot
+        assert "MACD Line:" in snapshot  # Updated to match data/market_snapshot.py format
         assert "## Recent Price Action" in snapshot
         assert "## Execution Context" in snapshot
         assert "round-trip cost:" in snapshot

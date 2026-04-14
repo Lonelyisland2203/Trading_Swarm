@@ -45,7 +45,6 @@ from loguru import logger
 # File paths
 XGBOOST_CONFIG_PATH = Path("signals/xgboost_config.py")
 RESULTS_TSV_PATH = Path("autoresearch/results.tsv")
-STOP_FILE_PATH = Path("STOP")
 
 # Improvement thresholds
 IMPROVEMENT_THRESHOLDS = {
@@ -488,8 +487,10 @@ def run_evaluation(dry_run: bool = False) -> EvalResult:
 
 
 def check_stop_file() -> bool:
-    """Check if STOP file exists."""
-    return STOP_FILE_PATH.exists()
+    """Check if STOP file exists at execution/state/STOP."""
+    from utils.stop_file import default_stop_checker
+
+    return default_stop_checker.is_active()
 
 
 # =============================================================================
@@ -776,12 +777,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
-        level="INFO",
-    )
+    from utils.logging import configure_cli_logging
+
+    configure_cli_logging()
 
     try:
         main()

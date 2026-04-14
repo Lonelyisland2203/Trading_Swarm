@@ -218,11 +218,13 @@ class TestPreflightChecks:
         mock_lock.return_value = (True, "Ready")
 
         # Create STOP file
+        from utils.stop_file import StopFileChecker
+
         stop_dir = tmp_path / "execution" / "state"
         stop_dir.mkdir(parents=True)
         (stop_dir / "STOP").touch()
 
-        with patch("training.grpo_trainer.STOP_FILE_PATH", stop_dir / "STOP"):
+        with patch("utils.stop_file.default_stop_checker", StopFileChecker(stop_dir / "STOP")):
             ok, reason = run_grpo_preflight(sample_examples)
             assert ok is False
             assert "STOP" in reason
@@ -236,10 +238,14 @@ class TestPreflightChecks:
         sample_examples: list[GRPOTrainingExample],
     ) -> None:
         """Test successful preflight."""
+        from utils.stop_file import StopFileChecker
+
         mock_vram.return_value = MagicMock(can_train=True, reason="OK", free_mb=12288)
         mock_lock.return_value = (True, "Ready")
 
-        with patch("training.grpo_trainer.STOP_FILE_PATH", Path("/nonexistent/STOP")):
+        with patch(
+            "utils.stop_file.default_stop_checker", StopFileChecker(Path("/nonexistent/STOP"))
+        ):
             ok, reason = run_grpo_preflight(sample_examples)
             assert ok is True
             assert "ready" in reason.lower()
@@ -1053,10 +1059,12 @@ class TestGRPOTrainerTrain:
                 vram_mb=1000,
             )
 
+        from utils.stop_file import StopFileChecker
+
         with patch.object(trainer, "_load_model"):
             with patch.object(trainer, "_training_step", side_effect=mock_step):
                 with patch.object(trainer, "_cleanup"):
-                    with patch("training.grpo_trainer.STOP_FILE_PATH", stop_file):
+                    with patch("utils.stop_file.default_stop_checker", StopFileChecker(stop_file)):
                         trainer._logger = MagicMock()
                         trainer._model = MagicMock()
                         result = trainer.train(sample_examples)

@@ -375,42 +375,39 @@ class TestRevertOnRegression:
 class TestStopFile:
     """Verify loop halts when STOP file exists."""
 
-    def test_check_stop_file_returns_true_when_exists(self, tmp_path, monkeypatch):
+    def test_check_stop_file_returns_true_when_exists(self, tmp_path):
         """check_stop_file should return True when STOP file exists."""
-        import run_autoresearch
+        from utils.stop_file import StopFileChecker
 
         stop_path = tmp_path / "STOP"
         stop_path.write_text("")
 
-        monkeypatch.setattr(run_autoresearch, "STOP_FILE_PATH", stop_path)
+        with patch("utils.stop_file.default_stop_checker", StopFileChecker(stop_path)):
+            assert check_stop_file() is True
 
-        assert check_stop_file() is True
-
-    def test_check_stop_file_returns_false_when_not_exists(self, tmp_path, monkeypatch):
+    def test_check_stop_file_returns_false_when_not_exists(self, tmp_path):
         """check_stop_file should return False when STOP file does not exist."""
-        import run_autoresearch
+        from utils.stop_file import StopFileChecker
 
         stop_path = tmp_path / "STOP"
         # Do NOT create the file
 
-        monkeypatch.setattr(run_autoresearch, "STOP_FILE_PATH", stop_path)
+        with patch("utils.stop_file.default_stop_checker", StopFileChecker(stop_path)):
+            assert check_stop_file() is False
 
-        assert check_stop_file() is False
-
-    def test_loop_should_stop_when_stop_file_exists(self, tmp_path, monkeypatch):
+    def test_loop_should_stop_when_stop_file_exists(self, tmp_path):
         """AutoresearchLoop.should_stop should return True when STOP file exists."""
-        import run_autoresearch
+        from utils.stop_file import StopFileChecker
 
         stop_path = tmp_path / "STOP"
         stop_path.write_text("")
 
-        monkeypatch.setattr(run_autoresearch, "STOP_FILE_PATH", stop_path)
+        with patch("utils.stop_file.default_stop_checker", StopFileChecker(stop_path)):
+            loop = AutoresearchLoop()
+            should_stop, reason = loop.should_stop()
 
-        loop = AutoresearchLoop()
-        should_stop, reason = loop.should_stop()
-
-        assert should_stop is True
-        assert "STOP" in reason
+            assert should_stop is True
+            assert "STOP" in reason
 
 
 # =============================================================================

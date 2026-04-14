@@ -11,27 +11,29 @@ from signals.preflight import (
     enforce_ollama_keep_alive,
 )
 from training.vram_check import VRAMStatus
+from utils.stop_file import StopFileChecker
 
 
 class TestCheckStopFile:
     """Tests for STOP file check."""
 
-    def test_stop_file_not_exists(self, tmp_path, monkeypatch):
+    def test_stop_file_not_exists(self, tmp_path):
         """Returns False when STOP file doesn't exist."""
-        # Point to a non-existent path
-        fake_path = tmp_path / "STOP"
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", fake_path)
+        # Create checker with non-existent path
+        fake_checker = StopFileChecker(tmp_path / "STOP")
 
-        assert check_stop_file() is False
+        with patch("utils.stop_file.default_stop_checker", fake_checker):
+            assert check_stop_file() is False
 
-    def test_stop_file_exists(self, tmp_path, monkeypatch):
+    def test_stop_file_exists(self, tmp_path):
         """Returns True when STOP file exists."""
         # Create STOP file
         stop_file = tmp_path / "STOP"
         stop_file.touch()
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_file)
+        fake_checker = StopFileChecker(stop_file)
 
-        assert check_stop_file() is True
+        with patch("utils.stop_file.default_stop_checker", fake_checker):
+            assert check_stop_file() is True
 
 
 class TestRunPreflightChecks:
@@ -59,11 +61,11 @@ class TestRunPreflightChecks:
             yield mock
 
     @pytest.fixture
-    def no_stop_file(self, tmp_path, monkeypatch):
+    def no_stop_file(self, tmp_path):
         """Ensure STOP file doesn't exist."""
-        fake_path = tmp_path / "STOP"
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", fake_path)
-        return fake_path
+        fake_checker = StopFileChecker(tmp_path / "STOP")
+        with patch("utils.stop_file.default_stop_checker", fake_checker):
+            yield tmp_path / "STOP"
 
     def test_all_checks_pass(self, no_stop_file, mock_can_infer, mock_vram_check):
         """All preflight checks pass."""
@@ -73,13 +75,14 @@ class TestRunPreflightChecks:
         assert "passed" in result.reason.lower()
         assert result.vram_status is not None
 
-    def test_stop_file_blocks(self, tmp_path, monkeypatch, mock_can_infer, mock_vram_check):
+    def test_stop_file_blocks(self, tmp_path, mock_can_infer, mock_vram_check):
         """STOP file blocks preflight."""
         stop_file = tmp_path / "STOP"
         stop_file.touch()
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_file)
+        fake_checker = StopFileChecker(stop_file)
 
-        result = run_preflight_checks()
+        with patch("utils.stop_file.default_stop_checker", fake_checker):
+            result = run_preflight_checks()
 
         assert result.passed is False
         assert "STOP" in result.reason

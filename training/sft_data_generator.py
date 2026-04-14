@@ -29,16 +29,14 @@ from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 from loguru import logger
 from tqdm import tqdm
 
 from config.fee_model import FeeModelSettings
 from config.settings import settings
 from data.historical_windows import HistoricalWindow, fetch_window_data
-from data.indicators import compute_all_indicators
 from data.market_data import MarketDataService
-from data.regime_filter import RegimeClassifier
+from data.market_snapshot import build_market_snapshot
 from swarm.ollama_client import OllamaClient
 from training.process_lock import acquire_training_lock, check_can_train
 from verifier.outcome import determine_direction
@@ -139,85 +137,6 @@ Important:
 - Be concise but precise"""
 
 
-def build_market_snapshot(
-    df: pd.DataFrame,
-    symbol: str,
-    timeframe: str,
-    fee_model: FeeModelSettings,
-) -> str:
-    """
-    Build market snapshot with indicators for distillation prompt.
-
-    Args:
-        df: OHLCV DataFrame with sufficient history
-        symbol: Trading pair
-        timeframe: Candle timeframe
-        fee_model: Fee model for cost context
-
-    Returns:
-        Formatted market snapshot string
-    """
-    # Compute all indicators
-    indicators = compute_all_indicators(df, include_volume=True, include_structure=True)
-
-    # Extract key values
-    current_price = float(df["close"].iloc[-1])
-    rsi = indicators.get("rsi", 50.0)
-    macd = indicators.get("macd", 0.0)
-    macd_signal = indicators.get("macd_signal", 0.0)
-    bb_position = indicators.get("bb_position", 0.5)
-    atr = indicators.get("atr", 0.0)
-    adx = indicators.get("adx", 0.0)
-    obv_slope = indicators.get("obv_slope", 0.0)
-
-    # Format recent price action
-    recent = df.tail(10)
-    price_lines = []
-    for _, row in recent.iterrows():
-        timestamp = pd.to_datetime(row["timestamp"], unit="ms")
-        change = ((row["close"] - row["open"]) / row["open"]) * 100
-        direction = "↑" if change > 0 else "↓"
-        price_lines.append(
-            f"{timestamp.strftime('%Y-%m-%d %H:%M')} | "
-            f"O: ${row['open']:.2f} H: ${row['high']:.2f} "
-            f"L: ${row['low']:.2f} C: ${row['close']:.2f} | "
-            f"{direction} {change:+.2f}%"
-        )
-
-    price_summary = "\n".join(price_lines)
-
-    # Calculate fee context
-    holding_periods = 1.0  # 1 funding period estimate
-    round_trip_cost = fee_model.round_trip_cost_pct(holding_periods)
-    min_profitable = fee_model.minimum_profitable_return_pct(holding_periods)
-
-    # Classify regime
-    classifier = RegimeClassifier()
-    regime, _ = classifier.get_current_regime(df["close"])
-
-    return f"""## Market Data
-Symbol: {symbol}
-Timeframe: {timeframe}
-Current Price: ${current_price:.4f}
-Market Regime: {regime.name}
-
-## Technical Indicators
-RSI(14): {rsi:.2f}
-MACD: {macd:.4f} (Signal: {macd_signal:.4f})
-BB Position: {bb_position:.2f} (0.0=lower band, 0.5=middle, 1.0=upper band)
-ATR(14): {atr:.4f}
-ADX(14): {adx:.2f}
-OBV Slope: {obv_slope:.4f}
-
-## Recent Price Action (last 10 bars)
-{price_summary}
-
-## Execution Context
-Exchange: Binance Futures USDT-M
-Estimated round-trip cost: {round_trip_cost:.3f}%
-Minimum profitable move: {min_profitable:.3f}%"""
-
-
 def parse_reasoning_trace(response: str) -> str | None:
     """
     Validate and clean reasoning trace from model response.
@@ -309,8 +228,9 @@ async def preflight_checks() -> bool:
     logger.info("✓ LOAD: OLLAMA_KEEP_ALIVE=0 enforced")
 
     # Check for STOP file
-    stop_file = Path("execution/state/STOP")
-    if stop_file.exists():
+    from utils.stop_file import default_stop_checker
+
+    if default_stop_checker.is_active():
         logger.error("STOP file exists at execution/state/STOP — refusing to proceed")
         return False
 
@@ -320,16 +240,9 @@ async def preflight_checks() -> bool:
 
 def load_completed_ids(output_file: Path) -> set[str]:
     """Load already-processed example IDs from existing JSONL."""
-    completed = set()
-    if output_file.exists():
-        with open(output_file) as f:
-            for line in f:
-                try:
-                    ex = json.loads(line)
-                    completed.add(ex["example_id"])
-                except (json.JSONDecodeError, KeyError):
-                    continue
-    return completed
+    from utils.jsonl import iter_jsonl
+
+    return {ex["example_id"] for ex in iter_jsonl(output_file) if "example_id" in ex}
 
 
 async def generate_sft_dataset(
@@ -598,12 +511,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Configure logging
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        level="INFO",
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
-    )
+    from utils.logging import configure_cli_logging
+
+    configure_cli_logging(include_name=False)
 
     # Run generation
     try:

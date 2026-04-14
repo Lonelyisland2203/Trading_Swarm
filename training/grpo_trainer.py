@@ -34,7 +34,6 @@ from training.vram_check import check_vram_availability
 # Constants
 MIN_VRAM_GB = 9.0
 MAX_VRAM_GB = 14.0
-STOP_FILE_PATH = Path("execution/state/STOP")
 
 
 # Direction keywords to look for in completions
@@ -168,7 +167,9 @@ def run_grpo_preflight(
     logger.debug("OLLAMA_KEEP_ALIVE=0 enforced")
 
     # 6. STOP file check
-    if STOP_FILE_PATH.exists():
+    from utils.stop_file import default_stop_checker
+
+    if default_stop_checker.is_active():
         return False, "STOP file exists - refusing to train"
 
     logger.info(
@@ -791,7 +792,9 @@ class GRPOTrainer:
                 example_idx = 0
                 for step in range(1, self.config.max_steps + 1):
                     # Check STOP file every 100 steps
-                    if step % 100 == 0 and STOP_FILE_PATH.exists():
+                    from utils.stop_file import default_stop_checker
+
+                    if step % 100 == 0 and default_stop_checker.is_active():
                         logger.warning("STOP file detected, saving checkpoint")
                         if self._model is not None:
                             save_grpo_checkpoint(
@@ -906,33 +909,26 @@ def main() -> None:
     args = parser.parse_args()
 
     # Configure logging
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        level="INFO",
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
-    )
+    from utils.logging import configure_cli_logging
+
+    configure_cli_logging(include_name=False)
 
     # Load training data
     if not args.data.exists():
         logger.error(f"Data file not found: {args.data}")
         sys.exit(1)
 
-    examples = []
-    with open(args.data) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            data = json.loads(line)
-            examples.append(
-                GRPOTrainingExample(
-                    market_snapshot=data["market_snapshot"],
-                    actual_direction=data["actual_direction"],
-                    gross_return_pct=data["gross_return_pct"],
-                    timestamp_ms=data["timestamp_ms"],
-                )
-            )
+    from utils.jsonl import load_jsonl
+
+    examples = load_jsonl(
+        args.data,
+        parser=lambda d: GRPOTrainingExample(
+            market_snapshot=d["market_snapshot"],
+            actual_direction=d["actual_direction"],
+            gross_return_pct=d["gross_return_pct"],
+            timestamp_ms=d["timestamp_ms"],
+        ),
+    )
 
     logger.info(f"Loaded {len(examples)} training examples")
 

@@ -7,15 +7,11 @@ Reuses existing modules: training.process_lock, training.vram_check.
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
 
 from loguru import logger
 
 from training.process_lock import check_can_infer
 from training.vram_check import check_vram_availability, VRAMStatus
-
-
-STOP_FILE_PATH = Path("execution/state/STOP")
 
 # Inference requires less VRAM than training (no gradients, no optimizer state)
 # Training needs 9GB, inference needs ~6GB for single model
@@ -41,9 +37,11 @@ def check_stop_file() -> bool:
     Returns:
         True if STOP file exists (trading should halt)
     """
-    exists = STOP_FILE_PATH.exists()
+    from utils.stop_file import default_stop_checker
+
+    exists = default_stop_checker.is_active()
     if exists:
-        logger.warning("Kill switch active: STOP file exists", path=str(STOP_FILE_PATH))
+        logger.warning("Kill switch active: STOP file exists", path=str(default_stop_checker.path))
     return exists
 
 

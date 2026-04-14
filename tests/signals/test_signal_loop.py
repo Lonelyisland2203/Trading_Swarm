@@ -212,7 +212,9 @@ class TestRunCycle:
         """Set up all mocks for run_cycle."""
         # Mock STOP file path
         stop_path = tmp_path / "STOP"
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_path)
+        from utils.stop_file import StopFileChecker
+
+        monkeypatch.setattr("utils.stop_file.default_stop_checker", StopFileChecker(stop_path))
 
         # Mock log paths
         log_path = tmp_path / "signal_log.jsonl"
@@ -339,7 +341,9 @@ class TestRunLoop:
         """Once mode runs a single cycle and exits."""
         # Mock STOP file
         stop_path = tmp_path / "STOP"
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_path)
+        from utils.stop_file import StopFileChecker
+
+        monkeypatch.setattr("utils.stop_file.default_stop_checker", StopFileChecker(stop_path))
 
         # Mock preflight
         with patch("signals.signal_loop.run_preflight_checks") as mock_preflight:
@@ -364,7 +368,9 @@ class TestRunLoop:
         """STOP file halts the loop immediately."""
         stop_path = tmp_path / "STOP"
         stop_path.touch()  # Create STOP file
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_path)
+        from utils.stop_file import StopFileChecker
+
+        monkeypatch.setattr("utils.stop_file.default_stop_checker", StopFileChecker(stop_path))
 
         with patch("signals.signal_loop.run_preflight_checks"):
             with patch("signals.signal_loop.run_cycle") as mock_cycle:
@@ -382,7 +388,9 @@ class TestRunLoop:
     async def test_preflight_failure_waits_in_once_mode(self, tmp_path, monkeypatch):
         """Preflight failure in once mode exits."""
         stop_path = tmp_path / "STOP"
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_path)
+        from utils.stop_file import StopFileChecker
+
+        monkeypatch.setattr("utils.stop_file.default_stop_checker", StopFileChecker(stop_path))
 
         with patch("signals.signal_loop.run_preflight_checks") as mock_preflight:
             from signals.preflight import PreflightResult
@@ -413,7 +421,9 @@ class TestPipelineIntegration:
         log_path = tmp_path / "signal_log.jsonl"
         pending_path = tmp_path / "pending.jsonl"
 
-        monkeypatch.setattr("signals.preflight.STOP_FILE_PATH", stop_path)
+        from utils.stop_file import StopFileChecker
+
+        monkeypatch.setattr("utils.stop_file.default_stop_checker", StopFileChecker(stop_path))
         monkeypatch.setattr("signals.signal_logger.SIGNAL_LOG_PATH", log_path)
         monkeypatch.setattr("signals.accuracy_tracker.PENDING_PATH", pending_path)
 
