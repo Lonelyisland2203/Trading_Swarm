@@ -3,8 +3,7 @@
 import json
 import pytest
 import pandas as pd
-from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 from data.inference_queue import (
     InferenceJob,

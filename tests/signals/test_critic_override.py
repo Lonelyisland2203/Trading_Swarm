@@ -1,6 +1,5 @@
 """Tests for critic override logic."""
 
-import pytest
 
 from signals.signal_loop import should_override_signal
 from swarm.critic import CritiqueResult

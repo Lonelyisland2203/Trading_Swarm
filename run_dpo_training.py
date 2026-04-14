@@ -354,7 +354,6 @@ def save_test_eval_data(
         Path to saved file, or None if split failed
     """
     from training.walk_forward import create_walk_forward_splits, TemporalSplitError
-    from dataclasses import asdict
 
     try:
         split = create_walk_forward_splits(

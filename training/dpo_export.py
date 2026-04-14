@@ -6,7 +6,6 @@ ranked by computed rewards for DPO fine-tuning.
 """
 
 from dataclasses import dataclass
-from typing import Callable
 
 from loguru import logger
 

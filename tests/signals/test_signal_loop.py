@@ -1,6 +1,5 @@
 """Integration tests for signal loop."""
 
-import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,7 +9,6 @@ import pytest
 from signals.signal_loop import (
     run_cycle,
     run_loop,
-    should_override_signal,
     generate_signal_for_symbol,
     evaluate_with_critic,
     format_recent_ohlcv,

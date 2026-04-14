@@ -15,7 +15,7 @@ Architecture Decisions (Session 8):
 
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -38,12 +38,11 @@ from trl import DPOConfig, DPOTrainer
 from config.settings import settings
 from training.dpo_eval import (
     AdapterEvaluation,
-    evaluate_adapter,
     should_promote_adapter,
 )
 from training.dpo_export import PreferencePair, export_to_huggingface_format
 from training.process_lock import ProcessLockError, acquire_training_lock, check_can_train
-from training.vram_check import VRAMStatus, check_vram_availability, log_vram_status
+from training.vram_check import VRAMStatus, check_vram_availability
 from training.walk_forward import (
     TemporalSplitError,
     WalkForwardSplit,

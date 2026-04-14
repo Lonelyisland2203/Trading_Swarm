@@ -12,7 +12,6 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
 
 import aiohttp
 from diskcache import Cache

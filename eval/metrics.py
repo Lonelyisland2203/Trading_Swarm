@@ -5,7 +5,6 @@ All metrics operate on numpy arrays for performance.
 Statistical significance testing uses scipy.stats.
 """
 
-import math
 from dataclasses import dataclass
 
 import numpy as np

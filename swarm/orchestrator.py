@@ -13,7 +13,7 @@ from loguru import logger
 
 from config.settings import settings
 from data.indicators import compute_bb_position, compute_macd, compute_rsi
-from data.prompt_builder import TaskType, PromptBuilder, sample_task, TaskConfig, TASK_CONFIGS
+from data.prompt_builder import TaskType, PromptBuilder, TaskConfig, TASK_CONFIGS
 from data.regime_filter import MarketRegime
 from .critic import evaluate_signal
 from .generator import generate_signal, TradingPersona

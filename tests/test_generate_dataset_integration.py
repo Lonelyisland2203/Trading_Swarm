@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 from generate_training_dataset import (
     DatasetConfig,

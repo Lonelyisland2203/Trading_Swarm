@@ -8,9 +8,8 @@ with incremental JSONL saving and resume support.
 import asyncio
 import json
 import time
-import uuid
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
@@ -27,7 +26,6 @@ class EnumJSONEncoder(json.JSONEncoder):
             return obj.value
         return super().default(obj)
 
-from config.settings import settings
 from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime
 from swarm.orchestrator import run_multi_persona_workflow

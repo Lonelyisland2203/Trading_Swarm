@@ -1,8 +1,7 @@
 """Tests for preflight checks."""
 
 import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -10,8 +9,6 @@ from signals.preflight import (
     check_stop_file,
     run_preflight_checks,
     enforce_ollama_keep_alive,
-    STOP_FILE_PATH,
-    PreflightResult,
 )
 from training.vram_check import VRAMStatus
 

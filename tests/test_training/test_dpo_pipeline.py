@@ -14,9 +14,8 @@ No GPU or live market data required.
 """
 
 import json
-import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

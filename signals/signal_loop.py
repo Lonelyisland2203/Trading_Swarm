@@ -13,7 +13,6 @@ This module orchestrates the entire signal generation pipeline:
 """
 
 import asyncio
-import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -24,7 +23,7 @@ from config.fee_model import FeeModelSettings
 from data.indicators import compute_all_indicators, compute_bb_position
 from data.market_data import MarketDataService, DataUnavailableError
 from data.prompt_builder import TaskType, PromptBuilder, TaskConfig
-from data.regime_filter import RegimeClassifier, MarketRegime
+from data.regime_filter import RegimeClassifier
 from execution.models import SignalInput
 from signals.accuracy_tracker import queue_for_verification, process_pending_verifications
 from signals.preflight import (
@@ -35,12 +34,11 @@ from signals.preflight import (
 from signals.signal_logger import log_signal
 from signals.signal_models import (
     Signal,
-    SignalDirection,
     map_generator_to_signal,
     get_timeframe_duration_ms,
 )
 from swarm.critic import evaluate_signal, CritiqueResult
-from swarm.generator import generate_signal, GeneratorSignal
+from swarm.generator import generate_signal
 from swarm.ollama_client import OllamaClient
 from training.process_lock import acquire_inference_lock, ProcessLockError
 
@@ -269,7 +267,7 @@ async def evaluate_with_critic(
 def print_signal_summary(signal: Signal, executed: bool, trade_reason: str | None):
     """Print concise signal summary to stdout."""
     override_marker = " [OVERRIDDEN]" if signal.critic_override else ""
-    exec_marker = f" -> EXECUTED" if executed else ""
+    exec_marker = " -> EXECUTED" if executed else ""
 
     print(f"\n{'='*60}")
     print(f"SIGNAL: {signal.symbol} @ {signal.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")

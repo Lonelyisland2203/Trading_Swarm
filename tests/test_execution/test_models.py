@@ -10,7 +10,7 @@ Tests all models:
 - SignalInput: Input signals from generation pipeline
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytest
 from pydantic import ValidationError
 

@@ -2,7 +2,6 @@
 
 import pytest
 import pandas as pd
-from datetime import datetime, timezone
 
 from data.historical_windows import (
     HistoricalWindow,

@@ -1,13 +1,11 @@
 """Tests for signal generator with personas and response extraction."""
 
-import json
 import pytest
 
 from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime
 from swarm.generator import (
     BASE_PERSONA_WEIGHTS,
-    REGIME_MODIFIERS,
     TradingPersona,
     extract_signal,
     sample_persona,

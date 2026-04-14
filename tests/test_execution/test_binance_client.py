@@ -4,23 +4,18 @@ Tests for BinanceExecutionClient in execution.binance_client.
 Tests initialization, order operations, position management, and signal acceptance logic.
 """
 
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import AsyncMock, MagicMock, Mock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from execution.binance_client import BinanceExecutionClient
 from execution.exceptions import (
     KillSwitchActiveError,
-    DailyLossLimitError,
-    PositionLimitError,
-    CooldownActiveError,
     InsufficientBalanceError,
     LiveTradingNotAllowedError,
     OrderRejectedError,
-    SignalRejectedError,
 )
 from execution.models import (
     OrderResult,

@@ -8,7 +8,6 @@ Cross-platform: uses msvcrt on Windows, fcntl on Unix/macOS.
 """
 
 import sys
-import os
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator

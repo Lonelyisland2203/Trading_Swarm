@@ -5,7 +5,6 @@ Verifies that all execution exceptions properly inherit from ExecutionError
 and correctly store and format their parameters.
 """
 
-import pytest
 
 from execution.exceptions import (
     CooldownActiveError,

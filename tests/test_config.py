@@ -1,7 +1,6 @@
 """Tests for configuration module."""
 
 import pytest
-from pathlib import Path
 from pydantic import ValidationError
 
 from config.settings import (

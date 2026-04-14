@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from data.cache_wrapper import AsyncDiskCache, make_cache_key
 from data.regime_filter import RegimeClassifier, MarketRegime
 from data.prompt_builder import sample_task, TaskType, PromptBuilder
-from data.market_data import retry_with_backoff, DataUnavailableError
+from data.market_data import retry_with_backoff
 
 
 @pytest.fixture

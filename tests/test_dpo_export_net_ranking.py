@@ -16,7 +16,7 @@ import pytest
 from config.fee_model import FeeModelSettings
 from swarm.training_capture import TrainingExample
 from training.dpo_export import construct_preference_pairs
-from training.reward_engine import ComputedReward, compute_reward
+from training.reward_engine import compute_reward
 from verifier.outcome import VerifiedOutcome, apply_fee_model
 
 

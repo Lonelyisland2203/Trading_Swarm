@@ -7,7 +7,6 @@ from training.reward_config import RewardScaling
 from training.reward_engine import (
     REWARD_VERSION,
     BatchDiagnostics,
-    ComputedReward,
     compute_reward,
     compute_rewards_for_batch,
 )

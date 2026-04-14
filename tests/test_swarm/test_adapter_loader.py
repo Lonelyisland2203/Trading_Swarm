@@ -8,7 +8,6 @@ import pytest
 
 from swarm.adapter_loader import (
     AdapterLoadError,
-    AdapterNotFoundError,
     find_latest_adapter,
     get_adapter_directory,
     get_adapter_model_tag,

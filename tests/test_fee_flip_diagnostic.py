@@ -5,10 +5,7 @@ Verifies that the diagnostic correctly identifies examples that flip from
 profitable (under flat 0.1% fees) to unprofitable (under realistic fees).
 """
 import math
-from io import StringIO
-from contextlib import redirect_stdout
 
-import pytest
 
 from config.fee_model import FeeModelSettings
 from swarm.training_capture import TrainingExample

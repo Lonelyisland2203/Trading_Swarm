@@ -3,30 +3,21 @@
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'input=$(cat); filepath=$(echo \"$input\" | jq -r \".tool_input.file_path\"); if [[ \"$filepath\" == *.py ]]; then ruff check --fix --quiet \"$filepath\" && ruff format --quiet \"$filepath\"; fi'",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'input=$(cat); filepath=$(echo \"$input\" | jq -r \".tool_input.file_path\"); if [[ \"$filepath\" == *.py ]]; then mypy --strict --no-error-summary \"$filepath\" 2>/dev/null || true; fi'",
-            "timeout": 30
-          }
-        ]
+        "hooks": [{"type": "command", "command": "ruff check --fix $CLAUDE_FILE_PATH && ruff format $CLAUDE_FILE_PATH 2>/dev/null || true"}]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{"type": "command", "command": "if echo '$CLAUDE_FILE_PATH' | grep -qE 'signals/|training/|evaluation/'; then echo '[HOOK] Signal/training file — run /no-lookahead before committing'; fi"}]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [{"type": "command", "command": "if echo '$CLAUDE_FILE_PATH' | grep -qE 'fee_model|execution|position_siz'; then echo '[HOOK] Critical execution file — run /fee-review before committing'; fi"}]
       }
     ],
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'input=$(cat); cmd=$(echo \"$input\" | jq -r \".tool_input.command\"); count=$(echo \"$cmd\" | grep -oE \"ollama (run|serve)\" | wc -l); if [ \"$count\" -gt 1 ]; then echo \"BLOCKED: Never load two models simultaneously\" >&2; exit 1; fi'",
-            "timeout": 5
-          }
-        ]
+        "hooks": [{"type": "command", "command": "if echo '$CLAUDE_TOOL_INPUT' | grep -qE 'rm -rf|DROP TABLE'; then echo 'BLOCKED' && exit 1; fi"}]
       }
     ]
   }

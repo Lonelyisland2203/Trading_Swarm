@@ -1,7 +1,6 @@
 """Tests for process-level locking."""
 
 import pytest
-from pathlib import Path
 
 from training.process_lock import (
     ProcessLockError,

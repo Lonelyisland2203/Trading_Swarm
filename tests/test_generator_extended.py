@@ -1,7 +1,7 @@
 """Tests for generator with multiple task types."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from data.prompt_builder import TaskType
 from data.regime_filter import MarketRegime

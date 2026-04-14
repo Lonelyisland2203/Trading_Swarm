@@ -20,8 +20,7 @@ Usage:
 import json
 import os
 import time
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -43,7 +42,7 @@ from transformers import (
 
 from config.settings import settings
 from training.process_lock import acquire_training_lock, check_can_train
-from training.vram_check import VRAMStatus, check_vram_availability
+from training.vram_check import check_vram_availability
 
 
 # VRAM budget constraints (GB)

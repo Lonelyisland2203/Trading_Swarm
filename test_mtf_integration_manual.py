@@ -11,7 +11,6 @@ This script demonstrates the end-to-end flow:
 Run: python test_mtf_integration_manual.py
 """
 
-import pandas as pd
 from data.prompt_builder import (
     PromptBuilder,
     TaskType,
@@ -22,8 +21,7 @@ from data.prompt_builder import (
 )
 from tests.fixtures.timeframe_fixtures import (
     create_test_df_bullish,
-    create_test_df_bearish,
-    create_test_df_neutral
+    create_test_df_bearish
 )
 from data.regime_filter import MarketRegime
 
@@ -47,7 +45,7 @@ def main():
     print("Step 2: Testing timeframe selection...")
     available_tfs = ["4h", "1d"]
     selected_tfs = get_higher_timeframes("1h", available_tfs)
-    print(f"  Current timeframe: 1h")
+    print("  Current timeframe: 1h")
     print(f"  Available higher TFs: {available_tfs}")
     print(f"  Selected higher TFs: {selected_tfs}")
     print()

@@ -2,7 +2,6 @@
 
 import json
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from threading import Thread
 
 import pytest
@@ -12,7 +11,6 @@ from signals.signal_logger import (
     read_signal_log,
     get_signal_count,
     get_signals_since,
-    SIGNAL_LOG_PATH,
 )
 from signals.signal_models import Signal
 

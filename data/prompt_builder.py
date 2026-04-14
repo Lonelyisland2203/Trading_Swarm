@@ -14,7 +14,6 @@ from loguru import logger
 
 from .indicators import compute_all_indicators, compute_bb_position
 from .regime_filter import MarketRegime
-import numpy as np
 
 if TYPE_CHECKING:
     from config.fee_model import FeeModelSettings

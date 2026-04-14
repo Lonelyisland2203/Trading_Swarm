@@ -11,7 +11,6 @@ throughout the entire training pipeline.
 """
 
 import math
-from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest

@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from loguru import logger
 
 from .exceptions import ResponseValidationError
-from .generator import TradingPersona
 from .ollama_client import OllamaClient
 
 # Critique prompt with adversarial framing

@@ -1,9 +1,8 @@
 """Tests for accuracy tracker."""
 
 import json
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
@@ -13,10 +12,8 @@ from signals.accuracy_tracker import (
     process_pending_verifications,
     get_accuracy_summary,
     get_recent_accuracy,
-    ACCURACY_LOG_PATH,
-    PENDING_PATH,
 )
-from signals.signal_models import Signal, AccuracyRecord
+from signals.signal_models import Signal
 
 
 @pytest.fixture

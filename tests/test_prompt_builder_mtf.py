@@ -1,9 +1,7 @@
 """Tests for multi-timeframe context in prompt builder."""
 
-import pandas as pd
-import pytest
 
-from data.prompt_builder import get_higher_timeframes, TIMEFRAME_HIERARCHY
+from data.prompt_builder import get_higher_timeframes
 from tests.fixtures.timeframe_fixtures import (
     create_test_df_bullish,
     create_test_df_bearish,

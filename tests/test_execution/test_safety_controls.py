@@ -25,7 +25,6 @@ from execution.binance_client import BinanceExecutionClient
 from execution.models import (
     DailyStats,
     SignalInput,
-    TradeDecision,
 )
 from config.settings import ExecutionSettings
 from config.fee_model import FeeModelSettings

@@ -28,9 +28,7 @@ import argparse
 import asyncio
 import json
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -119,7 +117,6 @@ def load_test_eval_data(
 
             # Reconstruct ComputedReward (minimal — only final_reward used in diagnostics)
             from datetime import datetime, UTC
-            from training.reward_engine import REWARD_VERSION
             reward = ComputedReward(
                 final_reward=rec["final_reward"],
                 return_reward=rec.get("return_reward", 0.0),
@@ -341,11 +338,11 @@ def run_evaluation(
     )
 
     if promoted:
-        print(f"RESULT: PROMOTED")
+        print("RESULT: PROMOTED")
         print(f"Reason: {reason}")
         print(f"Path:   {promoted_path}")
     else:
-        print(f"RESULT: NOT PROMOTED")
+        print("RESULT: NOT PROMOTED")
         print(f"Reason: {reason}")
         print(f"Candidate retained at: {candidate_path}")
 

@@ -1,6 +1,4 @@
 """Tests for derivatives data fetching (funding rates and open interest)."""
-import asyncio
-import pytest
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -260,7 +258,6 @@ class TestFundingRateFetching:
 
         # Create mock DataFrame
         import pandas as pd
-        from datetime import timezone
         mock_df = pd.DataFrame({
             'timestamp': pd.to_datetime([1609459200000, 1609488000000], unit='ms', utc=True),
             'funding_rate': [0.0001, 0.00015]
@@ -406,7 +403,6 @@ class TestOpenInterestFetching:
 
         # Create mock DataFrame
         import pandas as pd
-        from datetime import timezone
         mock_df = pd.DataFrame({
             'timestamp': pd.to_datetime([1609459200000, 1609488000000], unit='ms', utc=True),
             'open_interest_value': [1000000000, 1050000000],

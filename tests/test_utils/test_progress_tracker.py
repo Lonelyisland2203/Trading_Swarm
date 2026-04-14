@@ -3,7 +3,6 @@
 import json
 import time
 import pytest
-from pathlib import Path
 
 from utils.progress_tracker import ProgressTracker, ProgressStats
 

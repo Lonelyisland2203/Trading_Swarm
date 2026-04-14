@@ -44,7 +44,6 @@ from typing import Optional
 from loguru import logger
 
 from config.fee_model import FeeModelSettings
-from config.settings import settings
 from data.historical_windows import (
     HistoricalWindow,
     calculate_window_timestamps,
@@ -52,7 +51,7 @@ from data.historical_windows import (
 )
 from data.inference_queue import InferenceJob, InferenceQueue
 from data.market_data import MarketDataService
-from data.prompt_builder import PromptBuilder, TaskConfig, TaskType, TASK_CONFIGS
+from data.prompt_builder import PromptBuilder, TaskType, TASK_CONFIGS
 from data.regime_filter import RegimeClassifier
 from utils.progress_tracker import ProgressTracker
 
@@ -610,6 +609,6 @@ if __name__ == "__main__":
             + str(config.output_dir / "examples.jsonl")
         )
         sys.exit(0)
-    except Exception as e:
+    except Exception:
         logger.exception("Fatal error during generation")
         sys.exit(1)

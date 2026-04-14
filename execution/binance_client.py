@@ -9,9 +9,8 @@ Wraps CCXT with:
 - Comprehensive logging via StateManager
 """
 
-import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, List
 
 import ccxt.async_support as ccxt
@@ -21,10 +20,6 @@ from config.fee_model import FeeModelSettings
 from config.settings import ExecutionSettings
 from execution.exceptions import (
     KillSwitchActiveError,
-    DailyLossLimitError,
-    PositionLimitError,
-    CooldownActiveError,
-    DailyTradeCountError,
     InsufficientBalanceError,
     LiveTradingNotAllowedError,
     OrderRejectedError,

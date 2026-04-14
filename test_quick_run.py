@@ -2,7 +2,6 @@
 """Quick smoke test to verify Trading Swarm is ready to run."""
 
 import sys
-from pathlib import Path
 
 print("=" * 60)
 print("Trading Swarm — Quick Smoke Test")
@@ -12,7 +11,7 @@ print("=" * 60)
 print("\n[1/5] Testing config loading...")
 try:
     from config.settings import settings
-    print(f"✓ Config loaded")
+    print("✓ Config loaded")
     print(f"  - Generator model: {settings.ollama.generator_model}")
     print(f"  - Critic model: {settings.ollama.critic_model}")
     print(f"  - Exchange: {settings.market_data.exchange}")
@@ -46,7 +45,7 @@ try:
         sys.exit(1)
 except Exception as e:
     print(f"✗ Cannot connect to Ollama: {e}")
-    print(f"  → Make sure Ollama is running: ollama serve")
+    print("  → Make sure Ollama is running: ollama serve")
     sys.exit(1)
 
 # Test 3: Market data client
@@ -54,7 +53,7 @@ print("\n[3/5] Testing market data client...")
 try:
     from data.market_data import MarketDataClient
     client = MarketDataClient()
-    print(f"✓ Market data client initialized")
+    print("✓ Market data client initialized")
     print(f"  - Exchange: {client.exchange.name}")
     print(f"  - Rate limit: {client.exchange.rateLimit}ms")
 except Exception as e:
@@ -66,7 +65,7 @@ print("\n[4/5] Testing generator...")
 try:
     from swarm.generator import Generator
     generator = Generator()
-    print(f"✓ Generator initialized")
+    print("✓ Generator initialized")
     print(f"  - Personas: {settings.swarm.generator_personas}")
 except Exception as e:
     print(f"✗ Generator failed: {e}")
@@ -77,7 +76,7 @@ print("\n[5/5] Testing critic...")
 try:
     from swarm.critic import Critic
     critic = Critic()
-    print(f"✓ Critic initialized")
+    print("✓ Critic initialized")
     print(f"  - Critique enabled: {settings.swarm.critique_enabled}")
 except Exception as e:
     print(f"✗ Critic failed: {e}")

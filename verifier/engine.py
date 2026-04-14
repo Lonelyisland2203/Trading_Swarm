@@ -11,7 +11,6 @@ import pandas as pd
 from loguru import logger
 
 from config.fee_model import FeeModelSettings
-from data.market_data import MarketDataService
 from swarm.training_capture import TrainingExample
 from .config import BacktestConfig
 from .constants import get_horizon_bars, compute_holding_periods_8h

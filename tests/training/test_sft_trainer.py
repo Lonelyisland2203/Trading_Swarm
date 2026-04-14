@@ -17,10 +17,9 @@ import importlib.util
 import json
 import os
 import sys
-import tempfile
 from datetime import datetime, UTC
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

@@ -2,13 +2,11 @@
 
 from datetime import datetime, timezone
 
-import pytest
 
 from signals.signal_models import (
     Signal,
     SignalLogEntry,
     AccuracyRecord,
-    SignalDirection,
     map_generator_to_signal,
     get_timeframe_duration_ms,
     get_verification_horizon_bars,
