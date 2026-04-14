@@ -265,23 +265,6 @@ def filter_by_regime(
     return [ex for ex in examples if ex.market_regime == regime]
 
 
-def filter_by_persona(
-    examples: list[TrainingExample],
-    persona: str,
-) -> list[TrainingExample]:
-    """
-    Filter training examples by generator persona.
-
-    Args:
-        examples: List of training examples
-        persona: Persona string (e.g., "momentum")
-
-    Returns:
-        Filtered list
-    """
-    return [ex for ex in examples if ex.persona == persona]
-
-
 def filter_complete(
     examples: list[TrainingExample],
 ) -> list[TrainingExample]:

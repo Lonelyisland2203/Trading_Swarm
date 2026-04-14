@@ -14,12 +14,6 @@ from loguru import logger
 from config.settings import settings
 
 
-class AdapterNotFoundError(Exception):
-    """Raised when no adapter is found."""
-
-    pass
-
-
 class AdapterLoadError(Exception):
     """Raised when adapter loading fails."""
 

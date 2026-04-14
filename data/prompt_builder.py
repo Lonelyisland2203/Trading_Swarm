@@ -7,7 +7,7 @@ Samples tasks with weighted probabilities and builds prompts from market data.
 import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from loguru import logger
@@ -414,14 +414,6 @@ def sample_task(
     )
 
     return task
-
-
-class PromptTemplate(Protocol):
-    """Protocol for prompt templates."""
-
-    def render(self, **kwargs) -> str:
-        """Render template with provided kwargs."""
-        ...
 
 
 @dataclass(slots=True)
