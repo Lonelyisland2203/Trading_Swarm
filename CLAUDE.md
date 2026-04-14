@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17L.
+Completed through Session 17M.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -64,9 +64,11 @@ Completed through Session 17L.
   - verification.py — closes feedback loop: load unverified signals, fetch outcomes, compute fee-adjusted returns, aggregate stats (IC, Sharpe, regime-stratified accuracy, false bullish/bearish rates), training trigger (≥200 signals), export for GRPO retraining
   - xgboost_config.py — all XGBoost hyperparameters (n_estimators, max_depth, learning_rate, etc.), FEATURE_LIST (21 indicators), CLASS_WEIGHTS (asymmetric), WALK_FORWARD_CONFIG, LABEL_THRESHOLD, PROBABILITY_THRESHOLDS
   - xgboost_signal.py — production XGBoost signal generator: extract_features_from_ohlcv (21 indicators), generate_xgboost_signal (async, uses get_ohlcv_as_of for temporal safety), XGBoostSignal dataclass, walk-forward splits, retrain trigger (≥200 signals)
+  - llm_context.py — LLM context overlay node: LLMContext dataclass (bullish_factors, bearish_factors, regime_flag, confidence), generate_market_context (async), Qwen system prompt (context only, NEVER direction), VRAM preflight, OLLAMA_KEEP_ALIVE=0 enforcement, graceful fallback on failure, forbidden words filter (LONG/SHORT/BUY/SELL)
 - run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence
 - run_verification.py — CLI: --once, --interval, --stats, --export, --check-trigger; runs on schedule (default 4h) or once mode
-- Tests: 1450+ tests (previous: 1422, xgboost_signal: 28)
+- Tests: 1480+ tests (previous: 1450, llm_context: 29)
 
 ## Next Session
-Session 17M — Integrate XGBoost signal into signal loop (synthesis node: XGBoost prob + LLM context → decision)
+
+Session 17N — Integrate XGBoost signal + LLM context into signal loop (synthesis node: XGBoost prob + LLM context → decision)
