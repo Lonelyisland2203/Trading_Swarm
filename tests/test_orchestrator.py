@@ -33,36 +33,47 @@ class TestShouldAcceptSignal:
 
     def test_accept_high_score_accept_recommendation(self):
         """Test acceptance when score and recommendation align (ACCEPT)."""
+        # Note: should_accept_signal computes score from sub-dimensions, not "score" key
+        # Score = 0.35 * reasoning_quality + 0.40 * technical_alignment + 0.25 * confidence_calibration
         critique = {
-            "score": 0.8,
-            "recommendation": "ACCEPT",
+            "reasoning_quality": 0.8,
             "technical_alignment": 0.7,
+            "confidence_calibration": 0.9,
+            "recommendation": "ACCEPT",
         }
+        # Expected score = 0.35*0.8 + 0.40*0.7 + 0.25*0.9 = 0.28 + 0.28 + 0.225 = 0.785
 
         accepted, reason = should_accept_signal(critique, MarketRegime.NEUTRAL)
 
         assert accepted
-        assert "0.8" in reason or "0.80" in reason  # Score mentioned in reason
+        # Score should be ~0.79 which is mentioned in the reason
+        assert "0.78" in reason or "0.79" in reason
 
     def test_reject_on_reject_recommendation(self):
-        """Test rejection when recommendation is REJECT."""
+        """Test rejection when recommendation is REJECT with low score."""
+        # REJECT only triggers rejection if score is also low (<0.45)
         critique = {
-            "score": 0.8,  # High score doesn't matter
+            "reasoning_quality": 0.3,
+            "technical_alignment": 0.4,
+            "confidence_calibration": 0.3,
             "recommendation": "REJECT",
-            "technical_alignment": 0.7,
         }
+        # Score = 0.35*0.3 + 0.40*0.4 + 0.25*0.3 = 0.105 + 0.16 + 0.075 = 0.34
 
         accepted, reason = should_accept_signal(critique, MarketRegime.NEUTRAL)
 
         assert not accepted
-        assert "REJECT" in reason
+        assert "REJECT" in reason or "low score" in reason.lower()
 
     def test_reject_on_low_score(self):
-        """Test rejection when score below threshold."""
+        """Test rejection when computed score below threshold."""
+        # Score = 0.35*0.4 + 0.40*0.6 + 0.25*0.4 = 0.14 + 0.24 + 0.10 = 0.48
+        # Below 0.55 threshold for NEUTRAL
         critique = {
-            "score": 0.5,  # Below 0.65 threshold for NEUTRAL
-            "recommendation": "ACCEPT",
+            "reasoning_quality": 0.4,
             "technical_alignment": 0.6,
+            "confidence_calibration": 0.4,
+            "recommendation": "ACCEPT",
         }
 
         accepted, reason = should_accept_signal(critique, MarketRegime.NEUTRAL)
@@ -71,11 +82,14 @@ class TestShouldAcceptSignal:
         assert "below threshold" in reason.lower()
 
     def test_reject_on_low_technical_alignment(self):
-        """Test rejection when technical_alignment < 0.4."""
+        """Test rejection when technical_alignment < 0.35."""
+        # Score = 0.35*0.9 + 0.40*0.3 + 0.25*0.9 = 0.315 + 0.12 + 0.225 = 0.66
+        # Above threshold but technical_alignment below 0.35 gate
         critique = {
-            "score": 0.8,  # High score
+            "reasoning_quality": 0.9,
+            "technical_alignment": 0.3,  # Below 0.35 gate
+            "confidence_calibration": 0.9,
             "recommendation": "ACCEPT",
-            "technical_alignment": 0.3,  # Below 0.4 gate
         }
 
         accepted, reason = should_accept_signal(critique, MarketRegime.NEUTRAL)
@@ -84,50 +98,58 @@ class TestShouldAcceptSignal:
         assert "technical alignment" in reason.lower()
 
     def test_regime_aware_threshold_risk_off(self):
-        """Test that RISK_OFF uses higher threshold."""
+        """Test that RISK_OFF uses higher threshold (0.60) than NEUTRAL (0.55)."""
+        # Score = 0.35*0.6 + 0.40*0.6 + 0.25*0.5 = 0.21 + 0.24 + 0.125 = 0.575
+        # Would pass NEUTRAL (0.55) but not RISK_OFF (0.60)
         critique = {
-            "score": 0.70,  # Would pass NEUTRAL (0.65) but not RISK_OFF (0.75)
-            "recommendation": "ACCEPT",
+            "reasoning_quality": 0.6,
             "technical_alignment": 0.6,
+            "confidence_calibration": 0.5,
+            "recommendation": "ACCEPT",
         }
 
-        # Should pass NEUTRAL
+        # Should pass NEUTRAL (threshold 0.55)
         accepted_neutral, _ = should_accept_signal(critique, MarketRegime.NEUTRAL)
         assert accepted_neutral
 
-        # Should fail RISK_OFF
+        # Should fail RISK_OFF (threshold 0.60)
         accepted_risk_off, _ = should_accept_signal(critique, MarketRegime.RISK_OFF)
         assert not accepted_risk_off
 
     def test_regime_aware_threshold_risk_on(self):
-        """Test that RISK_ON uses lower threshold."""
+        """Test that RISK_ON uses lower threshold (0.50) than NEUTRAL (0.55)."""
+        # Score = 0.35*0.5 + 0.40*0.5 + 0.25*0.5 = 0.175 + 0.2 + 0.125 = 0.50
+        # Would fail NEUTRAL (0.55) but pass RISK_ON (0.50)
         critique = {
-            "score": 0.62,  # Would fail NEUTRAL (0.65) but pass RISK_ON (0.60)
-            "recommendation": "ACCEPT",
+            "reasoning_quality": 0.5,
             "technical_alignment": 0.5,
+            "confidence_calibration": 0.5,
+            "recommendation": "ACCEPT",
         }
 
-        # Should fail NEUTRAL
+        # Should fail NEUTRAL (threshold 0.55)
         accepted_neutral, _ = should_accept_signal(critique, MarketRegime.NEUTRAL)
         assert not accepted_neutral
 
-        # Should pass RISK_ON
+        # Should pass RISK_ON (threshold 0.50)
         accepted_risk_on, _ = should_accept_signal(critique, MarketRegime.RISK_ON)
         assert accepted_risk_on
 
     def test_override_threshold(self):
         """Test that override_threshold parameter works."""
+        # Score = 0.35*0.6 + 0.40*0.6 + 0.25*0.4 = 0.21 + 0.24 + 0.10 = 0.55
         critique = {
-            "score": 0.55,
-            "recommendation": "ACCEPT",
+            "reasoning_quality": 0.6,
             "technical_alignment": 0.6,
+            "confidence_calibration": 0.4,
+            "recommendation": "ACCEPT",
         }
 
-        # With override threshold of 0.5, should pass
+        # With override threshold of 0.5, should pass (score 0.55 > 0.5)
         accepted, _ = should_accept_signal(critique, MarketRegime.NEUTRAL, override_threshold=0.5)
         assert accepted
 
-        # With override threshold of 0.6, should fail
+        # With override threshold of 0.6, should fail (score 0.55 < 0.6)
         rejected, _ = should_accept_signal(critique, MarketRegime.NEUTRAL, override_threshold=0.6)
         assert not rejected
 

@@ -1,15 +1,18 @@
 """
-Core async loop for signal generation, critic evaluation, and execution.
+Core async loop for signal generation with XGBoost + LLM context synthesis.
 
-This module orchestrates the entire signal generation pipeline:
+Session 17N: Refactored pipeline:
 1. Preflight checks (STOP file, process lock, VRAM)
-2. Market data fetching
-3. Indicator computation
-4. Signal generation (qwen3:8b)
-5. Critic evaluation (deepseek-r1:14b)
-6. Override logic
-7. Signal logging
-8. Optional execution
+2. XGBoost signal generation (probability + direction)
+3. LLM context generation (Qwen: bullish/bearish factors, regime)
+4. DeepSeek risk filter (APPROVE/VETO)
+5. Synthesis node (combines all inputs into final decision)
+6. Signal logging
+7. Optional execution
+
+REMOVED: Qwen generator producing LONG/SHORT thesis
+REMOVED: DeepSeek critic evaluating thesis quality
+ADDED: XGBoost core signal, LLM context overlay, synthesis node
 """
 
 import asyncio
@@ -18,14 +21,10 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from config.settings import settings
-from config.fee_model import FeeModelSettings
-from data.indicators import compute_all_indicators, compute_bb_position
-from data.market_data import MarketDataService, DataUnavailableError
-from data.prompt_builder import TaskType, PromptBuilder, TaskConfig
-from data.regime_filter import RegimeClassifier
+from data.market_data import MarketDataService
 from execution.models import SignalInput
 from signals.accuracy_tracker import queue_for_verification, process_pending_verifications
+from signals.llm_context import generate_market_context, LLMContext
 from signals.preflight import (
     run_preflight_checks,
     check_stop_file,
@@ -34,257 +33,160 @@ from signals.preflight import (
 from signals.signal_logger import log_signal
 from signals.signal_models import (
     Signal,
-    map_generator_to_signal,
     get_timeframe_duration_ms,
 )
-from swarm.critic import evaluate_signal, CritiqueResult
-from swarm.generator import generate_signal
-from swarm.ollama_client import OllamaClient
+from signals.synthesis import SynthesisInput, SynthesisOutput, synthesize
+from signals.xgboost_signal import generate_xgboost_signal, XGBoostSignal
 from training.process_lock import acquire_inference_lock, ProcessLockError
 
 if TYPE_CHECKING:
     from execution.binance_client import BinanceExecutionClient
 
 
-def should_override_signal(critique: CritiqueResult) -> bool:
-    """
-    Determine if critic should override signal to FLAT.
+# DeepSeek risk filter configuration
+DEEPSEEK_MODEL = "deepseek-r1:14b"
+DEEPSEEK_TIMEOUT = 60.0
 
-    Override conditions:
-    1. Recommendation is REJECT AND
-    2. Either reasoning_quality < 0.5 OR technical_alignment < 0.5
+
+async def call_risk_filter(
+    xgb_signal: XGBoostSignal,
+    llm_context: LLMContext | None,
+) -> bool:
+    """
+    Call DeepSeek risk filter to veto or approve trade.
 
     Args:
-        critique: CritiqueResult from critic evaluation
+        xgb_signal: XGBoost signal with direction and probability
+        llm_context: LLM market context (may be None)
 
     Returns:
-        True if signal should be overridden to FLAT
+        True if trade is vetoed, False if approved
     """
-    if critique.recommendation != "REJECT":
-        return False
+    import httpx
 
-    # High-confidence rejection criteria
-    if critique.reasoning_quality < 0.5:
-        logger.info(
-            "Critic override: low reasoning quality",
-            reasoning_quality=critique.reasoning_quality,
-        )
-        return True
+    # Build context for risk filter
+    context_parts = [
+        f"XGBoost Signal: {xgb_signal.direction} (probability={xgb_signal.probability:.2f})",
+        f"Symbol: {xgb_signal.symbol}, Timeframe: {xgb_signal.timeframe}",
+    ]
 
-    if critique.technical_alignment < 0.5:
-        logger.info(
-            "Critic override: low technical alignment",
-            technical_alignment=critique.technical_alignment,
-        )
-        return True
+    if llm_context:
+        if llm_context.bullish_factors:
+            context_parts.append(f"Bullish factors: {', '.join(llm_context.bullish_factors)}")
+        if llm_context.bearish_factors:
+            context_parts.append(f"Bearish factors: {', '.join(llm_context.bearish_factors)}")
+        context_parts.append(f"Regime: {llm_context.regime_flag}")
 
-    return False
+    prompt = f"""Given this market context and XGBoost signal, are there any red flags that should veto this trade?
 
+{chr(10).join(context_parts)}
 
-def format_recent_ohlcv(df, n: int = 5) -> str:
-    """Format recent OHLCV data for critic prompt."""
-    recent = df.tail(n)
-    lines = []
-    for _, row in recent.iterrows():
-        ts = datetime.fromtimestamp(row["timestamp"] / 1000, tz=timezone.utc)
-        lines.append(
-            f"{ts.strftime('%H:%M')} | O:{row['open']:.2f} H:{row['high']:.2f} "
-            f"L:{row['low']:.2f} C:{row['close']:.2f}"
-        )
-    return "\n".join(lines)
+Respond with exactly one word: APPROVE or VETO
+Then provide one sentence of reasoning."""
 
+    payload = {
+        "model": DEEPSEEK_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 100,
+        },
+    }
 
-async def generate_signal_for_symbol(
-    symbol: str,
-    timeframe: str,
-    market_data_service: MarketDataService,
-    ollama_client: OllamaClient,
-    fee_model: FeeModelSettings,
-    prompt_builder: PromptBuilder,
-) -> tuple[Signal | None, str | None]:
-    """
-    Generate signal for a single symbol.
-
-    Args:
-        symbol: Trading pair
-        timeframe: Timeframe
-        market_data_service: Market data service
-        ollama_client: Ollama client
-        fee_model: Fee model settings
-        prompt_builder: Prompt builder
-
-    Returns:
-        Tuple of (Signal or None, task_prompt or None)
-    """
-    # 1. Fetch market data
     try:
-        df = await market_data_service.fetch_ohlcv(
-            symbol, timeframe, lookback_bars=100
-        )
-    except DataUnavailableError as e:
-        logger.error("Failed to fetch data", symbol=symbol, error=str(e))
-        return None, None
+        async with httpx.AsyncClient(timeout=DEEPSEEK_TIMEOUT) as client:
+            response = await client.post(
+                "http://localhost:11434/api/generate",
+                json=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+            response_text = result.get("response", "").strip().upper()
 
-    if len(df) < 50:
-        logger.warning("Insufficient data", symbol=symbol, bars=len(df))
-        return None, None
+            # Parse response
+            veto = response_text.startswith("VETO")
 
-    # 2. Compute indicators
-    indicators = compute_all_indicators(df, include_volume=True, include_structure=True)
+            if veto:
+                logger.info(
+                    "Risk filter VETO",
+                    symbol=xgb_signal.symbol,
+                    response=response_text[:100],
+                )
+            else:
+                logger.debug(
+                    "Risk filter APPROVE",
+                    symbol=xgb_signal.symbol,
+                )
 
-    # 3. Get market regime
-    classifier = RegimeClassifier()
-    regime = classifier.get_current_regime(df["close"])
+            return veto
 
-    # 4. Build prompt
-    task = TaskConfig(
-        task_type=TaskType.PREDICT_DIRECTION,
-        weight=1.0,
-        difficulty=2,
-        min_bars_required=50,
-    )
-
-    prompt = prompt_builder.build_prompt(
-        task=task,
-        df=df,
-        symbol=symbol,
-        timeframe=timeframe,
-        market_regime=regime,
-        fee_model=fee_model,
-    )
-
-    # 5. Generate signal
-    logger.info("Generating signal", symbol=symbol, regime=regime.value)
-
-    generator_signal = await generate_signal(
-        client=ollama_client,
-        model=settings.ollama.generator_model,
-        prompt=prompt,
-        regime=regime,
-        task_type=TaskType.PREDICT_DIRECTION,
-        temperature=0.7,
-    )
-
-    if generator_signal is None:
-        logger.warning("Signal generation failed", symbol=symbol)
-        return None, prompt
-
-    # 6. Map to execution format
-    direction = map_generator_to_signal(generator_signal.direction or "FLAT")
-    current_price = float(df["close"].iloc[-1])
-
-    signal = Signal(
-        symbol=symbol,
-        timeframe=timeframe,
-        direction=direction,
-        confidence=generator_signal.confidence or 0.5,
-        reasoning=generator_signal.reasoning,
-        persona=generator_signal.persona.value,
-        timestamp=datetime.now(timezone.utc),
-        market_regime=regime.value,
-        current_price=current_price,
-        rsi=indicators.get("rsi", 50.0),
-        macd=indicators.get("macd_line", 0.0),
-        macd_signal=indicators.get("macd_signal", 0.0),
-        bb_position=float(compute_bb_position(df["close"]).iloc[-1]),
-    )
-
-    return signal, prompt
+    except Exception as e:
+        logger.warning(f"Risk filter call failed: {e}, defaulting to APPROVE")
+        return False  # Don't veto on failure
 
 
-async def evaluate_with_critic(
-    signal: Signal,
-    df,
-    prompt: str,
-    ollama_client: OllamaClient,
-) -> Signal:
-    """
-    Evaluate signal with critic and apply override if needed.
-
-    Args:
-        signal: Signal to evaluate
-        df: OHLCV DataFrame
-        prompt: Original task prompt
-        ollama_client: Ollama client
-
-    Returns:
-        Signal with critic evaluation results
-    """
-    # Build market context for critic
-    market_context = {
-        "symbol": signal.symbol,
-        "current_price": signal.current_price,
-        "regime": signal.market_regime,
-        "rsi": signal.rsi,
-        "macd": signal.macd,
-        "macd_signal": signal.macd_signal,
-        "bb_position": signal.bb_position,
-        "recent_ohlcv": format_recent_ohlcv(df, n=5),
-    }
-
-    generator_signal_dict = {
-        "direction": signal.direction,
-        "confidence": signal.confidence,
-        "reasoning": signal.reasoning,
-        "persona": signal.persona,
-    }
-
-    # Evaluate
-    critique = await evaluate_signal(
-        client=ollama_client,
-        model=settings.ollama.critic_model,
-        generator_signal=generator_signal_dict,
-        market_context=market_context,
-        task_prompt=prompt,
-        temperature=0.3,
-    )
-
-    if critique is None:
-        logger.warning("Critique failed, keeping original signal")
-        signal.final_direction = signal.direction
-        return signal
-
-    # Update signal with critic results
-    signal.critic_score = critique.score
-    signal.critic_recommendation = critique.recommendation
-    signal.critic_reasoning = critique.critique
-
-    # Check for override
-    if should_override_signal(critique):
-        signal.critic_override = True
-        signal.final_direction = "FLAT"
-        logger.info(
-            "Signal overridden to FLAT by critic",
-            original=signal.direction,
-            critic_score=critique.score,
-        )
-    else:
-        signal.final_direction = signal.direction
-
-    return signal
-
-
-def print_signal_summary(signal: Signal, executed: bool, trade_reason: str | None):
+def print_signal_summary(
+    synthesis_output: SynthesisOutput,
+    xgb_signal: XGBoostSignal,
+    executed: bool,
+    trade_reason: str | None,
+):
     """Print concise signal summary to stdout."""
-    override_marker = " [OVERRIDDEN]" if signal.critic_override else ""
+    veto_marker = (
+        " [VETOED]"
+        if synthesis_output.direction == "FLAT" and synthesis_output.position_size_fraction == 0
+        else ""
+    )
     exec_marker = " -> EXECUTED" if executed else ""
 
-    print(f"\n{'='*60}")
-    print(f"SIGNAL: {signal.symbol} @ {signal.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    print(f"{'='*60}")
-    print(f"Direction:  {signal.direction} -> {signal.final_direction}{override_marker}")
-    print(f"Confidence: {signal.confidence:.1%}")
-    print(f"Persona:    {signal.persona}")
-    print(f"Regime:     {signal.market_regime}")
-    print(f"Price:      ${signal.current_price:,.2f}")
-
-    if signal.critic_score is not None:
-        print(f"Critic:     {signal.critic_recommendation} (score: {signal.critic_score:.2f})")
+    print(f"\n{'=' * 60}")
+    print(f"SIGNAL: {xgb_signal.symbol} @ {xgb_signal.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"{'=' * 60}")
+    print(f"XGBoost:    {xgb_signal.direction} (prob={xgb_signal.probability:.2f})")
+    print(
+        f"Final:      {synthesis_output.direction} (position={synthesis_output.position_size_fraction:.0%}){veto_marker}"
+    )
+    print(f"Rationale:  {synthesis_output.rationale}")
 
     if trade_reason:
         print(f"Trade:      {trade_reason}")
 
-    print(f"{'='*60}{exec_marker}")
+    print(f"{'=' * 60}{exec_marker}")
+
+
+def synthesis_to_legacy_signal(
+    xgb_signal: XGBoostSignal,
+    synthesis_output: SynthesisOutput,
+    llm_context: LLMContext | None,
+    critic_veto: bool,
+) -> Signal:
+    """
+    Convert synthesis output to legacy Signal format for logging compatibility.
+
+    This maintains backward compatibility with existing signal_logger.py and
+    accuracy_tracker.py which expect the Signal dataclass.
+    """
+    return Signal(
+        symbol=xgb_signal.symbol,
+        timeframe=xgb_signal.timeframe,
+        direction=xgb_signal.direction,  # Original XGBoost direction
+        confidence=xgb_signal.confidence,
+        reasoning=synthesis_output.rationale,
+        persona="XGBOOST",  # New source identifier
+        timestamp=xgb_signal.timestamp,
+        market_regime=llm_context.regime_flag if llm_context else "unknown",
+        current_price=0.0,  # Not available from XGBoost signal
+        rsi=xgb_signal.features.get("rsi", 50.0) or 50.0,
+        macd=xgb_signal.features.get("macd_line", 0.0) or 0.0,
+        macd_signal=xgb_signal.features.get("macd_signal", 0.0) or 0.0,
+        bb_position=xgb_signal.features.get("bb_position", 0.5) or 0.5,
+        critic_score=None,
+        critic_recommendation="VETO" if critic_veto else "APPROVE",
+        critic_override=critic_veto,
+        critic_reasoning=None,
+        final_direction=synthesis_output.direction,
+    )
 
 
 async def run_cycle(
@@ -297,6 +199,13 @@ async def run_cycle(
     """
     Run one complete signal generation cycle for all symbols.
 
+    New pipeline (Session 17N):
+    1. Generate XGBoost signal (probability + direction)
+    2. Generate LLM context (bullish/bearish factors, regime)
+    3. Call DeepSeek risk filter (APPROVE/VETO)
+    4. Synthesize final decision
+    5. Log and optionally execute
+
     Args:
         symbols: List of trading pairs
         timeframe: Timeframe
@@ -305,126 +214,172 @@ async def run_cycle(
         execution_client: Optional execution client
 
     Returns:
-        List of generated signals
+        List of generated signals (legacy format for compatibility)
     """
     signals = []
-    fee_model = settings.fee_model
-    prompt_builder = PromptBuilder()
 
     # Enforce OLLAMA_KEEP_ALIVE=0
     enforce_ollama_keep_alive()
 
     async with MarketDataService() as market_data_service:
-        async with OllamaClient() as ollama_client:
-            # Process pending accuracy verifications first
+        # Process pending accuracy verifications first
+        try:
+            await process_pending_verifications(market_data_service)
+        except Exception as e:
+            logger.warning("Accuracy verification failed", error=str(e))
+
+        for symbol in symbols:
+            # Check STOP file between symbols
+            if check_stop_file():
+                logger.warning("STOP file detected, halting cycle")
+                break
+
+            logger.info("Processing symbol", symbol=symbol, timeframe=timeframe)
+
+            # Get current timestamp for point-in-time safety
+            as_of = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+            # Step 1: Generate XGBoost signal
+            xgb_signal = await generate_xgboost_signal(
+                symbol=symbol,
+                timeframe=timeframe,
+                as_of=as_of,
+                market_data_service=market_data_service,
+            )
+
+            if xgb_signal is None:
+                logger.warning("XGBoost signal generation failed", symbol=symbol)
+                continue
+
+            logger.info(
+                "XGBoost signal generated",
+                symbol=symbol,
+                direction=xgb_signal.direction,
+                probability=xgb_signal.probability,
+            )
+
+            # Step 2: Generate LLM context
+            # Note: In production, we'd fetch funding rate, OI, etc. from market data
+            # For now, using placeholder values
+            llm_context: LLMContext | None = None
             try:
-                await process_pending_verifications(market_data_service)
-            except Exception as e:
-                logger.warning("Accuracy verification failed", error=str(e))
-
-            for symbol in symbols:
-                # Check STOP file between symbols
-                if check_stop_file():
-                    logger.warning("STOP file detected, halting cycle")
-                    break
-
-                logger.info("Processing symbol", symbol=symbol, timeframe=timeframe)
-
-                # Generate signal
-                signal, prompt = await generate_signal_for_symbol(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    market_data_service=market_data_service,
-                    ollama_client=ollama_client,
-                    fee_model=fee_model,
-                    prompt_builder=prompt_builder,
+                llm_context = await generate_market_context(
+                    funding_rate=None,  # TODO: Fetch from market data
+                    oi_delta=None,  # TODO: Fetch from market data
+                    liquidation_data=None,
+                    news_headlines=None,
                 )
+                logger.debug(
+                    "LLM context generated",
+                    regime_flag=llm_context.regime_flag,
+                    confidence=llm_context.confidence,
+                )
+            except Exception as e:
+                logger.warning(f"LLM context generation failed: {e}")
+                llm_context = None
 
-                if signal is None:
-                    continue
+            # Step 3: Call DeepSeek risk filter
+            critic_veto = False
+            try:
+                critic_veto = await call_risk_filter(xgb_signal, llm_context)
+            except Exception as e:
+                logger.warning(f"Risk filter failed: {e}, proceeding without veto")
 
-                # Unload generator, load critic
-                await ollama_client.unload_current()
+            # Step 4: Synthesize final decision
+            synthesis_input = SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=critic_veto,
+            )
 
-                # Re-fetch data for critic context (could cache but keeps it simple)
-                try:
-                    df = await market_data_service.fetch_ohlcv(
-                        symbol, timeframe, lookback_bars=100
-                    )
-                except DataUnavailableError:
-                    signal.final_direction = signal.direction
-                    df = None
+            synthesis_output = synthesize(synthesis_input)
 
-                # Evaluate with critic if we have data
-                if df is not None and prompt is not None:
-                    signal = await evaluate_with_critic(
-                        signal=signal,
-                        df=df,
-                        prompt=prompt,
-                        ollama_client=ollama_client,
-                    )
+            logger.info(
+                "Synthesis complete",
+                symbol=symbol,
+                final_direction=synthesis_output.direction,
+                position_fraction=synthesis_output.position_size_fraction,
+            )
 
-                    # Unload critic
-                    await ollama_client.unload_current()
+            # Queue for accuracy verification
+            legacy_signal = synthesis_to_legacy_signal(
+                xgb_signal, synthesis_output, llm_context, critic_veto
+            )
 
-                # Queue for accuracy verification
-                queue_for_verification(signal, signal.current_price)
+            # Get current price for verification (from XGBoost features or re-fetch)
+            current_price = 0.0
+            try:
+                df = await market_data_service.fetch_ohlcv(symbol, timeframe, lookback_bars=1)
+                if df is not None and len(df) > 0:
+                    current_price = float(df["close"].iloc[-1])
+                    legacy_signal.current_price = current_price
+            except Exception:
+                pass
 
-                # Determine execution
-                executed = False
-                trade_reason = None
+            queue_for_verification(legacy_signal, current_price)
 
-                if execute and execution_client is not None:
-                    if signal.final_direction == "FLAT":
-                        trade_reason = "Signal is FLAT - no trade"
-                    elif signal.confidence < min_confidence:
-                        trade_reason = f"Confidence {signal.confidence:.1%} below threshold {min_confidence:.1%}"
-                    else:
-                        # Build signal input for execution
-                        signal_input = SignalInput(
-                            symbol=symbol,
-                            direction="long" if signal.final_direction == "LONG" else "short",
-                            confidence=signal.confidence,
-                            expected_return_pct=0.5,  # Conservative estimate
-                            stop_loss_pct=2.0,  # Default stop loss
-                            take_profit_pct=4.0,  # 2:1 R:R
-                            timeframe=timeframe,
-                            entry_price=signal.current_price,
-                        )
+            # Determine execution
+            executed = False
+            trade_reason = None
 
-                        try:
-                            decision = await execution_client.accept_signal(signal_input)
-                            trade_reason = decision.reason
-
-                            if decision.execute:
-                                # Place order
-                                order = await execution_client.place_market_order(
-                                    symbol=decision.symbol,
-                                    side=decision.side,
-                                    amount=decision.amount,
-                                )
-                                executed = True
-                                trade_reason = f"Order placed: {order.order_id}"
-                                logger.info(
-                                    "Order executed",
-                                    symbol=symbol,
-                                    side=decision.side,
-                                    amount=decision.amount,
-                                    order_id=order.order_id,
-                                )
-                        except Exception as e:
-                            trade_reason = f"Execution error: {str(e)}"
-                            logger.error("Execution failed", error=str(e))
+            if execute and execution_client is not None:
+                if synthesis_output.direction == "FLAT":
+                    trade_reason = "Signal is FLAT - no trade"
+                elif synthesis_output.position_size_fraction == 0:
+                    trade_reason = "Position size is 0 - no trade"
+                elif xgb_signal.confidence < min_confidence:
+                    trade_reason = f"Confidence {xgb_signal.confidence:.1%} below threshold {min_confidence:.1%}"
                 else:
-                    trade_reason = "Execution disabled" if not execute else "No execution client"
+                    # Build signal input for execution
+                    signal_input = SignalInput(
+                        symbol=symbol,
+                        direction="long" if synthesis_output.direction == "LONG" else "short",
+                        confidence=xgb_signal.confidence,
+                        expected_return_pct=0.5,  # Conservative estimate
+                        stop_loss_pct=2.0,  # Default stop loss
+                        take_profit_pct=4.0,  # 2:1 R:R
+                        timeframe=timeframe,
+                        entry_price=current_price,
+                    )
 
-                # Log signal
-                log_signal(signal, executed=executed, trade_reason=trade_reason)
+                    try:
+                        decision = await execution_client.accept_signal(signal_input)
+                        trade_reason = decision.reason
 
-                # Print summary
-                print_signal_summary(signal, executed, trade_reason)
+                        if decision.execute:
+                            # Adjust amount by position_size_fraction
+                            adjusted_amount = (
+                                decision.amount * synthesis_output.position_size_fraction
+                            )
 
-                signals.append(signal)
+                            # Place order
+                            order = await execution_client.place_market_order(
+                                symbol=decision.symbol,
+                                side=decision.side,
+                                amount=adjusted_amount,
+                            )
+                            executed = True
+                            trade_reason = f"Order placed: {order.order_id}"
+                            logger.info(
+                                "Order executed",
+                                symbol=symbol,
+                                side=decision.side,
+                                amount=adjusted_amount,
+                                order_id=order.order_id,
+                            )
+                    except Exception as e:
+                        trade_reason = f"Execution error: {str(e)}"
+                        logger.error("Execution failed", error=str(e))
+            else:
+                trade_reason = "Execution disabled" if not execute else "No execution client"
+
+            # Log signal (includes synthesis components in reasoning)
+            log_signal(legacy_signal, executed=executed, trade_reason=trade_reason)
+
+            # Print summary
+            print_signal_summary(synthesis_output, xgb_signal, executed, trade_reason)
+
+            signals.append(legacy_signal)
 
     return signals
 

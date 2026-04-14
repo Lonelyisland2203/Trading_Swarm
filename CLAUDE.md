@@ -42,7 +42,7 @@
 @import .claude/context/data-layer.md
 
 ## Current State
-Completed through Session 17M.
+Completed through Session 17N.
 - training/sft_data_generator.py — reverse reasoning distillation from deepseek-r1:14b, outputs data/sft_training_data.jsonl
 - training/sft_trainer.py — fine-tunes qwen3:8b on SFT data, LoRA r=32/alpha=64, saves to adapters/sft_base/
 - training/grpo_config.py — all GRPO hyperparameters (G=4, β=0.04, ε=0.2, reward weights, asymmetry coefficients)
@@ -55,20 +55,21 @@ Completed through Session 17M.
 - run_autoresearch.py — autonomous hyperparameter search loop (karpathy/autoresearch-inspired): round-robin parameter selection, direction tracking, git commit/revert on IC improvement/regression, results.tsv logging, --max-experiments/--time-budget-hours/--dry-run flags
 - evaluation/xgboost_baseline.py — XGBoost/LightGBM baseline for LLM comparison: extracts same 21 indicators from market snapshots, walk-forward CV with temporal ordering, metrics (IC, Brier, Sharpe, directional accuracy), SHAP feature importance, comparison table vs GRPO/DPO adapters, CLI with --data/--compare/--n-folds flags
 - evaluation/baseline_metrics.json — saved baseline metrics from xgboost_baseline.py (IC, Brier, Sharpe for XGBoost/LightGBM)
-- signals/ — production signal loop package (129 tests):
+- signals/ — production signal loop package (187 tests):
   - signal_models.py — Signal dataclass, SignalDirection, map_generator_to_signal (HIGHER/LOWER→LONG/SHORT)
   - preflight.py — STOP file check, VRAM check (6GB min), process lock via check_can_infer()
   - signal_logger.py — thread-safe JSONL logging to signals/signal_log.jsonl
   - accuracy_tracker.py — deferred accuracy verification (queue signals, verify after next bar closes)
-  - signal_loop.py — async loop: generate_signal_for_symbol(), evaluate_with_critic(), critic override logic (REJECT + reasoning_quality<0.5 OR technical_alignment<0.5 → FLAT)
+  - signal_loop.py — **REFACTORED** async loop: XGBoost signal → LLM context → DeepSeek risk filter → synthesis node. REMOVED: Qwen generator producing LONG/SHORT thesis, thesis quality evaluation. ADDED: call_risk_filter (APPROVE/VETO), synthesis_to_legacy_signal for backward compatibility
+  - synthesis.py — **NEW** synthesis node: SynthesisInput/SynthesisOutput dataclasses, synthesize() function. Rules: XGBoost prob<0.55→FLAT, conflicting regime→half position, prob≥0.65+confirming→full position, veto→FLAT, missing context→0.7x position
   - verification.py — closes feedback loop: load unverified signals, fetch outcomes, compute fee-adjusted returns, aggregate stats (IC, Sharpe, regime-stratified accuracy, false bullish/bearish rates), training trigger (≥200 signals), export for GRPO retraining
   - xgboost_config.py — all XGBoost hyperparameters (n_estimators, max_depth, learning_rate, etc.), FEATURE_LIST (21 indicators), CLASS_WEIGHTS (asymmetric), WALK_FORWARD_CONFIG, LABEL_THRESHOLD, PROBABILITY_THRESHOLDS
   - xgboost_signal.py — production XGBoost signal generator: extract_features_from_ohlcv (21 indicators), generate_xgboost_signal (async, uses get_ohlcv_as_of for temporal safety), XGBoostSignal dataclass, walk-forward splits, retrain trigger (≥200 signals)
   - llm_context.py — LLM context overlay node: LLMContext dataclass (bullish_factors, bearish_factors, regime_flag, confidence), generate_market_context (async), Qwen system prompt (context only, NEVER direction), VRAM preflight, OLLAMA_KEEP_ALIVE=0 enforcement, graceful fallback on failure, forbidden words filter (LONG/SHORT/BUY/SELL)
 - run_signal_loop.py — CLI: --symbols, --timeframe, --execute, --dry-run, --once, --min-confidence
 - run_verification.py — CLI: --once, --interval, --stats, --export, --check-trigger; runs on schedule (default 4h) or once mode
-- Tests: 1480+ tests (previous: 1450, llm_context: 29)
+- Tests: 1510+ tests (signals: 187)
 
 ## Next Session
 
-Session 17N — Integrate XGBoost signal + LLM context into signal loop (synthesis node: XGBoost prob + LLM context → decision)
+Session 17O — Add funding rate / OI delta data fetching to market_data.py, integrate into signal_loop.py LLM context generation

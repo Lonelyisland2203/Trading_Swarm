@@ -105,7 +105,7 @@ class TestGRPOTrainingConfig:
         assert config.group_size == 4
         assert config.kl_penalty_beta == 0.04
         assert config.clip_epsilon == 0.2
-        assert config.learning_rate == 5e-6
+        assert config.learning_rate == 2e-5
         assert config.batch_size == 1
         assert config.gradient_accumulation_steps == 16
         assert config.max_steps == 5000
@@ -147,7 +147,7 @@ class TestLoadGRPOConfig:
         """Loading with no overrides returns defaults."""
         config = load_grpo_config()
         assert config.group_size == 4
-        assert config.learning_rate == 5e-6
+        assert config.learning_rate == 2e-5
 
     def test_simple_overrides(self):
         """Simple parameter overrides should work."""

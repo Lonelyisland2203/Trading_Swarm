@@ -25,7 +25,11 @@ from signals.accuracy_tracker import (
 from signals.signal_loop import (
     run_cycle,
     run_loop,
-    should_override_signal,
+)
+from signals.synthesis import (
+    SynthesisInput,
+    SynthesisOutput,
+    synthesize,
 )
 from signals.verification import (
     VerifiedResult,
@@ -55,7 +59,10 @@ __all__ = [
     # Signal loop
     "run_cycle",
     "run_loop",
-    "should_override_signal",
+    # Synthesis
+    "SynthesisInput",
+    "SynthesisOutput",
+    "synthesize",
     # Verification
     "VerifiedResult",
     "VerificationStats",

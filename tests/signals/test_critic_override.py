@@ -1,199 +1,229 @@
-"""Tests for critic override logic."""
+"""Tests for DeepSeek veto override logic.
+
+Session 17N: Refactored to test synthesis veto behavior.
+Old logic tested thesis quality evaluation.
+New logic tests binary APPROVE/VETO from DeepSeek risk filter.
+"""
+
+from datetime import datetime, timezone
+
+from signals.synthesis import SynthesisInput, synthesize
+from signals.xgboost_signal import XGBoostSignal
+from signals.llm_context import LLMContext
 
 
-from signals.signal_loop import should_override_signal
-from swarm.critic import CritiqueResult
+def _make_xgboost_signal(probability: float = 0.70) -> XGBoostSignal:
+    """Create test XGBoost signal."""
+    direction = "LONG" if probability >= 0.55 else ("SHORT" if probability <= 0.45 else "FLAT")
+    return XGBoostSignal(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        direction=direction,
+        probability=probability,
+        confidence=abs(probability - 0.5) * 2,
+        features={"rsi": 55.0},
+        timestamp=datetime.now(timezone.utc),
+    )
 
 
-class TestShouldOverrideSignal:
-    """Tests for critic override decision logic."""
+def _make_llm_context(regime_flag: str = "confirming") -> LLMContext:
+    """Create test LLM context."""
+    return LLMContext(
+        bullish_factors=["Test factor"],
+        bearish_factors=[],
+        regime_flag=regime_flag,
+        confidence=0.8,
+    )
 
-    def test_accept_never_overrides(self):
-        """ACCEPT recommendation never overrides."""
-        critique = CritiqueResult(
-            reasoning_quality=0.3,  # Low, but doesn't matter for ACCEPT
-            technical_alignment=0.3,
-            confidence_calibration=0.3,
-            critique="Signal looks fine",
-            recommendation="ACCEPT",
-            raw_response="...",
+
+class TestVetoOverrideLogic:
+    """Tests for DeepSeek veto override in synthesis."""
+
+    def test_veto_true_produces_flat(self):
+        """When critic_veto=True, synthesis always produces FLAT."""
+        xgb_signal = _make_xgboost_signal(probability=0.90)
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=True,
+            )
         )
 
-        assert should_override_signal(critique) is False
+        assert result.direction == "FLAT"
+        assert result.position_size_fraction == 0.0
 
-    def test_uncertain_never_overrides(self):
-        """UNCERTAIN recommendation never overrides."""
-        critique = CritiqueResult(
-            reasoning_quality=0.4,
-            technical_alignment=0.4,
-            confidence_calibration=0.4,
-            critique="Not sure about this one",
-            recommendation="UNCERTAIN",
-            raw_response="...",
+    def test_veto_false_allows_trade(self):
+        """When critic_veto=False, synthesis allows trade."""
+        xgb_signal = _make_xgboost_signal(probability=0.70)
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=False,
+            )
         )
 
-        assert should_override_signal(critique) is False
+        assert result.direction == "LONG"
+        assert result.position_size_fraction > 0.0
 
-    def test_reject_with_low_reasoning_quality_overrides(self):
-        """REJECT with reasoning_quality < 0.5 overrides to FLAT."""
-        critique = CritiqueResult(
-            reasoning_quality=0.4,  # Below 0.5
-            technical_alignment=0.7,  # Above 0.5
-            confidence_calibration=0.6,
-            critique="Reasoning is flawed",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_veto_overrides_high_conviction_long(self):
+        """Veto overrides even very high probability LONG signals."""
+        xgb_signal = _make_xgboost_signal(probability=0.95)
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=True,
+            )
         )
 
-        assert should_override_signal(critique) is True
+        assert result.direction == "FLAT"
+        assert "veto" in result.rationale.lower()
 
-    def test_reject_with_low_technical_alignment_overrides(self):
-        """REJECT with technical_alignment < 0.5 overrides to FLAT."""
-        critique = CritiqueResult(
-            reasoning_quality=0.7,  # Above 0.5
-            technical_alignment=0.4,  # Below 0.5
-            confidence_calibration=0.6,
-            critique="Indicators contradict prediction",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_veto_overrides_high_conviction_short(self):
+        """Veto overrides even high probability SHORT signals."""
+        xgb_signal = XGBoostSignal(
+            symbol="BTC/USDT",
+            timeframe="1h",
+            direction="SHORT",
+            probability=0.10,  # High conviction short
+            confidence=0.80,
+            features={"rsi": 30.0},
+            timestamp=datetime.now(timezone.utc),
+        )
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=True,
+            )
         )
 
-        assert should_override_signal(critique) is True
+        assert result.direction == "FLAT"
 
-    def test_reject_with_both_low_scores_overrides(self):
-        """REJECT with both scores < 0.5 overrides to FLAT."""
-        critique = CritiqueResult(
-            reasoning_quality=0.3,
-            technical_alignment=0.2,
-            confidence_calibration=0.8,  # This one is high
-            critique="Multiple issues",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_veto_with_conflicting_context(self):
+        """Veto still applies even with conflicting context."""
+        xgb_signal = _make_xgboost_signal(probability=0.65)
+        llm_context = _make_llm_context(regime_flag="conflicting")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=True,
+            )
         )
 
-        assert should_override_signal(critique) is True
+        assert result.direction == "FLAT"
 
-    def test_reject_with_high_scores_does_not_override(self):
-        """REJECT with high scores does NOT override."""
-        critique = CritiqueResult(
-            reasoning_quality=0.6,  # Above 0.5
-            technical_alignment=0.55,  # Above 0.5
-            confidence_calibration=0.3,  # Low but not considered
-            critique="Minor concerns only",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_veto_with_none_context(self):
+        """Veto applies even when LLM context is None."""
+        xgb_signal = _make_xgboost_signal(probability=0.75)
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=None,
+                critic_veto=True,
+            )
         )
 
-        assert should_override_signal(critique) is False
+        assert result.direction == "FLAT"
+        assert result.position_size_fraction == 0.0
 
-    def test_reject_at_threshold_does_not_override(self):
-        """REJECT with scores exactly at 0.5 does NOT override."""
-        critique = CritiqueResult(
-            reasoning_quality=0.5,  # Exactly 0.5 - not < 0.5
-            technical_alignment=0.5,
-            confidence_calibration=0.5,
-            critique="Borderline",
-            recommendation="REJECT",
-            raw_response="...",
+
+class TestNonVetoScenarios:
+    """Tests for synthesis when not vetoed."""
+
+    def test_low_prob_flat_not_affected_by_veto_false(self):
+        """Low probability signals are FLAT regardless of veto status."""
+        xgb_signal = _make_xgboost_signal(probability=0.50)
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=False,
+            )
         )
 
-        assert should_override_signal(critique) is False
+        # FLAT because of low conviction, not veto
+        assert result.direction == "FLAT"
 
-    def test_reject_just_below_threshold_overrides(self):
-        """REJECT with score just below 0.5 overrides."""
-        critique = CritiqueResult(
-            reasoning_quality=0.49,  # Just below 0.5
-            technical_alignment=0.8,
-            confidence_calibration=0.7,
-            critique="Slightly weak reasoning",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_high_prob_confirming_full_position(self):
+        """High prob + confirming = full position when not vetoed."""
+        xgb_signal = _make_xgboost_signal(probability=0.70)
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=False,
+            )
         )
 
-        assert should_override_signal(critique) is True
+        assert result.direction == "LONG"
+        assert result.position_size_fraction == 1.0
 
-    def test_confidence_calibration_not_considered(self):
-        """Low confidence_calibration alone doesn't trigger override."""
-        critique = CritiqueResult(
-            reasoning_quality=0.8,
-            technical_alignment=0.7,
-            confidence_calibration=0.1,  # Very low but not considered
-            critique="Over-confident but technically sound",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_moderate_prob_conflicting_half_position(self):
+        """Moderate prob + conflicting = half position when not vetoed."""
+        xgb_signal = _make_xgboost_signal(probability=0.60)
+        llm_context = _make_llm_context(regime_flag="conflicting")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=False,
+            )
         )
 
-        assert should_override_signal(critique) is False
+        assert result.direction == "LONG"
+        assert result.position_size_fraction == 0.5
 
 
-class TestCritiqueResultScore:
-    """Tests for CritiqueResult.score computed property."""
+class TestVetoRationale:
+    """Tests for veto rationale in output."""
 
-    def test_score_weighted_correctly(self):
-        """Score is computed with correct weights: 35%, 40%, 25%."""
-        critique = CritiqueResult(
-            reasoning_quality=1.0,
-            technical_alignment=1.0,
-            confidence_calibration=1.0,
-            critique="Perfect",
-            recommendation="ACCEPT",
-            raw_response="...",
+    def test_veto_rationale_mentions_veto(self):
+        """Rationale explicitly mentions veto."""
+        xgb_signal = _make_xgboost_signal(probability=0.80)
+        llm_context = _make_llm_context(regime_flag="confirming")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=True,
+            )
         )
 
-        # 0.35 * 1.0 + 0.40 * 1.0 + 0.25 * 1.0 = 1.0
-        assert critique.score == 1.0
+        assert "veto" in result.rationale.lower()
 
-    def test_score_zero_inputs(self):
-        """Score is 0 when all inputs are 0."""
-        critique = CritiqueResult(
-            reasoning_quality=0.0,
-            technical_alignment=0.0,
-            confidence_calibration=0.0,
-            critique="Bad",
-            recommendation="REJECT",
-            raw_response="...",
+    def test_veto_rationale_mentions_risk(self):
+        """Rationale mentions risk filter."""
+        xgb_signal = _make_xgboost_signal(probability=0.75)
+        llm_context = _make_llm_context(regime_flag="neutral")
+
+        result = synthesize(
+            SynthesisInput(
+                xgboost_signal=xgb_signal,
+                llm_context=llm_context,
+                critic_veto=True,
+            )
         )
 
-        assert critique.score == 0.0
-
-    def test_score_mixed_inputs(self):
-        """Score is computed correctly for mixed inputs."""
-        critique = CritiqueResult(
-            reasoning_quality=0.8,
-            technical_alignment=0.6,
-            confidence_calibration=0.4,
-            critique="Mixed",
-            recommendation="UNCERTAIN",
-            raw_response="...",
-        )
-
-        # 0.35 * 0.8 + 0.40 * 0.6 + 0.25 * 0.4 = 0.28 + 0.24 + 0.10 = 0.62
-        expected = 0.35 * 0.8 + 0.40 * 0.6 + 0.25 * 0.4
-        assert abs(critique.score - expected) < 0.001
-
-    def test_technical_alignment_has_highest_weight(self):
-        """Technical alignment has the highest impact on score."""
-        # Only technical_alignment = 1.0
-        critique1 = CritiqueResult(
-            reasoning_quality=0.0,
-            technical_alignment=1.0,
-            confidence_calibration=0.0,
-            critique="Test",
-            recommendation="ACCEPT",
-            raw_response="...",
-        )
-
-        # Only reasoning_quality = 1.0
-        critique2 = CritiqueResult(
-            reasoning_quality=1.0,
-            technical_alignment=0.0,
-            confidence_calibration=0.0,
-            critique="Test",
-            recommendation="ACCEPT",
-            raw_response="...",
-        )
-
-        # Technical (40%) > Reasoning (35%)
-        assert critique1.score > critique2.score
-        assert critique1.score == 0.40
-        assert critique2.score == 0.35
+        # Should mention either "veto" or "risk" or "reject"
+        rationale_lower = result.rationale.lower()
+        assert any(word in rationale_lower for word in ["veto", "risk", "reject"])
